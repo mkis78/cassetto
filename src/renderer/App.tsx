@@ -80,7 +80,8 @@ export default function App() {
       // the action bar, Ctrl+Space unless changed; checked first, so it wins whatever it was set to
       if (fromEvent(e) === (getSettings().barShortcut ?? DEFAULT_BAR)) return void (e.preventDefault(), e.stopPropagation(), setPalette({ mode: 'bar' }))
       if (!(window.api.platform === 'darwin' ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey)) return
-      const act = { KeyP: () => setPalette({ mode: window.api.platform === 'darwin' && e.shiftKey ? 'commands' : 'files' }), BracketRight: () => cycle(1), BracketLeft: () => cycle(-1) }[e.code]
+      const inEditor = !!(e.target as Element | null)?.closest?.('.cm-editor') // there Cmd+K belongs to the editor's chords
+      const act = { KeyP: () => setPalette({ mode: window.api.platform === 'darwin' && e.shiftKey ? 'commands' : 'files' }), BracketRight: () => cycle(1), BracketLeft: () => cycle(-1), ...(!inEditor && !e.shiftKey && { KeyK: () => setSshDialog(true) }) }[e.code]
       if (!act) return
       e.preventDefault()
       e.stopPropagation()
@@ -101,7 +102,13 @@ export default function App() {
         if (p) closeTiles([p])
       }),
       window.api.onCycleTile(cycle),
-      window.api.onOpenPalette(mode => setPalette({ mode }))
+      window.api.onOpenPalette(mode => setPalette({ mode })),
+      // from inside a tab (the editor's Cmd+R)
+      (() => {
+        const f = (e: Event) => setPalette({ mode: (e as CustomEvent<'bar' | 'commands' | 'files'>).detail })
+        window.addEventListener('cassetto:palette', f)
+        return () => window.removeEventListener('cassetto:palette', f)
+      })()
     ]
     return () => {
       window.removeEventListener('keydown', keys, true)

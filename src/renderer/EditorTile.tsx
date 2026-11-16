@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import { basicSetup } from 'codemirror'
-import { Compartment, EditorState } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
-import { indentWithTab } from '@codemirror/commands'
-import { defaultHighlightStyle, LanguageDescription, syntaxHighlighting } from '@codemirror/language'
+import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
+import { EditorView, highlightTrailingWhitespace, highlightWhitespace, keymap } from '@codemirror/view'
+import { copyLineDown, deleteLine, indentWithTab, moveLineDown, moveLineUp, toggleComment } from '@codemirror/commands'
+import { defaultHighlightStyle, foldAll, indentUnit, LanguageDescription, syntaxHighlighting, unfoldAll } from '@codemirror/language'
+import { gotoLine, openSearchPanel, selectSelectionMatches } from '@codemirror/search'
+import { completeAnyWord } from '@codemirror/autocomplete'
+import { ArrowDownUp, CaseLower, CaseSensitive, CaseUpper, Eraser, FoldVertical, Hash, MessageSquareCode, Pilcrow, Save, Search, SquareSplitVertical, TextCursorInput, UnfoldVertical, WrapText } from 'lucide-react'
+import type { Command as PaletteCommand } from './Palette'
+import { insertLineAbove, joinSelectedLines, lowerCase, sortSelectedLines, splitSelectionByLine, symbols, titleCaseWords, trimTrailingSpaces, upperCase } from './editorCommands'
+import { detectIndent } from '../shared/textOps'
 import { languages } from '@codemirror/language-data'
 import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark'
 import type { EditorParams } from '../shared/types'
 import { onSettings, resolvedTheme } from './settings'
-import { setDirty } from './tiles'
+import { setDirty, setTileActions } from './tiles'
 
 // the editor's look from the app's colours, so it follows the light and dark themes by itself
 const look = EditorView.theme({
@@ -27,7 +33,31 @@ const look = EditorView.theme({
 })
 const colours = () => syntaxHighlighting(resolvedTheme() === 'light' ? defaultHighlightStyle : oneDarkHighlightStyle)
 
-type Status = { line: number; col: number }
+type Status = { line: number; col: number; cursors: number; selected: number }
+
+const mac = window.api.platform === 'darwin'
+// Sublime Text's keys, over CodeMirror's own where they clash (Cmd+Shift+L splits the selection into lines there)
+const sublime = (save: () => void, palette: () => void) =>
+  Prec.high(
+    keymap.of([
+      { key: 'Mod-s', preventDefault: true, run: () => (save(), true) },
+      { key: 'Mod-Shift-l', run: splitSelectionByLine },
+      { key: mac ? 'Ctrl-Mod-g' : 'Alt-F3', run: selectSelectionMatches },
+      { key: mac ? 'Ctrl-Mod-ArrowUp' : 'Ctrl-Shift-ArrowUp', run: moveLineUp },
+      { key: mac ? 'Ctrl-Mod-ArrowDown' : 'Ctrl-Shift-ArrowDown', run: moveLineDown },
+      { key: 'Mod-Shift-d', run: copyLineDown },
+      { key: 'Mod-Shift-k', run: deleteLine },
+      { key: 'Mod-j', run: joinSelectedLines },
+      { key: mac ? 'F5' : 'F9', run: sortSelectedLines },
+      { key: 'Mod-Shift-Enter', run: insertLineAbove },
+      { key: 'Mod-k Mod-u', run: upperCase },
+      { key: 'Mod-k Mod-l', run: lowerCase },
+      { key: 'Ctrl-g', run: gotoLine },
+      { key: 'Mod-r', run: () => (palette(), true) },
+      indentWithTab
+    ])
+  )
+const openBar = () => window.dispatchEvent(new CustomEvent('cassetto:palette', { detail: 'bar' }))
 
 // a text file in its own tab: CodeMirror, Cmd+S saves, a dot on the tab while unsaved
 export default function EditorTile({ api, params }: IDockviewPanelProps<EditorParams>) {
@@ -37,7 +67,17 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
   const saved = useRef('') // the text as it is on disk, as far as we know
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirtyState] = useState(false)
-  const [status, setStatus] = useState<Status>({ line: 1, col: 1 })
+  const [status, setStatus] = useState<Status>({ line: 1, col: 1, cursors: 1, selected: 0 })
+  const [indent, setIndent] = useState('Spazi: 2')
+  // Alt+Z and the whitespace dots stay with the tab
+  const wrapC = useRef(new Compartment()).current
+  const spaceC = useRef(new Compartment()).current
+  const [wrap, setWrap] = useState(!!params.wrap)
+  const [whitespace, setWhitespace] = useState(!!params.whitespace)
+  const toggleWrap = () => setWrap(w => (view.current?.dispatch({ effects: wrapC.reconfigure(!w ? EditorView.lineWrapping : []) }), api.updateParameters({ wrap: !w }), !w))
+  const toggleSpace = () => setWhitespace(w => (view.current?.dispatch({ effects: spaceC.reconfigure(!w ? [highlightWhitespace(), highlightTrailingWhitespace()] : []) }), api.updateParameters({ whitespace: !w }), !w))
+  const toggleRef = useRef({ wrap: toggleWrap, space: toggleSpace })
+  toggleRef.current = { wrap: toggleWrap, space: toggleSpace }
   const [lang, setLang] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const name = path.slice(path.lastIndexOf('/') + 1)
@@ -69,22 +109,33 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
       if (!live) return
       if (!r.ok) return setError(r.binary ? 'File binario: non si può modificare come testo.' : r.error)
       saved.current = r.text
+      // the file's own indentation: tabs or how many spaces
+      const ind = detectIndent(r.text) ?? { tabs: false, size: 2 }
+      setIndent(ind.tabs ? 'Tab' : `Spazi: ${ind.size}`)
       view.current = new EditorView({
         parent: ref.current!,
         state: EditorState.create({
           doc: r.text,
           extensions: [
             basicSetup,
-            keymap.of([indentWithTab, { key: 'Mod-s', preventDefault: true, run: () => (void saveRef.current(), true) }]),
+            sublime(() => void saveRef.current(), openBar),
+            keymap.of([{ key: 'Alt-z', run: () => (toggleRef.current.wrap(), true) }]),
+            indentUnit.of(ind.tabs ? '\t' : ' '.repeat(ind.size)),
+            EditorState.tabSize.of(ind.size),
+            // completions from the words already in the file too, in any language
+            EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
+            wrapC.of(params.wrap ? EditorView.lineWrapping : []),
+            spaceC.of(params.whitespace ? [highlightWhitespace(), highlightTrailingWhitespace()] : []),
             look,
             theme.of(colours()),
             language.of([]),
             EditorView.updateListener.of(u => {
               if (u.docChanged) markDirty(u.state.doc.toString() !== saved.current)
               if (u.docChanged || u.selectionSet) {
-                const head = u.state.selection.main.head
+                const sel = u.state.selection
+                const head = sel.main.head
                 const line = u.state.doc.lineAt(head)
-                setStatus({ line: line.number, col: head - line.from + 1 })
+                setStatus({ line: line.number, col: head - line.from + 1, cursors: sel.ranges.length, selected: sel.ranges.reduce((n, r) => n + r.to - r.from, 0) })
               }
             })
           ]
@@ -104,6 +155,47 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
       view.current = null
     }
   }, [host, path])
+
+  // what the editor offers the command palette (Cmd+Shift+P) and the action bar: its commands, then the symbols of the file
+  const run = (cmd: (v: EditorView) => boolean) => () => {
+    const v = view.current
+    if (v) (cmd(v), v.focus())
+  }
+  const k = (m: string, o: string) => (mac ? m : o)
+  const editorActions = (): PaletteCommand[] => {
+    const v = view.current
+    if (!v) return []
+    const group = `Editor · ${name}`
+    const cmds: PaletteCommand[] = [
+      { label: 'Salva', hint: 'Cmd+S', run: () => void save(), icon: Save },
+      { label: 'Cerca e sostituisci', hint: 'Cmd+F', run: run(openSearchPanel), icon: Search },
+      { label: 'Vai alla riga…', hint: 'Ctrl+G', run: run(gotoLine), icon: Hash },
+      { label: 'Seleziona tutte le occorrenze', hint: k('Cmd+Ctrl+G', 'Alt+F3'), run: run(selectSelectionMatches), icon: TextCursorInput },
+      { label: 'Dividi la selezione in righe', hint: 'Cmd+Shift+L', run: run(splitSelectionByLine), icon: SquareSplitVertical },
+      { label: 'Ordina righe', hint: k('F5', 'F9'), run: run(sortSelectedLines), icon: ArrowDownUp },
+      { label: 'Unisci righe', hint: 'Cmd+J', run: run(joinSelectedLines), icon: WrapText },
+      { label: 'Maiuscolo', hint: 'Cmd+K Cmd+U', run: run(upperCase), icon: CaseUpper },
+      { label: 'Minuscolo', hint: 'Cmd+K Cmd+L', run: run(lowerCase), icon: CaseLower },
+      { label: 'Iniziali maiuscole', run: run(titleCaseWords), icon: CaseSensitive },
+      { label: 'Commenta / decommenta', hint: 'Cmd+/', run: run(toggleComment), icon: MessageSquareCode },
+      { label: 'Rimuovi spazi a fine riga', run: run(trimTrailingSpaces), icon: Eraser },
+      { label: 'Comprimi tutto', run: run(foldAll), icon: FoldVertical },
+      { label: 'Espandi tutto', run: run(unfoldAll), icon: UnfoldVertical },
+      { label: wrap ? 'Disattiva a capo automatico' : 'A capo automatico', hint: 'Alt+Z', run: toggleWrap, icon: WrapText },
+      { label: whitespace ? 'Nascondi spazi' : 'Mostra spazi', run: toggleSpace, icon: Pilcrow }
+    ].map(c => ({ ...c, group }))
+    // ponytail: the whole tree on each opening of the palette; cache by doc version if big files feel slow
+    const syms = symbols(v.state).map(s => ({
+      label: s.name,
+      hint: `${s.kind} · riga ${s.line}`,
+      group: `Simboli · ${name}`,
+      run: () => (v.dispatch({ selection: EditorSelection.cursor(s.from), effects: EditorView.scrollIntoView(s.from, { y: 'center' }) }), v.focus())
+    }))
+    return [...cmds, ...syms]
+  }
+  const actionsRef = useRef(editorActions)
+  actionsRef.current = editorActions
+  useEffect(() => setTileActions(api.id, () => actionsRef.current()), [api.id])
 
   // back to the tab: a file changed on disk while nothing here is unsaved comes in by itself
   useEffect(() => {
@@ -133,7 +225,10 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
         </div>
         {!error && (
           <div className="status-left editor-right">
+            {status.cursors > 1 && <span>{status.cursors} cursori</span>}
+            {status.selected > 0 && <span>{status.selected} selezionati</span>}
             <span>Riga {status.line}, col {status.col}</span>
+            <span>{indent}</span>
             <span>{lang ?? 'Testo'}</span>
             <button className="status-link" disabled={!dirty} onClick={() => void save()}>
               Salva (Cmd+S)

@@ -5,7 +5,7 @@ export type FilesParams = { kind: 'files'; host: string | null; path: string | n
 // a shell in `cwd`, here or on `host` over ssh
 export type TerminalParams = { kind: 'terminal'; host: string | null; cwd: string; name?: string; color?: TabColor }
 // a text file being edited, here or on `host`
-export type EditorParams = { kind: 'editor'; host: string | null; path: string; name?: string; color?: TabColor }
+export type EditorParams = { kind: 'editor'; host: string | null; path: string; name?: string; color?: TabColor; wrap?: boolean; whitespace?: boolean }
 export type TileParams = FilesParams | TerminalParams | EditorParams
 
 export interface SearchQuery {

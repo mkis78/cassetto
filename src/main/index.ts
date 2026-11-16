@@ -225,7 +225,8 @@ function setMenu(): void {
         submenu: [
           { label: 'Nuovo tab', accelerator: shortcut('T', p), click: send('tile:new') },
           { label: 'Nuovo terminale qui', accelerator: 'CmdOrCtrl+Alt+T', click: send('terminal:new') },
-          { label: 'Connetti a server SSH…', accelerator: p === 'darwin' ? 'Cmd+K' : 'Ctrl+Shift+K', click: send('ssh:open') },
+          // shown here, handled by the renderer: inside the editor Cmd+K starts chords (Cmd+K Cmd+U)
+          { label: 'Connetti a server SSH…', accelerator: shortcut('K', p), registerAccelerator: false, click: send('ssh:open') },
           { label: 'Barra azioni…', accelerator: barShortcut, registerAccelerator: false, click: send('palette:open', 'bar') },
           { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', 'files') },
           ...(p === 'darwin' ? [{ label: 'Comandi…', accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', 'commands') }] : []),

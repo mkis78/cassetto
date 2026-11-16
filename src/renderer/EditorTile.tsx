@@ -7,10 +7,11 @@ import { copyLineDown, deleteLine, indentWithTab, moveLineDown, moveLineUp, togg
 import { defaultHighlightStyle, foldAll, indentUnit, LanguageDescription, syntaxHighlighting, unfoldAll } from '@codemirror/language'
 import { gotoLine, openSearchPanel, selectSelectionMatches } from '@codemirror/search'
 import { completeAnyWord } from '@codemirror/autocomplete'
-import { ArrowDownUp, CaseLower, CaseSensitive, CaseUpper, Eraser, FoldVertical, Hash, MessageSquareCode, Pilcrow, Save, Search, SquareSplitVertical, TextCursorInput, UnfoldVertical, WrapText } from 'lucide-react'
+import { Bold, Code, Columns2, Heading1, Heading2, Heading3, Italic, Link as LinkIcon, List, ListChecks, ListOrdered, Quote, SquareCode, SquareCheck, Table, ArrowDownUp, CaseLower, CaseSensitive, CaseUpper, Eraser, FoldVertical, Hash, MessageSquareCode, Pilcrow, Save, Search, SquareSplitVertical, TextCursorInput, UnfoldVertical, WrapText } from 'lucide-react'
 import type { Command as PaletteCommand } from './Palette'
-import { insertLineAbove, joinSelectedLines, lowerCase, sortSelectedLines, splitSelectionByLine, symbols, titleCaseWords, trimTrailingSpaces, upperCase } from './editorCommands'
+import { mdCodeBlock, mdLines, mdLink, mdTable, mdTask, mdWrap, insertLineAbove, joinSelectedLines, lowerCase, sortSelectedLines, splitSelectionByLine, symbols, titleCaseWords, trimTrailingSpaces, upperCase } from './editorCommands'
 import { detectIndent } from '../shared/textOps'
+import { renderMarkdown } from '../shared/markdown'
 import { languages } from '@codemirror/language-data'
 import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark'
 import type { EditorParams } from '../shared/types'
@@ -57,11 +58,27 @@ const sublime = (save: () => void, palette: () => void) =>
       indentWithTab
     ])
   )
+// Markdown only: the formatting keys (GitHub's and Typora's), and the preview of VS Code
+const markdownKeys = (preview: () => void) =>
+  Prec.high(
+    keymap.of([
+      { key: 'Mod-b', run: mdWrap('**') },
+      { key: 'Mod-i', run: mdWrap('*') },
+      { key: 'Mod-e', run: mdWrap('`') },
+      { key: 'Mod-Alt-k', run: mdLink },
+      { key: 'Mod-Alt-1', run: mdLines('h1') },
+      { key: 'Mod-Alt-2', run: mdLines('h2') },
+      { key: 'Mod-Alt-3', run: mdLines('h3') },
+      { key: 'Mod-Shift-v', run: () => (preview(), true) }
+    ])
+  )
+export const isMarkdown = (name: string) => /\.(md|markdown|mdx|mdown)$/i.test(name)
 const openBar = () => window.dispatchEvent(new CustomEvent('cassetto:palette', { detail: 'bar' }))
 
 // a text file in its own tab: CodeMirror, Cmd+S saves, a dot on the tab while unsaved
 export default function EditorTile({ api, params }: IDockviewPanelProps<EditorParams>) {
   const { host, path } = params
+  const name = path.slice(path.lastIndexOf('/') + 1)
   const ref = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const saved = useRef('') // the text as it is on disk, as far as we know
@@ -76,11 +93,20 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
   const [whitespace, setWhitespace] = useState(!!params.whitespace)
   const toggleWrap = () => setWrap(w => (view.current?.dispatch({ effects: wrapC.reconfigure(!w ? EditorView.lineWrapping : []) }), api.updateParameters({ wrap: !w }), !w))
   const toggleSpace = () => setWhitespace(w => (view.current?.dispatch({ effects: spaceC.reconfigure(!w ? [highlightWhitespace(), highlightTrailingWhitespace()] : []) }), api.updateParameters({ whitespace: !w }), !w))
-  const toggleRef = useRef({ wrap: toggleWrap, space: toggleSpace })
-  toggleRef.current = { wrap: toggleWrap, space: toggleSpace }
+  // Markdown: the preview beside the text, rendered a moment after the last key
+  const md = isMarkdown(name)
+  const [preview, setPreview] = useState(md && !!params.mdPreview)
+  const [html, setHtml] = useState('')
+  const togglePreview = () => setPreview(p => (api.updateParameters({ mdPreview: !p }), !p))
+  const toggleRef = useRef({ wrap: toggleWrap, space: toggleSpace, preview: togglePreview })
+  toggleRef.current = { wrap: toggleWrap, space: toggleSpace, preview: togglePreview }
+  const renderTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const renderSoon = (text: string) => {
+    clearTimeout(renderTimer.current)
+    renderTimer.current = setTimeout(() => setHtml(renderMarkdown(text)), 150)
+  }
   const [lang, setLang] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const name = path.slice(path.lastIndexOf('/') + 1)
 
   const markDirty = (d: boolean) => (setDirtyState(d), setDirty(api.id, d))
 
@@ -119,6 +145,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
           extensions: [
             basicSetup,
             sublime(() => void saveRef.current(), openBar),
+            md ? markdownKeys(() => toggleRef.current.preview()) : [],
             keymap.of([{ key: 'Alt-z', run: () => (toggleRef.current.wrap(), true) }]),
             indentUnit.of(ind.tabs ? '\t' : ' '.repeat(ind.size)),
             EditorState.tabSize.of(ind.size),
@@ -131,6 +158,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
             language.of([]),
             EditorView.updateListener.of(u => {
               if (u.docChanged) markDirty(u.state.doc.toString() !== saved.current)
+              if (u.docChanged && md) renderSoon(u.state.doc.toString())
               if (u.docChanged || u.selectionSet) {
                 const sel = u.state.selection
                 const head = sel.main.head
@@ -142,6 +170,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
         })
       })
       view.current.focus()
+      if (md) setHtml(renderMarkdown(r.text))
       // the language by file name, loaded only now (each is its own small chunk)
       const desc = LanguageDescription.matchFilename(languages, name)
       if (desc) desc.load().then(support => live && (view.current?.dispatch({ effects: language.reconfigure(support) }), setLang(desc.name)))
@@ -150,6 +179,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
     return () => {
       live = false
       off()
+      clearTimeout(renderTimer.current)
       setDirty(api.id, false)
       view.current?.destroy()
       view.current = null
@@ -184,6 +214,25 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
       { label: wrap ? 'Disattiva a capo automatico' : 'A capo automatico', hint: 'Alt+Z', run: toggleWrap, icon: WrapText },
       { label: whitespace ? 'Nascondi spazi' : 'Mostra spazi', run: toggleSpace, icon: Pilcrow }
     ].map(c => ({ ...c, group }))
+    const mdCmds: PaletteCommand[] = !md
+      ? []
+      : [
+          { label: preview ? 'Nascondi anteprima' : 'Mostra anteprima', hint: 'Cmd+Shift+V', run: togglePreview, icon: Columns2 },
+          { label: 'Grassetto', hint: 'Cmd+B', run: run(mdWrap('**')), icon: Bold },
+          { label: 'Corsivo', hint: 'Cmd+I', run: run(mdWrap('*')), icon: Italic },
+          { label: 'Codice', hint: 'Cmd+E', run: run(mdWrap('`')), icon: Code },
+          { label: 'Link', hint: 'Cmd+Alt+K', run: run(mdLink), icon: LinkIcon },
+          { label: 'Titolo 1', hint: 'Cmd+Alt+1', run: run(mdLines('h1')), icon: Heading1 },
+          { label: 'Titolo 2', hint: 'Cmd+Alt+2', run: run(mdLines('h2')), icon: Heading2 },
+          { label: 'Titolo 3', hint: 'Cmd+Alt+3', run: run(mdLines('h3')), icon: Heading3 },
+          { label: 'Elenco puntato', run: run(mdLines('ul')), icon: List },
+          { label: 'Elenco numerato', run: run(mdLines('ol')), icon: ListOrdered },
+          { label: 'Checklist', run: run(mdLines('task')), icon: ListChecks },
+          { label: 'Spunta / togli spunta', run: run(mdTask), icon: SquareCheck },
+          { label: 'Citazione', run: run(mdLines('quote')), icon: Quote },
+          { label: 'Blocco di codice', run: run(mdCodeBlock), icon: SquareCode },
+          { label: 'Tabella', run: run(mdTable), icon: Table }
+        ].map(c => ({ ...c, group: `Markdown · ${name}` }))
     // ponytail: the whole tree on each opening of the palette; cache by doc version if big files feel slow
     const syms = symbols(v.state).map(s => ({
       label: s.name,
@@ -191,7 +240,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
       group: `Simboli · ${name}`,
       run: () => (v.dispatch({ selection: EditorSelection.cursor(s.from), effects: EditorView.scrollIntoView(s.from, { y: 'center' }) }), v.focus())
     }))
-    return [...cmds, ...syms]
+    return [...mdCmds, ...cmds, ...syms]
   }
   const actionsRef = useRef(editorActions)
   actionsRef.current = editorActions
@@ -216,7 +265,17 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
 
   return (
     <div className="editor-tile">
-      {error ? <div className="files-error"><pre>{error}</pre></div> : <div ref={ref} className="editor-body" />}
+      {error ? (
+        <div className="files-error">
+          <pre>{error}</pre>
+        </div>
+      ) : (
+        <div className="editor-split">
+          <div ref={ref} className="editor-body" />
+          {/* links do nothing here: main never lets the window navigate */}
+          {preview && <div className="note-preview md-preview" dangerouslySetInnerHTML={{ __html: html }} />}
+        </div>
+      )}
       <div className="status-bar">
         <div className="status-left" title={host ? `${host}:${path}` : path}>
           <b>{name}</b>
@@ -230,6 +289,11 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
             <span>Riga {status.line}, col {status.col}</span>
             <span>{indent}</span>
             <span>{lang ?? 'Testo'}</span>
+            {md && (
+              <button className="status-link" onClick={togglePreview}>
+                {preview ? 'Nascondi anteprima' : 'Anteprima'}
+              </button>
+            )}
             <button className="status-link" disabled={!dirty} onClick={() => void save()}>
               Salva (Cmd+S)
             </button>

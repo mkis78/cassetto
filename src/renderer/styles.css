@@ -529,7 +529,15 @@ svg.lucide { flex: none; vertical-align: -2px; }
 
 /* editor tabs */
 .editor-tile { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
-.editor-body { flex: 1; min-height: 0; }
+.editor-split { flex: 1; min-height: 0; display: flex; }
+.editor-body { flex: 1; min-width: 0; min-height: 0; }
+.md-preview { flex: 1; min-width: 0; padding: 12px 20px 24px; border-left: 1px solid var(--line); }
+.md-preview table { border-collapse: collapse; margin: 8px 0; }
+.md-preview th, .md-preview td { border: 1px solid var(--line2); padding: 4px 8px; }
+.md-preview blockquote { margin: 8px 0; padding-left: 12px; border-left: 3px solid var(--line2); color: var(--fg2); }
+.md-preview pre { background: var(--raised); padding: 8px 10px; border-radius: 5px; overflow: auto; }
+.md-preview pre code { background: none; padding: 0; }
+.md-preview img { max-width: 100%; }
 .editor-tile .status-left.editor-right { flex: none; }
 .editor-notice { color: var(--accent); }
 .tab-unsaved { color: var(--fg-strong); font-size: 10px; }

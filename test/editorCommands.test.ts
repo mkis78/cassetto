@@ -3,7 +3,7 @@ import { EditorSelection, EditorState, type StateCommand } from '@codemirror/sta
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import { markdown } from '@codemirror/lang-markdown'
-import { insertLineAbove, joinSelectedLines, sortSelectedLines, splitSelectionByLine, symbols, trimTrailingSpaces, upperCase } from '../src/renderer/editorCommands'
+import { mdLines, mdLink, mdWrap, insertLineAbove, joinSelectedLines, sortSelectedLines, splitSelectionByLine, symbols, trimTrailingSpaces, upperCase } from '../src/renderer/editorCommands'
 
 // runs a command on a document with a selection, returns the document and the selection after
 function run(cmd: StateCommand, doc: string, sel: { anchor: number; head?: number }[]) {
@@ -45,4 +45,19 @@ test('symbols from the syntax tree: JavaScript, Python, Markdown headings', () =
   expect(symbols(py).map(s => s.name)).toEqual(['A', 'run'])
   const md = EditorState.create({ doc: '# Titolo\n\ntesto\n\n## Sotto ##\n', extensions: markdown() })
   expect(symbols(md).map(s => [s.name, s.kind])).toEqual([['Titolo', 'titolo 1'], ['  Sotto', 'titolo 2']])
+})
+
+test('markdown: bold on a word, off again even when the markers are outside the selection', () => {
+  expect(run(mdWrap('**'), 'ciao mondo', [{ anchor: 7 }]).doc).toBe('ciao **mondo**')
+  expect(run(mdWrap('**'), 'ciao **mondo**', [{ anchor: 7, head: 12 }]).doc).toBe('ciao mondo')
+  const empty = run(mdWrap('*'), 'a  b', [{ anchor: 2 }])
+  expect(empty.doc).toBe('a ** b')
+  expect(empty.sel).toEqual([[3, 3]])
+})
+
+test('markdown: a heading on the cursor line, a link around the selection with url selected', () => {
+  expect(run(mdLines('h2'), 'uno\ndue', [{ anchor: 5 }]).doc).toBe('uno\n## due')
+  const l = run(mdLink, 'vedi qui', [{ anchor: 5, head: 8 }])
+  expect(l.doc).toBe('vedi [qui](url)')
+  expect(l.sel).toEqual([[11, 14]])
 })

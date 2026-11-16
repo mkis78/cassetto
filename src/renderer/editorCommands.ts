@@ -2,6 +2,7 @@
 import { EditorSelection, type EditorState, type StateCommand as Command } from '@codemirror/state'
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import { joinLines, sortLines, titleCase, trimTrailing } from '../shared/textOps'
+import { TABLE, toggleLines, toggleTask, toggleWrap, type LineKind } from '../shared/markdownEdit'
 
 // the whole lines a range touches
 const linesOf = (state: EditorState, from: number, to: number) => ({ from: state.doc.lineAt(from).from, to: state.doc.lineAt(to).to })
@@ -131,4 +132,87 @@ export function symbols(state: EditorState): Sym[] {
     }
   })
   return out
+}
+
+// Markdown
+
+// **bold**, *italic*, `code` on each selection; a bare cursor takes its word, or gets the markers to type in between
+export const mdWrap =
+  (marker: string): Command =>
+  ({ state, dispatch }) => {
+    dispatch(
+      state.update(
+        state.changeByRange(r => {
+          const span = r.empty ? (state.wordAt(r.head) ?? r) : r
+          const text = state.sliceDoc(span.from, span.to)
+          // the markers may sit just outside the selection: take them off from there too
+          const outside = state.sliceDoc(span.from - marker.length, span.from) === marker && state.sliceDoc(span.to, span.to + marker.length) === marker
+          if (outside) return { changes: [{ from: span.from - marker.length, to: span.from }, { from: span.to, to: span.to + marker.length }], range: EditorSelection.range(span.from - marker.length, span.to - marker.length) }
+          const insert = toggleWrap(text, marker)
+          if (!text) return { changes: { from: span.from, insert }, range: EditorSelection.cursor(span.from + marker.length) }
+          return { changes: { from: span.from, to: span.to, insert }, range: EditorSelection.range(span.from, span.from + insert.length) }
+        }),
+        { userEvent: 'input' }
+      )
+    )
+    return true
+  }
+
+// `fn` on the whole lines of each selection
+const mdOnLines =
+  (fn: (lines: string[]) => string[]): Command =>
+  ({ state, dispatch }) => {
+    dispatch(
+      state.update(
+        state.changeByRange(r => {
+          const span = linesOf(state, r.from, r.to)
+          const insert = fn(state.sliceDoc(span.from, span.to).split('\n')).join('\n')
+          return { changes: { ...span, insert }, range: r.empty ? EditorSelection.cursor(span.from + insert.split('\n')[0].length) : EditorSelection.range(span.from, span.from + insert.length) }
+        }),
+        { userEvent: 'input' }
+      )
+    )
+    return true
+  }
+
+export const mdLines = (kind: LineKind) => mdOnLines(lines => toggleLines(lines, kind))
+export const mdTask = mdOnLines(lines => lines.map(toggleTask))
+
+// [selection](url), with "url" selected to type over
+export const mdLink: Command = ({ state, dispatch }) => {
+  dispatch(
+    state.update(
+      state.changeByRange(r => {
+        const text = state.sliceDoc(r.from, r.to) || 'testo'
+        const insert = `[${text}](url)`
+        const at = r.from + text.length + 3
+        return { changes: { from: r.from, to: r.to, insert }, range: EditorSelection.range(at, at + 3) }
+      }),
+      { userEvent: 'input' }
+    )
+  )
+  return true
+}
+
+// the selected lines inside ``` fences, the cursor where the language goes
+export const mdCodeBlock: Command = ({ state, dispatch }) => {
+  dispatch(
+    state.update(
+      state.changeByRange(r => {
+        const span = linesOf(state, r.from, r.to)
+        const body = state.sliceDoc(span.from, span.to)
+        return { changes: { ...span, insert: '```\n' + body + '\n```' }, range: EditorSelection.cursor(span.from + 3) }
+      }),
+      { userEvent: 'input' }
+    )
+  )
+  return true
+}
+
+export const mdTable: Command = ({ state, dispatch }) => {
+  const line = state.doc.lineAt(state.selection.main.head)
+  const at = line.text.trim() ? line.to : line.from
+  const insert = (line.text.trim() ? '\n\n' : '') + TABLE
+  dispatch(state.update({ changes: { from: at, insert }, selection: EditorSelection.cursor(at + insert.indexOf('Colonna 1')), userEvent: 'input' }))
+  return true
 }

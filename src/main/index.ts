@@ -5,11 +5,11 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, SearchHit, SearchQuery } from '../shared/types'
 import { runOpLocal, runOpRemote } from './fileOps'
-import { listRemote, listSshHosts, previewRemote, shQuote, sshOptions, sshRun } from './ssh'
+import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
 import { existsSync } from 'node:fs'
 import { PtyManager, terminalLaunch } from './terminal'
-import { listLocal, previewLocal } from './files'
+import { listLocal, previewLocal, readLocal, writeLocal } from './files'
 import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
 import { shortcut, type MenuItem } from '../shared/menus'
@@ -117,8 +117,11 @@ on('pty:kill', (id: string) => ptys.kill(id))
 handle('files:list', (host: string | null, path: string | null) => (host ? listRemote(host, path) : listLocal(path ?? homedir())))
 handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
+handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
+handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: 'testo non valido' } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
 handle('files:op', (host: string | null, op: FileOp) => (host ? runOpRemote(host, op) : runOpLocal(op, p => electronShell.trashItem(p))))
 handle('openPath', (p: string) => electronShell.openPath(p))
+handle('app:quit', () => app.quit())
 
 // free and total space of the disk holding `path`; null when it cannot be read
 handle('files:disk', async (host: string | null, path: string): Promise<Disk | null> => {
@@ -222,7 +225,8 @@ function setMenu(): void {
         submenu: [
           { label: 'Nuovo tab', accelerator: shortcut('T', p), click: send('tile:new') },
           { label: 'Nuovo terminale qui', accelerator: 'CmdOrCtrl+Alt+T', click: send('terminal:new') },
-          { label: 'Connetti a server SSH…', accelerator: p === 'darwin' ? 'Cmd+K' : 'Ctrl+Shift+K', click: send('ssh:open') },
+          // shown here, handled by the renderer: inside the editor Cmd+K starts chords (Cmd+K Cmd+U)
+          { label: 'Connetti a server SSH…', accelerator: shortcut('K', p), registerAccelerator: false, click: send('ssh:open') },
           { label: 'Barra azioni…', accelerator: barShortcut, registerAccelerator: false, click: send('palette:open', 'bar') },
           { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', 'files') },
           ...(p === 'darwin' ? [{ label: 'Comandi…', accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', 'commands') }] : []),

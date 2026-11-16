@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
-import { Folder, Plus, Server, SquareTerminal, X } from 'lucide-react'
+import { FileCode, Folder, Plus, Server, SquareTerminal, X } from 'lucide-react'
 import type { TileParams } from '../shared/types'
 import { TAB_COLORS, tabColor, tabMenu, type TabColor } from '../shared/menus'
 import { ICON } from './icons'
-import { closeTiles, focusTile, openFolder, whereOf } from './tiles'
+import { closeTiles, focusTile, isDirty, onDirty, openFolder, whereOf } from './tiles'
 import { popup } from './menuIcons'
 
 // the palette as the theme paints it now (teal is the accent)
@@ -41,7 +41,8 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
     if (v !== null) save({ name: v.trim() || undefined }) // an empty name goes back to the folder's
     focusTile(containerApi.getPanel(api.id))
   }
-  const Icon = params.kind === 'terminal' ? SquareTerminal : params.host ? Server : Folder
+  const Icon = params.kind === 'terminal' ? SquareTerminal : params.kind === 'editor' ? FileCode : params.host ? Server : Folder
+  const unsaved = useSyncExternalStore(onDirty, () => isDirty(api.id))
   return (
     <div
       className={'tile-tab' + (color ? ' c-' + color : '')}
@@ -79,6 +80,11 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
         />
       ) : (
         <span title={name ? title : undefined}>{name ?? title ?? ''}</span>
+      )}
+      {unsaved && (
+        <span className="tab-unsaved" title="Modifiche non salvate">
+          ●
+        </span>
       )}
       <button className="dv-default-tab-action tile-close" title="Chiudi tab" onPointerDown={e => e.stopPropagation()} onClick={() => closeTiles([containerApi.getPanel(api.id)!])}>
         <X size={13} strokeWidth={2} />

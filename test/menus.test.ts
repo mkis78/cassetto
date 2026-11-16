@@ -5,7 +5,7 @@ const ids = (items: MenuItem[]): string[] => items.flatMap(i => (i.submenu ? [i.
 const find = (items: MenuItem[], id: string): MenuItem | undefined => items.flatMap(i => [i, ...(i.submenu ?? [])]).find(i => i.id === id)
 
 test('files menu depends on what was clicked', () => {
-  expect(ids(filesMenu({ target: 'file', remote: false }))).toEqual(['open', 'copyPath', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
+  expect(ids(filesMenu({ target: 'file', remote: false }))).toEqual(['open', 'edit', 'copyPath', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
   expect(ids(filesMenu({ target: 'dir', remote: false }))).toEqual(['open', 'split:right', 'split:within', 'terminal', 'copyPath', 'newFile', 'newFolder', 'paste', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
   expect(ids(filesMenu({ target: 'background', remote: false }))).toEqual(['refresh', 'terminal', 'newFile', 'newFolder', 'paste'])
   expect(find(filesMenu({ target: 'file', remote: true }), 'delete')?.label).toBe('Elimina definitivamente…') // no trash over ssh

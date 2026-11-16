@@ -41,7 +41,7 @@ export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: bo
     { id: 'delete', label: c.remote ? 'Elimina definitivamente…' : 'Sposta nel Cestino' }
   ]
   const split = [sep, { id: 'split:right', label: 'Apri in un pannello a destra' }, { id: 'split:within', label: 'Apri in un nuovo tab' }, { id: 'terminal', label: 'Apri terminale qui' }]
-  if (c.target === 'file') return [{ id: 'open', label: 'Apri' }, { id: 'copyPath', label: 'Copia percorso' }, ...edit]
+  if (c.target === 'file') return [{ id: 'open', label: c.remote ? 'Apri nell\'editor' : 'Apri' }, ...(c.remote ? [] : [{ id: 'edit', label: 'Modifica nell\'editor' }]), { id: 'copyPath', label: 'Copia percorso' }, ...edit]
   if (c.target === 'dir') return [{ id: 'open', label: 'Apri' }, ...split, { id: 'copyPath', label: 'Copia percorso' }, ...create, ...edit]
   return [{ id: 'refresh', label: 'Aggiorna' }, { id: 'terminal', label: 'Apri terminale qui' }, ...create]
 }

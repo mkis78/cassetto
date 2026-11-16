@@ -1,6 +1,6 @@
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { ArrowRightLeft, SquareTerminal, Search, TextSelect, Eraser, Grid2x2, LayoutDashboard, LayoutPanelLeft, Rows2, Save, Square, ClipboardPaste, Columns2, Columns3, Copy, CopyPlus, Eye, ExternalLink, FilePlus, FolderOpen, FolderPlus, GalleryHorizontal, LayoutGrid, Link, List, Maximize2, Minimize2, PanelRight, Pencil, Plus, RotateCw, Scissors, Trash2, X, XSquare, type LucideIcon } from 'lucide-react'
+import { ArrowRightLeft, FileCode, SquareTerminal, Search, TextSelect, Eraser, Grid2x2, LayoutDashboard, LayoutPanelLeft, Rows2, Save, Square, ClipboardPaste, Columns2, Columns3, Copy, CopyPlus, Eye, ExternalLink, FilePlus, FolderOpen, FolderPlus, GalleryHorizontal, LayoutGrid, Link, List, Maximize2, Minimize2, PanelRight, Pencil, Plus, RotateCw, Scissors, Trash2, X, XSquare, type LucideIcon } from 'lucide-react'
 import type { MenuItem } from '../shared/menus'
 
 // the icon of each menu item, by its id
@@ -32,6 +32,7 @@ const BY_ID: Record<string, LucideIcon> = {
   closeOthers: XSquare,
   save: Save,
   terminal: SquareTerminal,
+  edit: FileCode,
   find: Search,
   selectAll: TextSelect,
   clear: Eraser,

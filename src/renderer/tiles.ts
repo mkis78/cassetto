@@ -27,12 +27,54 @@ export function focusTile(p: IDockviewPanel | undefined): void {
   p?.view.content.element.querySelector<HTMLElement>('[data-autofocus]')?.focus()
 }
 
-export const closeTiles = (panels: IDockviewPanel[]) => panels.forEach(p => p.api.close())
+// editors with unsaved changes: their tab shows a dot, and closing them (or the app) asks first
+const dirty = new Set<string>()
+const dirtySubs = new Set<() => void>()
+export const setDirty = (id: string, d: boolean) => {
+  if (d === dirty.has(id)) return
+  d ? dirty.add(id) : dirty.delete(id)
+  dirtySubs.forEach(f => f())
+}
+export const isDirty = (id: string) => dirty.has(id)
+export const onDirty = (f: () => void) => (dirtySubs.add(f), () => void dirtySubs.delete(f))
+const lose = (n: number) => `${n === 1 ? 'Un file ha' : `${n} file hanno`} modifiche non salvate: andranno perse.`
+
+export function closeTiles(panels: IDockviewPanel[]): void {
+  const n = panels.filter(p => dirty.has(p.id)).length
+  if (n && !confirm(`${lose(n)} Chiudere comunque?`)) return
+  panels.forEach(p => (dirty.delete(p.id), p.api.close()))
+}
+
+// quitting (Cmd+Q, the window's close button) with unsaved editors: stop, ask, then quit for real
+let leaving = false
+window.addEventListener('beforeunload', e => {
+  if (leaving || !dirty.size) return
+  e.preventDefault()
+  e.returnValue = false
+  setTimeout(() => {
+    if (!confirm(`${lose(dirty.size)} Uscire comunque?`)) return
+    leaving = true
+    void window.api.quit()
+  })
+})
+
+// a file opens once: asking again shows its tab instead of a second copy
+export function openEditor(api: DockviewApi, where: { path: string; host: string | null }, nextTo?: string): void {
+  const same = api.panels.find(p => {
+    const q = p.params as TileParams | undefined
+    return q?.kind === 'editor' && q.path === where.path && q.host === where.host
+  })
+  if (same) return void (same.api.setActive(), focusTile(same))
+  const ref = nextTo ?? api.activePanel?.id
+  const params: TileParams = { kind: 'editor', host: where.host, path: where.path }
+  api.addPanel({ id: crypto.randomUUID(), component: 'editor', title: baseName(where.path), params, position: ref ? { referencePanel: ref, direction: 'within' } : undefined })
+}
 
 // where a tab is: the folder it shows, or the one its terminal was opened in
 export function whereOf(p: IDockviewPanel | undefined): { path: string | null; host: string | null } {
   const q = p?.params as TileParams | undefined
   if (!q) return { path: null, host: null }
+  if (q.kind === 'editor') return { path: q.path.slice(0, q.path.lastIndexOf('/')) || '/', host: q.host }
   return { path: q.kind === 'terminal' ? q.cwd : q.path, host: q.host }
 }
 

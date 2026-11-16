@@ -1,0 +1,112 @@
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, test } from 'vitest'
+import { listFiles, nameMatcher, parseContentRecord, posixRegex, runSearch } from '../src/main/search'
+import type { SearchQuery } from '../src/shared/types'
+
+const q = (text: string, o: Partial<SearchQuery> = {}): SearchQuery => ({ text, mode: 'content', regex: false, word: false, ...o })
+
+// a folder with code, an ignored node_modules and an untracked file; `git` makes it a repository
+function project(git: boolean): string {
+  const d = mkdtempSync(join(tmpdir(), 'tsearch-'))
+  mkdirSync(join(d, 'src/deep'), { recursive: true })
+  mkdirSync(join(d, 'node_modules/lib'), { recursive: true })
+  writeFileSync(join(d, 'src/app.ts'), 'import { parseLog } from "./git"\nconst x = parseLog(a: b)\nrerun()\n')
+  writeFileSync(join(d, 'src/deep/My Tile.tsx'), 'export function GitTile() { run() }\n')
+  writeFileSync(join(d, 'node_modules/lib/index.js'), 'parseLog()\n')
+  writeFileSync(join(d, 'README.md'), 'PARSELOG in caps\n')
+  writeFileSync(join(d, '.gitignore'), 'node_modules\n')
+  if (git) {
+    const g = (...a: string[]) => execFileSync('git', a, { cwd: d })
+    g('init', '-q')
+    g('add', 'src', '.gitignore')
+    writeFileSync(join(d, 'src/new.ts'), 'parseLog() // untracked\n')
+  } else writeFileSync(join(d, 'src/new.ts'), 'parseLog() // untracked\n')
+  return d
+}
+
+describe.each([true, false])('content search (git repository: %s)', git => {
+  const d = project(git)
+
+  test('finds lines, skips ignored folders, includes files not committed yet', async () => {
+    const r = await runSearch(d, q('parseLog'))
+    expect(r.error).toBeNull()
+    // "parseLog" has a capital, so it matches case exactly and skips README's PARSELOG
+    expect(r.hits.map(h => `${h.path}:${h.line}`).sort()).toEqual(['src/app.ts:1', 'src/app.ts:2', 'src/new.ts:1'])
+    expect(r.hits.find(h => h.path === 'src/app.ts' && h.line === 2)!.text).toBe('const x = parseLog(a: b)')
+  })
+
+  test('case matters only when the query has a capital letter', async () => {
+    expect((await runSearch(d, q('parselog'))).hits).toHaveLength(4)
+    expect((await runSearch(d, q('PARSELOG'))).hits.map(h => h.path)).toEqual(['README.md'])
+  })
+
+  test('plain text by default, regex on request, whole word', async () => {
+    expect((await runSearch(d, q('parseLog(a'))).hits).toHaveLength(1)
+    expect((await runSearch(d, q('function \\w+Tile', { regex: true }))).hits.map(h => h.path)).toEqual(['src/deep/My Tile.tsx'])
+    expect((await runSearch(d, q('\\d\\s*$', { regex: true }))).hits).toEqual([]) // \d and \s work with every grep
+    expect((await runSearch(d, q('run', { word: true }))).hits.map(h => h.path)).toEqual(['src/deep/My Tile.tsx'])
+  })
+
+  test('a broken regex is an error, no match is not', async () => {
+    expect((await runSearch(d, q('(', { regex: true }))).error).toBeTruthy()
+    expect(await runSearch(d, q('nothing-here'))).toEqual({ hits: [], truncated: false, error: null })
+  })
+
+  test('stops at the limit and says so', async () => {
+    const r = await runSearch(d, q('parseLog'), 2)
+    expect(r.hits).toHaveLength(2)
+    expect(r.truncated).toBe(true)
+  })
+
+  test('file names: globs, plain words, ignored folders skipped', async () => {
+    const names = async (text: string) => (await runSearch(d, q(text, { mode: 'name' }))).hits.map(h => h.path).sort()
+    expect(await names('*.tsx')).toEqual(['src/deep/My Tile.tsx'])
+    expect(await names('tile')).toEqual(['src/deep/My Tile.tsx'])
+    expect(await names('src/*.ts')).toEqual(['src/app.ts', 'src/new.ts'])
+    expect(await names('*.js')).toEqual([])
+  })
+})
+
+test('an aborted search ends quietly', async () => {
+  const ac = new AbortController()
+  const p = runSearch(project(true), q('parseLog'), 1000, ac.signal)
+  ac.abort()
+  expect((await p).error).toBeNull()
+})
+
+test('records from git grep (NUL NUL) and grep (NUL colon) parse the same', () => {
+  expect(parseContentRecord('a b/x.ts\x0012\x00text: with colon')).toEqual({ path: 'a b/x.ts', line: 12, text: 'text: with colon' })
+  expect(parseContentRecord('./a b/x.ts\x0012:text: with colon')).toEqual({ path: 'a b/x.ts', line: 12, text: 'text: with colon' })
+  expect(parseContentRecord('garbage')).toBeNull()
+})
+
+test('regex shorthands become POSIX classes, escaped backslashes stay', () => {
+  expect(posixRegex('\\w+\\d\\s\\W')).toBe('[[:alnum:]_]+[[:digit:]][[:space:]][^[:alnum:]_]')
+  expect(posixRegex('a\\\\w')).toBe('a\\\\w')
+})
+
+test('name patterns', () => {
+  expect(nameMatcher('*.ts')('src/a.ts')).toBe(true)
+  expect(nameMatcher('*.ts')('src/a.tsx')).toBe(false)
+  expect(nameMatcher('src/**/*.tsx')('src/x/y/A.tsx')).toBe(true)
+  expect(nameMatcher('src/**/*.tsx')('lib/A.tsx')).toBe(false)
+  expect(nameMatcher('test?.ts')('a/test1.ts')).toBe(true)
+  expect(nameMatcher('Tile')('src/GitTile.tsx')).toBe(true)
+  expect(nameMatcher('Tile')('src/gittile.tsx')).toBe(false) // smart case
+  expect(nameMatcher('tile')('src/dir-tile/a.ts')).toBe(false) // plain words look at the file name only
+})
+
+test('quick open lists the whole project from its root, ignored folders left out', async () => {
+  for (const git of [true, false]) {
+    const d = realpathSync(project(git))
+    const from = await listFiles(join(d, 'src', 'deep')) // asked from a subfolder
+    expect(from.root).toBe(git ? d : join(d, 'src', 'deep'))
+    if (git) expect(from.files.sort()).toEqual(['.gitignore', 'README.md', 'src/app.ts', 'src/deep/My Tile.tsx', 'src/new.ts'])
+    const all = await listFiles(d)
+    expect(all.files).not.toContain('node_modules/lib/index.js')
+    expect((await listFiles(d, 2)).truncated).toBe(true)
+  }
+})

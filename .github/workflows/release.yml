@@ -1,0 +1,40 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  # One release, made before the builds: electron-builder creates it when missing, and its parallel
+  # uploads (and the two platforms) each made their own, splitting the files across duplicates.
+  create:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "${GITHUB_REF_NAME#v}" --notes ""
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  release:
+    needs: create
+    strategy:
+      fail-fast: false # one platform failing must not cancel the other one's upload
+      matrix:
+        include:
+          - os: macos-26
+            args: --mac
+          - os: ubuntu-22.04
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - run: npm test
+      - run: npx electron-vite build
+      - run: npx electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

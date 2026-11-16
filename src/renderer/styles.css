@@ -503,7 +503,6 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .search-opts .opt-hint { margin: -4px 0 0; color: var(--muted); font-size: 11px; }
 .search-opts .opt-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .search-opts .opt-check input { margin: 0; accent-color: var(--accent); }
-.search-opts .opt-check.off { opacity: .45; cursor: default; }
 .search-opts .opt-field { display: flex; flex-direction: column; gap: 3px; }
 .search-opts input:not([type]), .search-opts select { background: var(--bg); color: var(--fg-strong); border: 1px solid var(--line2); border-radius: 5px; padding: 4px 7px; font: 12px Menlo, monospace; outline: none; }
 .search-opts input:not([type]):focus, .search-opts select:focus { border-color: var(--accent); }

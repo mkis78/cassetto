@@ -36,12 +36,17 @@ export default function SearchOptions({ q, set, onClose }: { q: SearchQuery; set
       <label className="opt-check">
         <input type="checkbox" checked={q.subfolders !== false} onChange={e => set({ subfolders: e.target.checked })} /> Cerca anche nelle sottocartelle
       </label>
-      <label className={'opt-check' + (content ? '' : ' off')} title={content ? undefined : 'Solo per la ricerca nel contenuto'}>
-        <input type="checkbox" disabled={!content} checked={content && q.word} onChange={e => set({ word: e.target.checked })} /> Parola intera
-      </label>
-      <label className={'opt-check' + (content ? '' : ' off')} title={content ? undefined : 'Solo per la ricerca nel contenuto'}>
-        <input type="checkbox" disabled={!content} checked={content && q.regex} onChange={e => set({ regex: e.target.checked })} /> Espressione regolare
-      </label>
+      {/* only where they apply: by name a pattern is already a glob (*.pdf), so these would do nothing */}
+      {content && (
+        <>
+          <label className="opt-check">
+            <input type="checkbox" checked={q.word} onChange={e => set({ word: e.target.checked })} /> Parola intera
+          </label>
+          <label className="opt-check">
+            <input type="checkbox" checked={q.regex} onChange={e => set({ regex: e.target.checked })} /> Espressione regolare
+          </label>
+        </>
+      )}
 
       <label className="opt-field">
         <span className="opt-label">Solo questi file</span>

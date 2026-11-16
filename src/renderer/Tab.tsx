@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
-import { Folder, Plus, Server, X } from 'lucide-react'
+import { Folder, Plus, Server, SquareTerminal, X } from 'lucide-react'
 import type { TileParams } from '../shared/types'
 import { TAB_COLORS, tabColor, tabMenu, type TabColor } from '../shared/menus'
 import { ICON } from './icons'
-import { closeTiles, focusTile, openFolder } from './tiles'
+import { closeTiles, focusTile, openFolder, whereOf } from './tiles'
 import { popup } from './menuIcons'
 
 // the palette as the theme paints it now (teal is the accent)
@@ -41,7 +41,7 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
     if (v !== null) save({ name: v.trim() || undefined }) // an empty name goes back to the folder's
     focusTile(containerApi.getPanel(api.id))
   }
-  const Icon = params.host ? Server : Folder
+  const Icon = params.kind === 'terminal' ? SquareTerminal : params.host ? Server : Folder
   return (
     <div
       className={'tile-tab' + (color ? ' c-' + color : '')}
@@ -89,9 +89,8 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
 
 // "+" after the tabs of each group: a new tab there, on the folder of the tab in front
 export function NewTabButton({ containerApi, activePanel }: IDockviewHeaderActionsProps) {
-  const q = activePanel?.params as TileParams | undefined
   return (
-    <button className="tab-add" title="Nuovo tab (Cmd+T)" onClick={() => openFolder(containerApi, { path: q?.path ?? null, host: q?.host ?? null }, activePanel?.id)}>
+    <button className="tab-add" title="Nuovo tab (Cmd+T)" onClick={() => openFolder(containerApi, whereOf(activePanel), activePanel?.id)}>
       <Plus {...ICON} />
     </button>
   )

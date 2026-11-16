@@ -5,7 +5,10 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, SearchHit, SearchQuery } from '../shared/types'
 import { runOpLocal, runOpRemote } from './fileOps'
-import { listRemote, listSshHosts, previewRemote, shQuote, sshRun } from './ssh'
+import { listRemote, listSshHosts, previewRemote, shQuote, sshOptions, sshRun } from './ssh'
+import { spawn as spawnPty } from 'node-pty'
+import { existsSync } from 'node:fs'
+import { PtyManager, terminalLaunch } from './terminal'
 import { listLocal, previewLocal } from './files'
 import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
@@ -17,6 +20,8 @@ import { DEFAULT_BAR, systemConflict, type SymbolicHotkeys } from '../shared/sho
 if (process.env.CASSETTO_USERDATA) app.setPath('userData', process.env.CASSETTO_USERDATA)
 const stateFile = () => join(app.getPath('userData'), 'state.json')
 let win: BrowserWindow | null = null
+const ptys = new PtyManager(spawnPty)
+const shell = process.env.SHELL ?? (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
 let barShortcut = DEFAULT_BAR // shown in the menu; the renderer listens for the key itself
 
 function createWindow(): void {
@@ -32,7 +37,7 @@ function createWindow(): void {
   // the window only ever shows the app: a dropped file or a link must not replace it (the preload API would stay exposed)
   win.webContents.on('will-navigate', e => e.preventDefault())
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  win.on('closed', () => (win = null))
+  win.on('closed', () => (ptys.killAll(), (win = null)))
 }
 
 // IPC is only accepted from our own window
@@ -92,6 +97,23 @@ handle(
     })
 )
 handle('clipboard:write', (t: string) => clipboard.writeText(t))
+handle('clipboard:read', () => clipboard.readText())
+
+// terminal tabs: one pty each, its output and exit sent to the window
+handle('pty:create', (id: string, p: { host: string | null; cwd: string }, cols: number, rows: number) => {
+  if (!p.host && !existsSync(p.cwd)) throw new Error(`Cartella non trovata: ${p.cwd}`) // node-pty would report only "exit 1"
+  ptys.create(
+    id,
+    terminalLaunch(p, { shell, home: homedir(), sshOptions }),
+    cols,
+    rows,
+    d => win?.webContents.send('pty:data', id, d),
+    code => win?.webContents.send('pty:exit', id, code)
+  )
+})
+on('pty:write', (id: string, d: string) => ptys.write(id, d))
+on('pty:resize', (id: string, c: number, r: number) => ptys.resize(id, c, r))
+on('pty:kill', (id: string) => ptys.kill(id))
 handle('files:list', (host: string | null, path: string | null) => (host ? listRemote(host, path) : listLocal(path ?? homedir())))
 handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
@@ -199,6 +221,7 @@ function setMenu(): void {
         label: 'Archivio',
         submenu: [
           { label: 'Nuovo tab', accelerator: shortcut('T', p), click: send('tile:new') },
+          { label: 'Nuovo terminale qui', accelerator: 'CmdOrCtrl+Alt+T', click: send('terminal:new') },
           { label: 'Connetti a server SSH…', accelerator: p === 'darwin' ? 'Cmd+K' : 'Ctrl+Shift+K', click: send('ssh:open') },
           { label: 'Barra azioni…', accelerator: barShortcut, registerAccelerator: false, click: send('palette:open', 'bar') },
           { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', 'files') },
@@ -222,4 +245,5 @@ app.whenReady().then(() => {
   setMenu()
   createWindow()
 })
+app.on('before-quit', () => ptys.killAll())
 app.on('window-all-closed', () => app.quit())

@@ -29,10 +29,30 @@ export function focusTile(p: IDockviewPanel | undefined): void {
 
 export const closeTiles = (panels: IDockviewPanel[]) => panels.forEach(p => p.api.close())
 
-// the local folder a tab shows, for quick open; none for remote tabs
-export function tileFolder(p: IDockviewPanel | undefined): string | null {
+// where a tab is: the folder it shows, or the one its terminal was opened in
+export function whereOf(p: IDockviewPanel | undefined): { path: string | null; host: string | null } {
   const q = p?.params as TileParams | undefined
-  return q && !q.host ? q.path : null
+  if (!q) return { path: null, host: null }
+  return { path: q.kind === 'terminal' ? q.cwd : q.path, host: q.host }
+}
+
+// the local folder a tab is in, for quick open; none for remote tabs
+export function tileFolder(p: IDockviewPanel | undefined): string | null {
+  const w = whereOf(p)
+  return w.host ? null : w.path
+}
+
+// a terminal in its own tab, next to `nextTo`, starting in `cwd` (on `host` when remote)
+export function openTerminal(api: DockviewApi, where: { cwd: string; host: string | null }, nextTo?: string): void {
+  const ref = nextTo ?? api.activePanel?.id
+  const params: TileParams = { kind: 'terminal', host: where.host, cwd: where.cwd }
+  api.addPanel({
+    id: crypto.randomUUID(),
+    component: 'terminal',
+    title: `${where.host ? `${where.host}: ` : ''}${baseName(where.cwd) || '/'}`,
+    params,
+    position: ref ? { referencePanel: ref, direction: 'within' } : undefined
+  })
 }
 
 // through the tabs in layout order, group by group, wrapping around

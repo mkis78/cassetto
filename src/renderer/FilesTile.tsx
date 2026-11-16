@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, SlidersHorizontal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
+import { ArrowUp, ChevronDown, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
@@ -9,7 +9,7 @@ import FileSearch, { dirOf } from './FileSearch'
 import { actionsMenu, filesMenu, viewMenu } from '../shared/menus'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { baseName, openFolder, setTileActions } from './tiles'
+import { baseName, openFolder, openTerminal, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -451,6 +451,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'open') return entry && open(full, entry.dir)
     if (choice === 'copyPath') return window.api.clipboardWrite(host ? `${host}:${full}` : full)
     if (choice === 'refresh') return refresh()
+    if (choice === 'terminal') return openTerminal(containerApi, { cwd: full, host }, api.id)
     if (choice === 'split:right' || choice === 'split:within') openFolder(containerApi, { path: full, host }, api.id, choice === 'split:right' ? 'right' : 'within')
   }
 
@@ -552,6 +553,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const choice = await popup(actionsMenu({ ready: !!dir, paste: clipFor() }), at)
     if ((choice === 'newFile' || choice === 'newFolder') && dir) startCreate(choice, dir)
     if (choice === 'paste' && dir) paste(dir)
+    if (choice === 'terminal' && dir) openTerminal(containerApi, { cwd: dir, host }, api.id)
     if (choice === 'refresh') refresh()
   }
 
@@ -579,6 +581,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
         ? [
             { label: 'Nuovo file', run: () => void startCreate('newFile', dir), icon: FilePlus },
             { label: 'Nuova cartella', run: () => void startCreate('newFolder', dir), icon: FolderPlus },
+            { label: 'Apri terminale qui', hint: 'Cmd+Alt+T', run: () => openTerminal(containerApi, { cwd: oneDir && one ? one : dir, host }, api.id), icon: SquareTerminal },
             ...(clipFor() === 'ok' ? [{ label: 'Incolla', hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
           ]
         : []),

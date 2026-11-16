@@ -1,13 +1,13 @@
 import { expect, test } from 'vitest'
-import { actionsMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
+import { actionsMenu, terminalMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
 
 const ids = (items: MenuItem[]): string[] => items.flatMap(i => (i.submenu ? [i.id ?? i.label, ...ids(i.submenu)] : i.id ? [i.id] : []))
 const find = (items: MenuItem[], id: string): MenuItem | undefined => items.flatMap(i => [i, ...(i.submenu ?? [])]).find(i => i.id === id)
 
 test('files menu depends on what was clicked', () => {
   expect(ids(filesMenu({ target: 'file', remote: false }))).toEqual(['open', 'copyPath', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
-  expect(ids(filesMenu({ target: 'dir', remote: false }))).toEqual(['open', 'split:right', 'split:within', 'copyPath', 'newFile', 'newFolder', 'paste', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
-  expect(ids(filesMenu({ target: 'background', remote: false }))).toEqual(['refresh', 'newFile', 'newFolder', 'paste'])
+  expect(ids(filesMenu({ target: 'dir', remote: false }))).toEqual(['open', 'split:right', 'split:within', 'terminal', 'copyPath', 'newFile', 'newFolder', 'paste', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
+  expect(ids(filesMenu({ target: 'background', remote: false }))).toEqual(['refresh', 'terminal', 'newFile', 'newFolder', 'paste'])
   expect(find(filesMenu({ target: 'file', remote: true }), 'delete')?.label).toBe('Elimina definitivamente…') // no trash over ssh
   expect(find(filesMenu({ target: 'file', remote: false, count: 2 }), 'rename')?.enabled).toBe(false)
   expect(find(filesMenu({ target: 'background', remote: false, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
@@ -52,7 +52,7 @@ test('view menu: the current view and toggles ticked, no side preview in the gal
 })
 
 test('actions menu: nothing to create in a folder that failed, paste only from the same host', () => {
-  expect(ids(actionsMenu({ ready: true, paste: null }))).toEqual(['newFile', 'newFolder', 'paste', 'refresh'])
+  expect(ids(actionsMenu({ ready: true, paste: null }))).toEqual(['newFile', 'newFolder', 'terminal', 'paste', 'refresh'])
   expect(find(actionsMenu({ ready: false, paste: 'ok' }), 'newFile')?.enabled).toBe(false)
   expect(find(actionsMenu({ ready: true, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
   expect(find(actionsMenu({ ready: true, paste: 'ok' }), 'paste')?.enabled).toBe(true)
@@ -72,4 +72,10 @@ test('saving a layout under a taken name replaces it in place', () => {
 
 test('layouts menu: the arrangements first, then save and the saved ones', () => {
   expect(ids(layoutsMenu(['Foto'], [{ id: 'two', label: 'Due affiancati' }, { id: 'grid', label: 'Griglia 2×2' }]))).toEqual(['arrange:two', 'arrange:grid', 'save', 'layout:Foto', 'Elimina', 'delete:Foto'])
+})
+
+test('terminal menu: copy only with a selection, the folder it started in, close', () => {
+  expect(ids(terminalMenu({ hasSelection: false, platform: 'darwin' }))).toEqual(['copy', 'paste', 'selectAll', 'find', 'clear', 'folder', 'close'])
+  expect(find(terminalMenu({ hasSelection: false, platform: 'darwin' }), 'copy')?.enabled).toBe(false)
+  expect(find(terminalMenu({ hasSelection: true, platform: 'linux' }), 'copy')?.accelerator).toBe('Ctrl+Shift+C') // Ctrl+C stays an interrupt
 })

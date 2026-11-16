@@ -525,3 +525,4 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .status-meter > span { display: block; height: 100%; background: var(--accent); }
 .status-disk.full .status-meter > span { background: var(--red); }
 .status-disk.full { color: var(--red); }
+

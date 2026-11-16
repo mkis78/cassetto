@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
 import type { AppState } from '../shared/types'
 import FilesTile from './FilesTile'
+import TerminalTile from './TerminalTile'
+import { destroyTerminal } from './terminals'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
-import { ChevronDown, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
+import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, focusTile, openFolder, tileActions, tileFolder } from './tiles'
+import { closeTiles, cycleTile, focusTile, openFolder, openTerminal, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
@@ -16,7 +18,7 @@ import { arrange, PRESETS, type Layout, type Preset } from '../shared/arrange'
 import { popup } from './menuIcons'
 import { ICON } from './icons'
 
-const components = { files: FilesTile }
+const components = { files: FilesTile, terminal: TerminalTile }
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null)
@@ -52,6 +54,11 @@ export default function App() {
 
   const active = () => dv.current?.activePanel
   const newTab = () => dv.current && openFolder(dv.current, { path: tileFolder(active()) ?? getSettings().filesHome ?? null, host: null })
+  // a terminal where the tab in front is (its folder, or the one its terminal started in), else in the base folder
+  const newTerminal = () => {
+    const w = whereOf(active())
+    if (dv.current) openTerminal(dv.current, { cwd: w.path ?? getSettings().filesHome ?? window.api.homeDir(), host: w.host })
+  }
   const pick = async () => {
     const path = await window.api.pickFolder()
     if (path && dv.current) openFolder(dv.current, { path, host: null })
@@ -81,6 +88,7 @@ export default function App() {
       window.api.onOpenSettings(() => setSettingsOpen(true)),
       window.api.onOpenSsh(() => setSshDialog(true)),
       window.api.onNewTile(newTab),
+      window.api.onNewTerminal(newTerminal),
       window.api.onCloseTile(() => {
         const p = active()
         if (p) closeTiles([p])
@@ -110,6 +118,9 @@ export default function App() {
     }
     if (!api.panels.length) openFolder(api, { path: getSettings().filesHome ?? null, host: null }) // first launch: the home
     api.onDidLayoutChange(() => update(s => ({ ...s, layout: api.toJSON() })))
+    // a closed terminal tab ends its shell; not one that comes straight back (fromJSON rebuilds every panel
+    // for an arrangement or a saved layout, with the same ids)
+    api.onDidRemovePanel(p => setTimeout(() => !api.getPanel(p.id) && destroyTerminal(p.id)))
     setTimeout(() => focusTile(api.activePanel), 50)
   }
 
@@ -160,8 +171,9 @@ export default function App() {
     const general: Command[] = [
       { label: 'Nuovo tab', hint: 'Cmd+T', run: newTab, icon: PanelTopOpen },
       { label: 'Apri cartella…', run: pick, icon: FolderOpen },
+      { label: 'Nuovo terminale qui', hint: 'Cmd+Alt+T', run: newTerminal, icon: SquareTerminal },
       { label: 'Connetti a server SSH…', hint: 'Cmd+K', run: () => setSshDialog(true), icon: Server },
-      ...(p && dv.current ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(dv.current!, { path: (p.params as { path: string | null }).path, host: (p.params as { host: string | null }).host }, p.id, 'right'), icon: Columns2 }] : []),
+      ...(p && dv.current ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(dv.current!, whereOf(p), p.id, 'right'), icon: Columns2 }] : []),
       { label: 'Tab successivo', hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1), icon: SquareArrowRight },
       { label: 'Tab precedente', hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1), icon: SquareArrowLeft },
       ...(p ? [{ label: 'Chiudi tab', hint: 'Cmd+W', run: () => closeTiles([p]), icon: X }, { label: p.api.isMaximized() ? 'Ripristina pannello' : 'Massimizza pannello', run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()), icon: p.api.isMaximized() ? Minimize2 : Maximize2 }] : []),

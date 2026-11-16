@@ -12,7 +12,21 @@ const listen =
     return () => void ipcRenderer.removeListener(ch, h)
   }
 
+// one IPC listener per channel, routed by terminal id (instead of one filtering listener per terminal)
+function router<A extends unknown[]>(ch: string) {
+  const handlers = new Map<string, (...a: A) => void>()
+  ipcRenderer.on(ch, (_e, id: string, ...a: unknown[]) => handlers.get(id)?.(...(a as A)))
+  return (id: string, cb: (...a: A) => void) => (handlers.set(id, cb), () => void (handlers.get(id) === cb && handlers.delete(id)))
+}
+
 const api = {
+  ptyCreate: (id: string, p: { host: string | null; cwd: string }, cols: number, rows: number): Promise<void> => ipcRenderer.invoke('pty:create', id, p, cols, rows),
+  ptyWrite: (id: string, d: string) => ipcRenderer.send('pty:write', id, d),
+  ptyResize: (id: string, cols: number, rows: number) => ipcRenderer.send('pty:resize', id, cols, rows),
+  ptyKill: (id: string) => ipcRenderer.send('pty:kill', id),
+  onPtyData: router<[string]>('pty:data'),
+  onPtyExit: router<[number]>('pty:exit'),
+  clipboardRead: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
   platform: process.platform,
   pickFolder: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('pickFolder', defaultPath),
   loadState: (): Promise<AppState> => ipcRenderer.invoke('state:load'),
@@ -36,6 +50,7 @@ const api = {
   onOpenSettings: listen<[]>('settings:open'),
   onOpenSsh: listen<[]>('ssh:open'),
   onNewTile: listen<[]>('tile:new'),
+  onNewTerminal: listen<[]>('terminal:new'),
   onCloseTile: listen<[]>('tile:close'),
   onCycleTile: listen<[number]>('tile:cycle'),
   onOpenPalette: listen<['files' | 'commands' | 'bar']>('palette:open')

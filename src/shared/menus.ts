@@ -40,10 +40,25 @@ export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: bo
     sep,
     { id: 'delete', label: c.remote ? 'Elimina definitivamente…' : 'Sposta nel Cestino' }
   ]
-  const split = [sep, { id: 'split:right', label: 'Apri in un pannello a destra' }, { id: 'split:within', label: 'Apri in un nuovo tab' }]
+  const split = [sep, { id: 'split:right', label: 'Apri in un pannello a destra' }, { id: 'split:within', label: 'Apri in un nuovo tab' }, { id: 'terminal', label: 'Apri terminale qui' }]
   if (c.target === 'file') return [{ id: 'open', label: 'Apri' }, { id: 'copyPath', label: 'Copia percorso' }, ...edit]
   if (c.target === 'dir') return [{ id: 'open', label: 'Apri' }, ...split, { id: 'copyPath', label: 'Copia percorso' }, ...create, ...edit]
-  return [{ id: 'refresh', label: 'Aggiorna' }, ...create]
+  return [{ id: 'refresh', label: 'Aggiorna' }, { id: 'terminal', label: 'Apri terminale qui' }, ...create]
+}
+
+// a terminal tab
+export function terminalMenu(c: { hasSelection: boolean; platform: string }): MenuItem[] {
+  return [
+    { id: 'copy', label: 'Copia', accelerator: shortcut('C', c.platform), enabled: c.hasSelection },
+    { id: 'paste', label: 'Incolla', accelerator: shortcut('V', c.platform) },
+    { id: 'selectAll', label: 'Seleziona tutto' },
+    { id: 'find', label: 'Cerca…', accelerator: shortcut('F', c.platform) },
+    { id: 'clear', label: 'Pulisci' },
+    sep,
+    { id: 'folder', label: 'Apri la cartella in un tab' },
+    sep,
+    { id: 'close', label: 'Chiudi tab', accelerator: shortcut('W', c.platform) }
+  ]
 }
 
 // the files tile's "Vista" button: how the folder is drawn, what shows
@@ -62,6 +77,7 @@ export function actionsMenu(c: { ready: boolean; paste: 'ok' | 'other-host' | nu
   return [
     { id: 'newFile', label: 'Nuovo file', enabled: c.ready },
     { id: 'newFolder', label: 'Nuova cartella', enabled: c.ready },
+    { id: 'terminal', label: 'Apri terminale qui', enabled: c.ready },
     { id: 'paste', label: c.paste === 'other-host' ? 'Incolla (solo dallo stesso host)' : 'Incolla', enabled: c.ready && c.paste === 'ok' },
     sep,
     { id: 'refresh', label: 'Aggiorna' }

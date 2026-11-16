@@ -16,6 +16,7 @@
 - **Ricerca** per nome (`*.ts`, `src/**/*.tsx`) o contenuto sotto la cartella aperta.
 - **Vai a file** (Cmd+P) e **comandi** (Cmd+Shift+P).
 - **Server SSH** (Cmd+K): sfoglia, copia, sposta ed elimina file remoti con gli host di `~/.ssh/config`.
+- **Terminale** (Cmd+Alt+T, o «Apri terminale qui» dal menu): una shell in un tab, nella cartella scelta; su un server SSH si apre lì.
 
 ## Sviluppo
 

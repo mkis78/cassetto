@@ -1,4 +1,7 @@
-export type TileParams = { kind: 'files'; host: string | null; path: string | null; hidden?: boolean; preview?: boolean; query?: SearchQuery | null }
+import type { TabColor } from './menus'
+
+// name, color: what the user gave the tab; without a name it shows the folder's
+export type TileParams = { kind: 'files'; host: string | null; path: string | null; hidden?: boolean; preview?: boolean; query?: SearchQuery | null; name?: string; color?: TabColor }
 
 export interface SearchQuery {
   text: string

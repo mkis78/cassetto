@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -46,6 +46,21 @@ handle('pickFolder', async (defaultPath?: string) => {
 })
 handle('state:load', () => loadState(stateFile()))
 handle('ssh:hosts', () => listSshHosts())
+// a filled circle for a menu item, 12pt at 2x, edges antialiased by distance from the centre
+function dotIcon(hex: string, hollow = false): Electron.NativeImage | undefined {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
+  if (!m) return undefined
+  const [r, g, b] = m.slice(1).map(h => parseInt(h, 16))
+  const n = 24, buf = Buffer.alloc(n * n * 4)
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const d = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2)
+      const a = Math.max(0, Math.min(1, 9.5 - d)) * (hollow ? Math.max(0, Math.min(1, d - 7.5)) : 1) // radius 9px of 12, a 2px ring when hollow
+      buf.set([Math.round(b * a), Math.round(g * a), Math.round(r * a), Math.round(255 * a)], (y * n + x) * 4) // BGRA, premultiplied
+    }
+  return nativeImage.createFromBitmap(buf, { width: n, height: n, scaleFactor: 2 })
+}
+
 // native context menu built from data; resolves with the chosen id, or null when dismissed
 handle(
   'menu:popup',
@@ -57,7 +72,7 @@ handle(
         list.map(i =>
           i.separator
             ? { type: 'separator' }
-            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), click: i.id ? () => pick(i.id!) : undefined }
+            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : undefined, click: i.id ? () => pick(i.id!) : undefined }
         )
       Menu.buildFromTemplate(build(items)).popup({ window: win!, callback: () => setTimeout(() => pick(null), 50) })
     })

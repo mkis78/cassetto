@@ -5,6 +5,7 @@ import { ICON } from './icons'
 import { highlight } from '../shared/highlight'
 import { searchMenu } from '../shared/menus'
 import { listKey } from '../shared/listNav'
+import { popup } from './menuIcons'
 
 type Props = {
   tileId: string
@@ -54,7 +55,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
   const menu = async (e: React.SyntheticEvent, hit: SearchHit) => {
     e.preventDefault()
     e.stopPropagation()
-    const choice = await window.api.popupMenu(searchMenu({ line: !!hit.line }))
+    const choice = await popup(searchMenu({ line: !!hit.line }))
     if (choice) act(choice, hit)
   }
   const more = (hit: SearchHit) => (

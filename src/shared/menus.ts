@@ -10,6 +10,7 @@ export interface MenuItem {
   dot?: string // #rrggbb: a coloured dot as the item's icon
   hollow?: boolean // the dot as a ring ("no colour")
   checked?: boolean // a tick: set, even to false, makes it a checkbox item
+  image?: string // data:image/png;base64 at 2x, the item's icon (set by the renderer, see menuIcons)
 }
 
 export const TAB_COLORS = ['red', 'yellow', 'green', 'teal', 'blue', 'purple'] as const

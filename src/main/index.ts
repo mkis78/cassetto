@@ -61,6 +61,16 @@ function dotIcon(hex: string, hollow = false): Electron.NativeImage | undefined 
   return nativeImage.createFromBitmap(buf, { width: n, height: n, scaleFactor: 2 })
 }
 
+// a menu icon drawn by the renderer: a PNG at 2x, nothing else; a template, so macOS colours it
+function menuImage(dataUrl: string): Electron.NativeImage | undefined {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl)
+  if (!m) return undefined
+  const img = nativeImage.createFromBuffer(Buffer.from(m[1], 'base64'), { scaleFactor: 2 })
+  if (img.isEmpty()) return undefined
+  img.setTemplateImage(true)
+  return img
+}
+
 // native context menu built from data; resolves with the chosen id, or null when dismissed
 handle(
   'menu:popup',
@@ -72,7 +82,7 @@ handle(
         list.map(i =>
           i.separator
             ? { type: 'separator' }
-            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : undefined, ...(i.checked !== undefined && { type: 'checkbox' as const, checked: i.checked }), click: i.id ? () => pick(i.id!) : undefined }
+            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : i.image ? menuImage(i.image) : undefined, ...(i.checked !== undefined && { type: 'checkbox' as const, checked: i.checked }), click: i.id ? () => pick(i.id!) : undefined }
         )
       Menu.buildFromTemplate(build(items)).popup({ window: win!, ...(at && { x: at.x, y: at.y }), callback: () => setTimeout(() => pick(null), 50) })
     })

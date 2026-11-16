@@ -14,6 +14,7 @@ import { getSettings } from './settings'
 import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
 import type { FileOp, OpResult } from '../shared/types'
 import { ConfirmDelete, ConflictDialog, type Choice } from './FileDialogs'
+import { popup } from './menuIcons'
 
 type View = 'list' | 'icons' | 'columns' | 'gallery'
 type Sort = { key: SortKey; desc: boolean }
@@ -430,7 +431,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     // a right-click outside the selection selects just that entry, like Finder
     if (entry && !picked.has(full)) select(Math.max(0, columns.findIndex(c => c.path === dir)), dir, entry)
     const items = entry ? chosen(full) : []
-    const choice = await window.api.popupMenu(
+    const choice = await popup(
       filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor() })
     )
     if (!choice) return
@@ -527,7 +528,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     return { x: Math.round(r.left), y: Math.round(r.bottom + 2) }
   }
   const viewChoice = async (e: React.MouseEvent) => {
-    const choice = await window.api.popupMenu(viewMenu({ view, hidden, preview: showPreview }), below(e))
+    const choice = await popup(viewMenu({ view, hidden, preview: showPreview }), below(e))
     if (choice?.startsWith('view:')) setView(choice.slice(5) as View), setCols([])
     if (choice === 'hidden') setHidden(h => !h)
     if (choice === 'preview') setShowPreview(v => !v)
@@ -535,7 +536,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const actionChoice = async (e: React.MouseEvent) => {
     const at = below(e)
     const dir = error ? null : (col?.path ?? listing?.path ?? null)
-    const choice = await window.api.popupMenu(actionsMenu({ ready: !!dir, paste: clipFor() }), at)
+    const choice = await popup(actionsMenu({ ready: !!dir, paste: clipFor() }), at)
     if ((choice === 'newFile' || choice === 'newFolder') && dir) startCreate(choice, dir)
     if (choice === 'paste' && dir) paste(dir)
     if (choice === 'refresh') refresh()

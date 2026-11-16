@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppState, FileOp, ListResult, OpResult, Preview, SearchQuery, SearchResult } from '../shared/types'
+import type { AppState, FileOp, ListResult, OpResult, Preview, SearchHit, SearchQuery, SearchResult } from '../shared/types'
 import type { MenuItem } from '../shared/menus'
 
 // a listener for a message from main; returns how to remove it
@@ -19,7 +19,9 @@ const api = {
   popupMenu: (items: MenuItem[], at?: { x: number; y: number }): Promise<string | null> => ipcRenderer.invoke('menu:popup', items, at),
   clipboardWrite: (t: string): Promise<void> => ipcRenderer.invoke('clipboard:write', t),
   sshHosts: (): Promise<string[]> => ipcRenderer.invoke('ssh:hosts'),
-  search: (tileId: string, host: string | null, cwd: string, q: SearchQuery): Promise<SearchResult> => ipcRenderer.invoke('search:run', tileId, host, cwd, q),
+  search: (tileId: string, run: number, host: string | null, cwd: string, q: SearchQuery): Promise<SearchResult> => ipcRenderer.invoke('search:run', tileId, run, host, cwd, q),
+  // the hits of search `run` of a tile, as they are found
+  onSearchHits: (tileId: string, run: number, cb: (hits: SearchHit[]) => void) => listen<[string, number, SearchHit[]]>('search:hits')((t, r, hits) => t === tileId && r === run && cb(hits)),
   listDir: (host: string | null, path: string | null): Promise<ListResult> => ipcRenderer.invoke('files:list', host, path),
   listFiles: (cwd: string): Promise<{ root: string; files: string[]; truncated: boolean }> => ipcRenderer.invoke('files:all', cwd),
   preview: (host: string | null, path: string): Promise<Preview> => ipcRenderer.invoke('files:preview', host, path),

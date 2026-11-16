@@ -21,26 +21,33 @@ export const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/')) || '/'
 
 // recursive search below `cwd`, here or on an ssh host: results of the files tile while its search box has text
 export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, onOpen }: Props) {
-  const [answer, setAnswer] = useState<{ q: SearchQuery; r: SearchResult } | null>(null) // a result with the query it answers
+  // a result with the query and the run it answers; it grows while hits stream in
+  const [answer, setAnswer] = useState<{ n: number; q: SearchQuery; r: SearchResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const seq = useRef(0)
   const [cur, setCur] = useState(-1) // keyboard cursor over the rows below, file rows included
   const listRef = useRef<HTMLDivElement>(null)
-  useEffect(() => void setCur(-1), [answer])
+  useEffect(() => void setCur(-1), [answer?.n]) // a new search, not each batch of the same one
   useEffect(() => void listRef.current?.querySelector('.file.selected')?.scrollIntoView({ block: 'nearest' }), [cur])
 
-  // search while typing, 300 ms after the last key; main cancels the previous search of this tile
+  // search while typing, 200 ms after the last key; main cancels the previous search of this tile.
+  // Hits show as they are found: the old results stay until the first ones of the new search arrive.
   useEffect(() => {
     const n = ++seq.current
     if (!q.text) return void (setAnswer(null), setBusy(false))
+    let off = () => {}
     const t = setTimeout(async () => {
       setBusy(true)
-      const r = await window.api.search(tileId, host, cwd, q)
+      off = window.api.onSearchHits(tileId, n, hits =>
+        setAnswer(a => (a?.n === n ? { ...a, r: { ...a.r, hits: [...a.r.hits, ...hits] } } : { n, q, r: { hits, truncated: false, error: null } }))
+      )
+      const r = await window.api.search(tileId, n, host, cwd, q)
+      off()
       if (n !== seq.current) return // a newer search is on its way
       setBusy(false)
-      setAnswer({ q, r })
-    }, 300)
-    return () => clearTimeout(t)
+      setAnswer({ n, q, r }) // the whole result, the hits not streamed yet included
+    }, 200)
+    return () => (clearTimeout(t), off())
   }, [q, cwd, host])
 
 
@@ -114,8 +121,11 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
   }
   const files = q.mode === 'content' ? groups.size : (result?.hits.length ?? 0)
   const where = (cwd.split('/').filter(Boolean).pop() ?? '/') + (q.subfolders === false ? ' (senza sottocartelle)' : ' e sottocartelle')
+  const streaming = busy && answer?.n === seq.current // hits of the search still running are on screen
   const summary = busy
-    ? 'Cerco…'
+    ? streaming
+      ? `Cerco… ${result?.hits.length ?? 0} trovati finora · ${where}`
+      : `Cerco in ${where}…`
     : result && !result.error
       ? q.mode === 'content'
         ? `${result.hits.length} ${result.hits.length === 1 ? 'risultato' : 'risultati'} in ${files} file · ${where}`

@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AppState, FileOp, SearchQuery } from '../shared/types'
+import type { AppState, FileOp, SearchHit, SearchQuery } from '../shared/types'
 import { runOpLocal, runOpRemote } from './fileOps'
 import { listRemote, listSshHosts, previewRemote, shQuote, sshRun } from './ssh'
 import { listLocal, previewLocal } from './files'
@@ -111,14 +111,27 @@ handle('files:image', async (host: string | null, path: string): Promise<Uint8Ar
   }
 })
 // one search per tab: a new query cancels the one still running
+// hits stream to the renderer as they are found, a batch at most every 80 ms; the reply is the whole result
 const searches = new Map<string, AbortController>()
-handle('search:run', async (tileId: string, host: string | null, cwd: string, q: SearchQuery) => {
+handle('search:run', async (tileId: string, run: number, host: string | null, cwd: string, q: SearchQuery) => {
   searches.get(tileId)?.abort()
   const ac = new AbortController()
   searches.set(tileId, ac)
+  let batch: SearchHit[] = []
+  let timer: NodeJS.Timeout | null = null
+  const flush = () => {
+    timer = null
+    if (batch.length && !ac.signal.aborted) win?.webContents.send('search:hits', tileId, run, batch)
+    batch = []
+  }
+  const onHits = (h: SearchHit[]) => {
+    batch.push(...h)
+    timer ??= setTimeout(flush, 80)
+  }
   try {
-    return await (host ? runSearchRemote(host, cwd, q, 1000, ac.signal) : runSearch(cwd, q, 1000, ac.signal))
+    return await (host ? runSearchRemote(host, cwd, q, 1000, ac.signal, onHits) : runSearch(cwd, q, 1000, ac.signal, onHits))
   } finally {
+    if (timer) clearTimeout(timer) // what is left comes with the reply
     if (searches.get(tileId) === ac) searches.delete(tileId)
   }
 })

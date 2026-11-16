@@ -1,6 +1,6 @@
-import { execFile, spawn } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import type { SearchHit, SearchQuery, SearchResult } from '../shared/types'
-import { onPath, shQuote, sshRun } from './ssh'
+import { isValidHost, onPath, remoteSh, shQuote, sshOptions } from './ssh'
 
 // outside a repository there is no .gitignore to honour: skip at least these
 const SKIP_DIRS = ['.git', 'node_modules']
@@ -63,10 +63,11 @@ function command(q: SearchQuery, git: boolean): [string, string[]] {
 const hitOf = (rec: string, match: ((p: string) => boolean) | null): SearchHit | null =>
   match ? (match(rec.replace(/^\.\//, '')) ? { path: rec.replace(/^\.\//, '') } : null) : parseContentRecord(rec)
 
-// Streams the tool's output and stops it as soon as `max` hits are found.
-export async function runSearch(cwd: string, q: SearchQuery, max = 1000, signal?: AbortSignal): Promise<SearchResult> {
-  const git = onPath('git') && (await inRepo(cwd))
-  const [cmd, args] = command(q, git)
+type Hits = (hits: SearchHit[]) => void
+
+// Reads a search tool's output as it comes: each chunk's hits go to `onHits` at once, the whole result at the end.
+// Stops the tool as soon as `max` hits are found. `failure` turns an exit code above 1 into the message to show.
+function collect(child: ChildProcess, q: SearchQuery, max: number, signal: AbortSignal | undefined, onHits: Hits | undefined, failure: (code: number, errOut: string) => string): Promise<SearchResult> {
   const match = q.mode === 'name' ? nameMatcher(q.text) : null
   // names end with NUL; content records with a newline (a file name with a newline would split: ignored)
   const sep = q.mode === 'name' ? '\0' : '\n'
@@ -75,50 +76,59 @@ export async function runSearch(cwd: string, q: SearchQuery, max = 1000, signal?
     let rest = ''
     let errOut = ''
     let truncated = false
-    const child = spawn(cmd, args, { cwd, signal })
-    const add = (rec: string) => {
+    const add = (rec: string, batch: SearchHit[]) => {
       const hit = hitOf(rec, match)
       if (!hit) return
       if (hits.length === max) return void ((truncated = true), child.kill())
       hits.push(hit)
+      batch.push(hit)
     }
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (d: string) => {
+    child.stdout!.setEncoding('utf8')
+    child.stdout!.on('data', (d: string) => {
       const recs = (rest + d).split(sep)
       rest = recs.pop()!
-      for (const r of recs) if (!truncated && r) add(r)
+      const batch: SearchHit[] = []
+      for (const r of recs) if (!truncated && r) add(r, batch)
+      if (batch.length) onHits?.(batch)
     })
-    child.stderr.on('data', d => (errOut += d))
+    child.stderr!.on('data', d => (errOut += d))
     child.on('error', err => (err.name === 'AbortError' ? resolve({ hits: [], truncated: false, error: null }) : resolve({ hits, truncated, error: err.message })))
     child.on('close', code => {
       if (signal?.aborted) return resolve({ hits: [], truncated: false, error: null })
-      if (rest && !truncated) add(rest)
+      if (rest && !truncated) add(rest, [])
       // grep and git grep exit 1 for "no match"; 2 and up is a real error (e.g. a broken regex)
       const failed = !truncated && code !== null && code > 1
-      resolve({ hits, truncated, error: failed ? errOut.trim() || `${cmd} è terminato con codice ${code}` : null })
+      resolve({ hits, truncated, error: failed ? failure(code, errOut.trim()) : null })
     })
   })
 }
 
-// The same search on an ssh host: git grep / git ls-files inside a repository, else grep and find.
-// The output comes back whole, so a search matching too much stops at the buffer limit and says so.
-export async function runSearchRemote(host: string, cwd: string, q: SearchQuery, max = 1000, signal?: AbortSignal): Promise<SearchResult> {
+// below `cwd` on this machine: git grep / git ls-files inside a repository, else grep and find
+export async function runSearch(cwd: string, q: SearchQuery, max = 1000, signal?: AbortSignal, onHits?: Hits): Promise<SearchResult> {
+  const [cmd, args] = command(q, onPath('git') && (await inRepo(cwd)))
+  return collect(spawn(cmd, args, { cwd, signal }), q, max, signal, onHits, (code, err) => err || `${cmd} è terminato con codice ${code}`)
+}
+
+// The same search on an ssh host, streamed like the local one; gives up after a minute.
+export async function runSearchRemote(host: string, cwd: string, q: SearchQuery, max = 1000, signal?: AbortSignal, onHits?: Hits): Promise<SearchResult> {
+  if (!isValidHost(host)) return { hits: [], truncated: false, error: `Host non valido: ${host}` }
   const sh = ([cmd, args]: [string, string[]]) => [cmd, ...args].map(shQuote).join(' ')
   const script =
     `cd -- ${shQuote(cwd)} && { if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; ` +
     `then ${sh(command(q, true))}; else ${sh(command(q, false))}; fi; c=$?; [ $c -le 1 ] || exit $c; }` // 1 = no match, not an error
-  const r = await sshRun(host, script, { timeout: 60_000, signal })
-  if (signal?.aborted) return { hits: [], truncated: false, error: null }
-  if (!r.ok) return { hits: [], truncated: false, error: /maxBuffer/i.test(r.error) ? 'Troppi risultati: restringi la ricerca' : r.error }
-  const match = q.mode === 'name' ? nameMatcher(q.text) : null
-  const hits: SearchHit[] = []
-  for (const rec of r.out.toString('utf8').split(q.mode === 'name' ? '\0' : '\n')) {
-    const hit = rec && hitOf(rec, match)
-    if (!hit) continue
-    if (hits.length === max) return { hits, truncated: true, error: null }
-    hits.push(hit)
+  let opts: string[]
+  try {
+    opts = sshOptions()
+  } catch (e) {
+    return { hits: [], truncated: false, error: (e as Error).message }
   }
-  return { hits, truncated: false, error: null }
+  const child = spawn('ssh', [...opts, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', host, '--', remoteSh(script)], { signal })
+  child.stdin.end()
+  let timedOut = false
+  const timer = setTimeout(() => ((timedOut = true), child.kill()), 60_000)
+  const r = await collect(child, q, max, signal, onHits, (code, err) => (code === 255 ? err || `Connessione a ${host} non riuscita` : err || `ricerca terminata con codice ${code}`))
+  clearTimeout(timer)
+  return timedOut ? { ...r, error: `Timeout: la ricerca su ${host} ha impiegato più di un minuto` } : r
 }
 
 // Every file below `cwd`, for quick open and the action bar: inside a repository through git

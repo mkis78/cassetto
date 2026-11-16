@@ -69,6 +69,15 @@ describe.each([true, false])('content search (git repository: %s)', git => {
     expect(await names('*.js')).toEqual([])
   })
 
+  test('hits stream out as they are found, and together they are the final result', async () => {
+    for (const mode of ['content', 'name'] as const) {
+      const streamed: string[] = []
+      const r = await runSearch(d, q(mode === 'name' ? 'ts' : 'parselog', { mode }), 1000, undefined, hits => streamed.push(...hits.map(h => `${h.path}:${h.line ?? ''}`)))
+      expect(streamed.length).toBeGreaterThan(0)
+      expect(streamed).toEqual(r.hits.map(h => `${h.path}:${h.line ?? ''}`))
+    }
+  })
+
   test('without subfolders: only what is right in the folder', async () => {
     const top = (o: Partial<SearchQuery>) => runSearch(d, { ...q('parselog'), subfolders: false, ...o })
     expect((await top({})).hits.map(h => h.path)).toEqual(['README.md'])

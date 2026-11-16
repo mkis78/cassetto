@@ -12,6 +12,7 @@ import { sortBy, type SortKey } from '../shared/sortEntries'
 import { baseName, openFolder, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
+import StatusBar from './StatusBar'
 import { changedOptions } from '../shared/query'
 import { getSettings } from './settings'
 import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
@@ -697,6 +698,15 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           )}
           {showPreview && view !== 'gallery' && <FilePreview path={sel && !sel.dir ? sel.path : null} preview={preview && preview.path === sel?.path ? preview.p : null} />}
         </div>
+      )}
+      {!error && (
+        <StatusBar
+          host={host}
+          col={col ?? null}
+          shown={col ? visible(col) : []}
+          hidden={col ? col.entries.length - visible(col).length : 0}
+          picked={col ? chosen().flatMap(path => (dirOf(path) === col.path ? col.entries.filter(e => e.name === nameOf(path)).map(entry => ({ path, entry })) : [])) : []}
+        />
       )}
     </div>
   )

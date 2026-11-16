@@ -129,7 +129,7 @@ handle('search:run', async (tileId: string, run: number, host: string | null, cw
     timer ??= setTimeout(flush, 80)
   }
   try {
-    return await (host ? runSearchRemote(host, cwd, q, 1000, ac.signal, onHits) : runSearch(cwd, q, 1000, ac.signal, onHits))
+    return await (host ? runSearchRemote(host, cwd, q, ac.signal, onHits) : runSearch(cwd, q, ac.signal, onHits))
   } finally {
     if (timer) clearTimeout(timer) // what is left comes with the reply
     if (searches.get(tileId) === ac) searches.delete(tileId)

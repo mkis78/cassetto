@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, FolderTree, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List, Regex, WholeWord } from 'lucide-react'
+import { ArrowUp, ChevronDown, SlidersHorizontal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
@@ -11,6 +11,8 @@ import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
 import { baseName, openFolder, setTileActions } from './tiles'
 import type { Command } from './Palette'
+import SearchOptions from './SearchOptions'
+import { changedOptions } from '../shared/query'
 import { getSettings } from './settings'
 import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
 import type { FileOp, OpResult } from '../shared/types'
@@ -74,6 +76,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   // reopen with the same view after a restart (dockview merges these into the saved params)
   useEffect(() => void api.updateParameters({ hidden, preview: showPreview, query: q, view }), [hidden, showPreview, q, view])
   const set = (o: Partial<SearchQuery>) => setQ(s => ({ ...s, ...o }))
+  const [showOpts, setShowOpts] = useState(false) // the search criteria panel
+  const closeOpts = useCallback(() => setShowOpts(false), [])
 
   useEffect(() => {
     if (!(showPreview || view === 'gallery') || !sel || sel.dir) return
@@ -647,24 +651,11 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             </button>
           ))}
         </div>
-        <button
-          className={'opt' + (q.subfolders !== false ? ' on' : '')}
-          title={q.subfolders !== false ? 'Cerca anche nelle sottocartelle' : 'Cerca solo in questa cartella'}
-          aria-pressed={q.subfolders !== false}
-          onClick={() => set({ subfolders: q.subfolders === false })}
-        >
-          <FolderTree {...ICON} /> Sottocartelle
+        <button className={'opt search-opts-btn' + (showOpts ? ' on' : '')} title="Opzioni di ricerca" aria-expanded={showOpts} onClick={() => setShowOpts(v => !v)}>
+          <SlidersHorizontal {...ICON} /> Opzioni
+          {changedOptions(q) > 0 && <span className="opt-badge">{changedOptions(q)}</span>}
         </button>
-        {q.mode === 'content' && (
-          <>
-            <button className={'opt' + (q.regex ? ' on' : '')} title="Espressione regolare" aria-pressed={q.regex} onClick={() => set({ regex: !q.regex })}>
-              <Regex {...ICON} />
-            </button>
-            <button className={'opt' + (q.word ? ' on' : '')} title="Parola intera" aria-pressed={q.word} onClick={() => set({ word: !q.word })}>
-              <WholeWord {...ICON} />
-            </button>
-          </>
-        )}
+        {showOpts && <SearchOptions q={q} set={set} onClose={closeOpts} />}
       </div>
       {notice && (
         <div className="files-notice">

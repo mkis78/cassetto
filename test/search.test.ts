@@ -56,7 +56,7 @@ describe.each([true, false])('content search (git repository: %s)', git => {
   })
 
   test('stops at the limit and says so', async () => {
-    const r = await runSearch(d, q('parseLog'), 2)
+    const r = await runSearch(d, q('parseLog', { max: 2 }))
     expect(r.hits).toHaveLength(2)
     expect(r.truncated).toBe(true)
   })
@@ -72,10 +72,28 @@ describe.each([true, false])('content search (git repository: %s)', git => {
   test('hits stream out as they are found, and together they are the final result', async () => {
     for (const mode of ['content', 'name'] as const) {
       const streamed: string[] = []
-      const r = await runSearch(d, q(mode === 'name' ? 'ts' : 'parselog', { mode }), 1000, undefined, hits => streamed.push(...hits.map(h => `${h.path}:${h.line ?? ''}`)))
+      const r = await runSearch(d, q(mode === 'name' ? 'ts' : 'parselog', { mode }), undefined, hits => streamed.push(...hits.map(h => `${h.path}:${h.line ?? ''}`)))
       expect(streamed.length).toBeGreaterThan(0)
       expect(streamed).toEqual(r.hits.map(h => `${h.path}:${h.line ?? ''}`))
     }
+  })
+
+  test('case: smart by default, or always matched, or always ignored', async () => {
+    const paths = async (o: Partial<SearchQuery>) => (await runSearch(d, q('PARSELOG', o))).hits.map(h => h.path).sort()
+    expect(await paths({})).toEqual(['README.md'])
+    expect(await paths({ case: 'ignore' })).toEqual(['README.md', 'src/app.ts', 'src/app.ts', 'src/new.ts'])
+    expect((await runSearch(d, q('parselog', { case: 'match' }))).hits).toEqual([])
+    expect((await runSearch(d, q('TILE', { mode: 'name', case: 'ignore' }))).hits.map(h => h.path)).toEqual(['src/deep/My Tile.tsx'])
+  })
+
+  test('only some files, never others: names anywhere, paths from the folder', async () => {
+    const paths = async (o: Partial<SearchQuery>, text = 'parselog') => [...new Set((await runSearch(d, q(text, o))).hits.map(h => h.path))].sort()
+    expect(await paths({ include: '*.md' })).toEqual(['README.md'])
+    expect(await paths({ include: '*.ts, *.md' })).toEqual(['README.md', 'src/app.ts', 'src/new.ts'])
+    expect(await paths({ exclude: 'src' })).toEqual(['README.md'])
+    expect(await paths({ exclude: 'new.ts' })).toEqual(['README.md', 'src/app.ts'])
+    expect(await paths({ exclude: 'src/deep', mode: 'name' }, '*')).not.toContain('src/deep/My Tile.tsx')
+    expect(await paths({ include: '*.tsx', mode: 'name' }, '*')).toEqual(['src/deep/My Tile.tsx'])
   })
 
   test('without subfolders: only what is right in the folder', async () => {
@@ -90,7 +108,7 @@ describe.each([true, false])('content search (git repository: %s)', git => {
 
 test('an aborted search ends quietly', async () => {
   const ac = new AbortController()
-  const p = runSearch(project(true), q('parseLog'), 1000, ac.signal)
+  const p = runSearch(project(true), q('parseLog'), ac.signal)
   ac.abort()
   expect((await p).error).toBeNull()
 })

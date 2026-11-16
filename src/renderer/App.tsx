@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
 import type { AppState } from '../shared/types'
 import FilesTile from './FilesTile'
@@ -18,7 +18,14 @@ import { arrange, PRESETS, type Layout, type Preset } from '../shared/arrange'
 import { popup } from './menuIcons'
 import { ICON } from './icons'
 
-const components = { files: FilesTile, terminal: TerminalTile }
+// CodeMirror loads with the first editor tab, not with the app
+const Editor = lazy(() => import('./EditorTile'))
+const EditorTile = (props: React.ComponentProps<typeof Editor>) => (
+  <Suspense fallback={<div className="files-empty">Apro l'editor…</div>}>
+    <Editor {...props} />
+  </Suspense>
+)
+const components = { files: FilesTile, terminal: TerminalTile, editor: EditorTile }
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null)

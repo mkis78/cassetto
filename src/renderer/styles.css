@@ -526,3 +526,10 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .status-disk.full .status-meter > span { background: var(--red); }
 .status-disk.full { color: var(--red); }
 
+
+/* editor tabs */
+.editor-tile { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+.editor-body { flex: 1; min-height: 0; }
+.editor-tile .status-left.editor-right { flex: none; }
+.editor-notice { color: var(--accent); }
+.tab-unsaved { color: var(--fg-strong); font-size: 10px; }

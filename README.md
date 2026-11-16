@@ -16,6 +16,7 @@
 - **Ricerca** per nome (`*.ts`, `src/**/*.tsx`) o contenuto sotto la cartella aperta.
 - **Vai a file** (Cmd+P) e **comandi** (Cmd+Shift+P).
 - **Server SSH** (Cmd+K): sfoglia, copia, sposta ed elimina file remoti con gli host di `~/.ssh/config`.
+- **Editor** (CodeMirror 6): «Modifica nell'editor» dal menu di un file; evidenziazione per decine di linguaggi, Cmd+F, Cmd+S, più cursori. I file remoti si aprono qui.
 - **Terminale** (Cmd+Alt+T, o «Apri terminale qui» dal menu): una shell in un tab, nella cartella scelta; su un server SSH si apre lì.
 
 ## Sviluppo

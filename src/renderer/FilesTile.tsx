@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
+import { ArrowUp, ChevronDown, FileCode, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
@@ -9,7 +9,7 @@ import FileSearch, { dirOf } from './FileSearch'
 import { actionsMenu, filesMenu, viewMenu } from '../shared/menus'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { baseName, openFolder, openTerminal, setTileActions } from './tiles'
+import { baseName, openEditor, openFolder, openTerminal, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -163,8 +163,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
 
   const open = (full: string, dir: boolean) => {
     if (dir) return void (setSel(null), load(full))
-    // ponytail: a remote file only previews; download-and-open when it is asked for
-    if (host) return void (setSel({ path: full, dir: false }), setShowPreview(true))
+    // a remote file has no app here to open it: it opens in the editor
+    if (host) return openEditor(containerApi, { path: full, host }, api.id)
     window.api.openPath(full).then(err => err && setNotice(`${nameOf(full)}: ${err}`))
   }
 
@@ -452,6 +452,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'copyPath') return window.api.clipboardWrite(host ? `${host}:${full}` : full)
     if (choice === 'refresh') return refresh()
     if (choice === 'terminal') return openTerminal(containerApi, { cwd: full, host }, api.id)
+    if (choice === 'edit') return openEditor(containerApi, { path: full, host }, api.id)
     if (choice === 'split:right' || choice === 'split:within') openFolder(containerApi, { path: full, host }, api.id, choice === 'split:right' ? 'right' : 'within')
   }
 
@@ -569,6 +570,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       : [
           ...(one ? [{ label: `Apri ${what}`, hint: 'Invio', run: () => open(one, oneDir), icon: ExternalLink }] : []),
           ...(one && oneDir ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
+          ...(one && !oneDir ? [{ label: 'Modifica nell\'editor', run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
           ...(one ? [{ label: 'Rinomina', hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
           { label: 'Duplica', run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus },
           { label: 'Copia', hint: 'Cmd+C', run: () => take(false), icon: Copy },

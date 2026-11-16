@@ -451,3 +451,10 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .git-row.match { box-shadow: inset 3px 0 0 var(--accent); }
 .git-row.match .subject { color: var(--accent); }
 .git-sidebar:focus { outline: none; }
+
+/* tabs: the user's colour as a stripe under the tab and on its icon */
+.tile-tab[class*=' c-'] { box-shadow: inset 0 -2px 0 var(--stripe); }
+.tile-tab[class*=' c-'] .tile-icon { color: var(--stripe) !important; }
+.tab-rename { width: 120px; background: var(--bg); color: var(--fg-strong); border: 1px solid var(--accent); border-radius: 3px; font: inherit; padding: 0 3px; }
+.tab-add { display: inline-flex; align-items: center; height: 100%; padding: 0 8px; background: none; border: 0; color: var(--fg3); cursor: pointer; }
+.tab-add:hover { color: var(--fg-strong); }

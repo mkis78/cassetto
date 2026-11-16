@@ -1,26 +1,57 @@
-import { useEffect, useState } from 'react'
-import type { IDockviewPanelHeaderProps } from 'dockview-react'
-import { Folder, Server, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
+import { Folder, Plus, Server, X } from 'lucide-react'
 import type { TileParams } from '../shared/types'
-import { tabMenu } from '../shared/menus'
+import { TAB_COLORS, tabColor, tabMenu, type TabColor } from '../shared/menus'
 import { ICON } from './icons'
-import { closeTiles } from './tiles'
+import { closeTiles, focusTile, openFolder } from './tiles'
 
-// Tab header: icon, title (the folder shown), close button.
+// the palette as the theme paints it now (teal is the accent)
+const themeDots = () => {
+  const css = getComputedStyle(document.documentElement)
+  const v = (name: string) => css.getPropertyValue(name).trim()
+  return { none: v('--fg3'), ...Object.fromEntries(TAB_COLORS.map(c => [c, v(c === 'teal' ? '--accent' : `--${c}`)])) }
+}
+
+// Tab header: icon, name (the user's, else the folder shown), close button; double click renames, right click colours.
 export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderProps<TileParams>) {
   const [title, setTitle] = useState(api.title)
+  // kept here too: dockview does not re-render the header when the params change
+  const [name, setName] = useState(params.name)
+  const [color, setColor] = useState(tabColor(params.color))
+  const [renaming, setRenaming] = useState(false)
+  const ended = useRef(false) // Enter or Esc already decided: the blur as the box goes away must not save again
   useEffect(() => {
     const d = api.onDidTitleChange(e => setTitle(e.title))
     return () => d.dispose()
   }, [api])
+  const save = (o: { name?: string; color?: TabColor }) => {
+    const next = { name, color, ...o }
+    setName(next.name)
+    setColor(next.color)
+    // undefined drops the key from the saved layout
+    api.updateParameters({ name: next.name, color: next.color })
+  }
+  const rename = () => ((ended.current = false), setRenaming(true))
+  const done = (v: string | null) => {
+    if (ended.current) return
+    ended.current = true
+    setRenaming(false)
+    if (v !== null) save({ name: v.trim() || undefined }) // an empty name goes back to the folder's
+    focusTile(containerApi.getPanel(api.id))
+  }
   const Icon = params.host ? Server : Folder
   return (
     <div
-      className="tile-tab"
+      className={'tile-tab' + (color ? ' c-' + color : '')}
+      onDoubleClick={rename}
       onContextMenu={async e => {
         e.preventDefault()
         const others = containerApi.panels.filter(p => p.id !== api.id)
-        const choice = await window.api.popupMenu(tabMenu({ maximized: api.isMaximized(), others: others.length > 0 }))
+        const choice = await window.api.popupMenu(tabMenu({ maximized: api.isMaximized(), others: others.length > 0, color, named: !!name, dots: themeDots() }))
+        if (choice === 'rename') rename()
+        if (choice === 'unname') save({ name: undefined })
+        if (choice?.startsWith('color:')) save({ color: tabColor(choice.slice(6)) })
         if (choice === 'maximize') api.maximize()
         if (choice === 'restore') api.exitMaximized()
         if (choice === 'close') closeTiles([containerApi.getPanel(api.id)!])
@@ -28,10 +59,39 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
       }}
     >
       <Icon {...ICON} className="tile-icon files" />
-      <span>{title ?? ''}</span>
+      {renaming ? (
+        <input
+          className="tab-rename"
+          autoFocus
+          spellCheck={false}
+          defaultValue={name ?? title ?? ''}
+          placeholder={title}
+          onFocus={e => e.target.select()}
+          // the tab must not start a drag or take the keys while a name is typed
+          onPointerDown={e => e.stopPropagation()}
+          onKeyDown={e => {
+            e.stopPropagation()
+            if (e.key === 'Enter') done(e.currentTarget.value)
+            if (e.key === 'Escape') done(null)
+          }}
+          onBlur={e => done(e.target.value)}
+        />
+      ) : (
+        <span title={name ? title : undefined}>{name ?? title ?? ''}</span>
+      )}
       <button className="dv-default-tab-action tile-close" title="Chiudi tab" onPointerDown={e => e.stopPropagation()} onClick={() => closeTiles([containerApi.getPanel(api.id)!])}>
         <X size={13} strokeWidth={2} />
       </button>
     </div>
+  )
+}
+
+// "+" after the tabs of each group: a new tab there, on the folder of the tab in front
+export function NewTabButton({ containerApi, activePanel }: IDockviewHeaderActionsProps) {
+  const q = activePanel?.params as TileParams | undefined
+  return (
+    <button className="tab-add" title="Nuovo tab (Cmd+T)" onClick={() => openFolder(containerApi, { path: q?.path ?? null, host: q?.host ?? null }, activePanel?.id)}>
+      <Plus {...ICON} />
+    </button>
   )
 }

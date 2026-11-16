@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
 import type { AppState } from '../shared/types'
 import FilesTile from './FilesTile'
-import Tab from './Tab'
+import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
 import SettingsDialog from './SettingsDialog'
@@ -116,7 +116,7 @@ export default function App() {
       </div>
       <WelcomeContext.Provider value={welcome}>
         <div className="ws-body">
-          <DockviewReact theme={theme} components={components} onReady={onReady} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} watermarkComponent={Welcome} />
+          <DockviewReact theme={theme} components={components} onReady={onReady} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} leftHeaderActionsComponent={NewTabButton} watermarkComponent={Welcome} />
         </div>
       </WelcomeContext.Provider>
       {palette && (

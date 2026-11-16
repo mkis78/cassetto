@@ -7,7 +7,15 @@ export interface MenuItem {
   accelerator?: string
   separator?: boolean
   submenu?: MenuItem[]
+  dot?: string // #rrggbb: a coloured dot as the item's icon
+  hollow?: boolean // the dot as a ring ("no colour")
 }
+
+export const TAB_COLORS = ['red', 'yellow', 'green', 'teal', 'blue', 'purple'] as const
+export type TabColor = (typeof TAB_COLORS)[number]
+export const COLOR_NAMES: Record<TabColor, string> = { red: 'Rosso', yellow: 'Giallo', green: 'Verde', teal: 'Verde acqua', blue: 'Blu', purple: 'Viola' }
+// anything outside the palette (an old or hand-edited state.json) is no colour
+export const tabColor = (v: unknown): TabColor | undefined => (TAB_COLORS.includes(v as TabColor) ? (v as TabColor) : undefined)
 
 export const shortcut = (key: string, platform: string): string => (platform === 'darwin' ? `CmdOrCtrl+${key}` : `Ctrl+Shift+${key}`)
 
@@ -46,8 +54,19 @@ export function searchMenu(c: { line: boolean }): MenuItem[] {
   ]
 }
 
-export function tabMenu(c: { maximized: boolean; others: boolean }): MenuItem[] {
+// dots: each colour's hex in the current theme, read from the CSS by the renderer
+export function tabMenu(c: { maximized: boolean; others: boolean; color?: TabColor; named?: boolean; dots?: Partial<Record<TabColor | 'none', string>> }): MenuItem[] {
   return [
+    { id: 'rename', label: 'Rinomina…' },
+    ...(c.named ? [{ id: 'unname', label: 'Usa il nome della cartella' }] : []),
+    {
+      label: 'Colore',
+      submenu: [
+        { id: 'color:', label: (c.color ? '' : '✓ ') + 'Nessuno', dot: c.dots?.none, hollow: true },
+        ...TAB_COLORS.map(k => ({ id: `color:${k}`, label: (c.color === k ? '✓ ' : '') + COLOR_NAMES[k], dot: c.dots?.[k] }))
+      ]
+    },
+    sep,
     c.maximized ? { id: 'restore', label: 'Ripristina' } : { id: 'maximize', label: 'Massimizza' },
     { id: 'close', label: 'Chiudi tab' },
     { id: 'closeOthers', label: 'Chiudi gli altri tab', enabled: c.others }

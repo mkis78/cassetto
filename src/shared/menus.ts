@@ -96,3 +96,24 @@ export function tabMenu(c: { maximized: boolean; others: boolean; color?: TabCol
     { id: 'closeOthers', label: 'Chiudi gli altri tab', enabled: c.others }
   ]
 }
+
+// the top bar's "Layout" button: save what is open, reopen or delete a saved layout (ids carry the name)
+export function layoutsMenu(names: string[]): MenuItem[] {
+  return [
+    { id: 'save', label: 'Salva layout corrente…' },
+    ...(names.length
+      ? [
+          sep,
+          ...names.map(n => ({ id: `layout:${n}`, label: n })),
+          sep,
+          { label: 'Elimina', submenu: names.map(n => ({ id: `delete:${n}`, label: n })) }
+        ]
+      : [])
+  ]
+}
+
+// save under `name`: replaces a layout of the same name (in its place), else goes at the end
+export function putLayout<T extends { name: string }>(list: T[] | undefined, item: T): T[] {
+  const all = list ?? []
+  return all.some(l => l.name === item.name) ? all.map(l => (l.name === item.name ? item : l)) : [...all, item]
+}

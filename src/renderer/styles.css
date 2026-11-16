@@ -458,3 +458,8 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .tab-rename { width: 120px; background: var(--bg); color: var(--fg-strong); border: 1px solid var(--accent); border-radius: 3px; font: inherit; padding: 0 3px; }
 .tab-add { display: inline-flex; align-items: center; height: 100%; padding: 0 8px; background: none; border: 0; color: var(--fg3); cursor: pointer; }
 .tab-add:hover { color: var(--fg-strong); }
+
+/* action bar (Ctrl+Space): headings between groups, an icon per row */
+.palette-group { padding: 8px 12px 3px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.palette-row .palette-icon { flex: none; align-self: center; color: var(--fg3); }
+.palette-row.sel .palette-icon { color: var(--fg-strong); }

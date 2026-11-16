@@ -32,7 +32,7 @@ const api = {
   onNewTile: listen<[]>('tile:new'),
   onCloseTile: listen<[]>('tile:close'),
   onCycleTile: listen<[number]>('tile:cycle'),
-  onOpenPalette: listen<[boolean]>('palette:open')
+  onOpenPalette: listen<['files' | 'commands' | 'bar']>('palette:open')
 }
 
 export type Api = typeof api

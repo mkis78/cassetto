@@ -5,9 +5,10 @@ import FilesTile from './FilesTile'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
+import { Columns2, FolderOpen, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, focusTile, openFolder, tileFolder } from './tiles'
+import { closeTiles, cycleTile, focusTile, openFolder, tileActions, tileFolder } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 
 const components = { files: FilesTile }
@@ -15,7 +16,7 @@ const components = { files: FilesTile }
 export default function App() {
   const [state, setState] = useState<AppState | null>(null)
   const [sshDialog, setSshDialog] = useState(false)
-  const [palette, setPalette] = useState<{ commands: boolean } | null>(null)
+  const [palette, setPalette] = useState<{ mode: 'files' | 'commands' | 'bar' } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const dv = useRef<DockviewApi | null>(null)
   const theme = useTheme() === 'light' ? themeLight : themeDark
@@ -45,8 +46,10 @@ export default function App() {
     const cycle = (step: number) => cycleTile(dv.current ?? undefined, step)
     // captured before the lists see them: Cmd+P quick open, Cmd+Shift+P commands, Cmd+] Cmd+[ between tabs
     const keys = (e: KeyboardEvent) => {
+      // Ctrl+Space: the action bar (ponytail: macOS may keep it for switching input source; then use the menu or rebind)
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Space') return void (e.preventDefault(), e.stopPropagation(), setPalette({ mode: 'bar' }))
       if (!(window.api.platform === 'darwin' ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey)) return
-      const act = { KeyP: () => setPalette({ commands: window.api.platform === 'darwin' && e.shiftKey }), BracketRight: () => cycle(1), BracketLeft: () => cycle(-1) }[e.code]
+      const act = { KeyP: () => setPalette({ mode: window.api.platform === 'darwin' && e.shiftKey ? 'commands' : 'files' }), BracketRight: () => cycle(1), BracketLeft: () => cycle(-1) }[e.code]
       if (!act) return
       e.preventDefault()
       e.stopPropagation()
@@ -66,7 +69,7 @@ export default function App() {
         if (p) closeTiles([p])
       }),
       window.api.onCycleTile(cycle),
-      window.api.onOpenPalette(commands => setPalette({ commands }))
+      window.api.onOpenPalette(mode => setPalette({ mode }))
     ]
     return () => {
       window.removeEventListener('keydown', keys, true)
@@ -96,16 +99,19 @@ export default function App() {
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }
   const paletteActions = (): Command[] => {
     const p = active()
-    return [
-      { label: 'Nuovo tab', hint: 'Cmd+T', run: newTab },
-      { label: 'Apri cartella…', run: pick },
-      { label: 'Connetti a server SSH…', hint: 'Cmd+K', run: () => setSshDialog(true) },
-      ...(p && dv.current ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(dv.current!, { path: (p.params as { path: string | null }).path, host: (p.params as { host: string | null }).host }, p.id, 'right') }] : []),
-      { label: 'Tab successivo', hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1) },
-      { label: 'Tab precedente', hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1) },
-      ...(p ? [{ label: 'Chiudi tab', hint: 'Cmd+W', run: () => closeTiles([p]) }, { label: p.api.isMaximized() ? 'Ripristina pannello' : 'Massimizza pannello', run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()) }] : []),
-      { label: 'Impostazioni…', hint: 'Cmd+,', run: () => setSettingsOpen(true) }
-    ]
+    const group = 'Generali'
+    const general: Command[] = [
+      { label: 'Nuovo tab', hint: 'Cmd+T', run: newTab, icon: PanelTopOpen },
+      { label: 'Apri cartella…', run: pick, icon: FolderOpen },
+      { label: 'Connetti a server SSH…', hint: 'Cmd+K', run: () => setSshDialog(true), icon: Server },
+      ...(p && dv.current ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(dv.current!, { path: (p.params as { path: string | null }).path, host: (p.params as { host: string | null }).host }, p.id, 'right'), icon: Columns2 }] : []),
+      { label: 'Tab successivo', hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1), icon: SquareArrowRight },
+      { label: 'Tab precedente', hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1), icon: SquareArrowLeft },
+      ...(p ? [{ label: 'Chiudi tab', hint: 'Cmd+W', run: () => closeTiles([p]), icon: X }, { label: p.api.isMaximized() ? 'Ripristina pannello' : 'Massimizza pannello', run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()), icon: p.api.isMaximized() ? Minimize2 : Maximize2 }] : []),
+      { label: 'Impostazioni…', hint: 'Cmd+,', run: () => setSettingsOpen(true), icon: Settings }
+    ].map(c => ({ ...c, group }))
+    // what the tab in front can do with its selection and its folder first
+    return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general]
   }
 
   return (
@@ -119,13 +125,14 @@ export default function App() {
           <DockviewReact theme={theme} components={components} onReady={onReady} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} leftHeaderActionsComponent={NewTabButton} watermarkComponent={Welcome} />
         </div>
       </WelcomeContext.Provider>
+      {/* closing goes back to the list first, so an action's own focus (a rename box) can take it after */}
       {palette && (
         <Palette
-          commands={palette.commands}
+          mode={palette.mode}
           root={tileFolder(active())}
           actions={paletteActions()}
           onOpen={full => void window.api.openPath(full)}
-          onClose={() => setPalette(null)}
+          onClose={() => (setPalette(null), focusTile(active()))}
         />
       )}
       {settingsOpen && <SettingsDialog settings={{ ...DEFAULT_SETTINGS, ...state.settings }} onChange={settings => update(s => ({ ...s, settings }))} onClose={() => setSettingsOpen(false)} />}

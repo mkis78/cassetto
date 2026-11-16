@@ -143,8 +143,9 @@ function setMenu(): void {
         submenu: [
           { label: 'Nuovo tab', accelerator: shortcut('T', p), click: send('tile:new') },
           { label: 'Connetti a server SSH…', accelerator: p === 'darwin' ? 'Cmd+K' : 'Ctrl+Shift+K', click: send('ssh:open') },
-          { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', false) },
-          ...(p === 'darwin' ? [{ label: 'Comandi…', accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', true) }] : []),
+          { label: 'Barra azioni…', accelerator: 'Ctrl+Space', registerAccelerator: false, click: send('palette:open', 'bar') },
+          { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', 'files') },
+          ...(p === 'darwin' ? [{ label: 'Comandi…', accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', 'commands') }] : []),
           { type: 'separator' },
           // shown here, handled by the renderer
           { label: 'Tab successivo', accelerator: shortcut(']', p), registerAccelerator: false, click: send('tile:cycle', 1) },

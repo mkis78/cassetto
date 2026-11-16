@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, ChevronRight, Ellipsis, House, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List, Regex, WholeWord } from 'lucide-react'
+import { ArrowUp, ChevronDown, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List, Regex, WholeWord } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
@@ -9,7 +9,8 @@ import FileSearch, { dirOf } from './FileSearch'
 import { actionsMenu, filesMenu, viewMenu } from '../shared/menus'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { baseName, openFolder } from './tiles'
+import { baseName, openFolder, setTileActions } from './tiles'
+import type { Command } from './Palette'
 import { getSettings } from './settings'
 import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
 import type { FileOp, OpResult } from '../shared/types'
@@ -22,6 +23,7 @@ type Params = { kind: 'files'; host: string | null; path: string | null; hidden?
 type Col = Listing & { error?: string } // a folder in the columns view, or why it could not be opened
 
 const VIEW_ICON = { list: List, icons: LayoutGrid, columns: Columns3, gallery: GalleryHorizontal }
+const VIEW_NAME = { list: 'Elenco', icons: 'Icone', columns: 'Colonne', gallery: 'Galleria' }
 
 const EMPTY: SearchQuery = { text: '', mode: 'name', regex: false, word: false }
 
@@ -541,6 +543,48 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'paste' && dir) paste(dir)
     if (choice === 'refresh') refresh()
   }
+
+  // the action bar (Ctrl+Space): what can be done with the selection, then with the folder shown
+  const barActions = (): Command[] => {
+    const dir = error ? null : (col?.path ?? listing?.path ?? null)
+    const items = chosen()
+    const one = items.length === 1 ? items[0] : null
+    const oneDir = one && sel?.path === one ? sel.dir : false
+    const what = one ? nameOf(one) : `${items.length} elementi`
+    const onSel: Command[] = !items.length
+      ? []
+      : [
+          ...(one ? [{ label: `Apri ${what}`, hint: 'Invio', run: () => open(one, oneDir), icon: ExternalLink }] : []),
+          ...(one && oneDir ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
+          ...(one ? [{ label: 'Rinomina', hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
+          { label: 'Duplica', run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus },
+          { label: 'Copia', hint: 'Cmd+C', run: () => take(false), icon: Copy },
+          { label: 'Taglia', hint: 'Cmd+X', run: () => take(true), icon: Scissors },
+          { label: 'Copia percorso', run: () => void window.api.clipboardWrite(items.map(p => (host ? `${host}:${p}` : p)).join('\n')), icon: Link },
+          { label: host ? 'Elimina definitivamente…' : 'Sposta nel Cestino', hint: 'Cmd+⌫', run: () => askDelete(items), icon: Trash2 }
+        ].map(c => ({ ...c, group: `Selezione: ${what}` }))
+    const onDir: Command[] = [
+      ...(dir
+        ? [
+            { label: 'Nuovo file', run: () => void startCreate('newFile', dir), icon: FilePlus },
+            { label: 'Nuova cartella', run: () => void startCreate('newFolder', dir), icon: FolderPlus },
+            ...(clipFor() === 'ok' ? [{ label: 'Incolla', hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
+          ]
+        : []),
+      { label: 'Cerca per nome', hint: 'Cmd+F', run: () => (set({ mode: 'name' }), setTimeout(() => inputRef.current?.focus())), icon: Search },
+      { label: 'Cerca nel contenuto', run: () => (set({ mode: 'content' }), setTimeout(() => inputRef.current?.focus())), icon: TextSearch },
+      ...(here && here !== '/' ? [{ label: 'Cartella superiore', hint: '⌫', run: up, icon: ArrowUp }] : []),
+      { label: 'Cartella di base', run: () => (setSel(null), load(host ? null : (getSettings().filesHome ?? null))), icon: House },
+      { label: 'Aggiorna', run: refresh, icon: RotateCw },
+      ...(['list', 'icons', 'columns', 'gallery'] as const).filter(v => v !== view).map(v => ({ label: `Vista: ${VIEW_NAME[v]}`, run: () => (setView(v), setCols([])), icon: VIEW_ICON[v] })),
+      { label: hidden ? 'Nascondi file nascosti' : 'Mostra file nascosti', run: () => setHidden(h => !h), icon: hidden ? EyeOff : Eye },
+      ...(view !== 'gallery' ? [{ label: showPreview ? 'Nascondi anteprima' : 'Mostra anteprima', hint: 'Spazio', run: () => setShowPreview(v => !v), icon: PanelRight }] : [])
+    ].map(c => ({ ...c, group: `Cartella: ${here ? baseName(here) || '/' : '~'}` }))
+    return [...onSel, ...onDir]
+  }
+  const barRef = useRef(barActions)
+  barRef.current = barActions
+  useEffect(() => setTileActions(api.id, () => barRef.current()), [api.id])
 
   return (
     // Cmd/Ctrl+F: to the search box from anywhere in the tile

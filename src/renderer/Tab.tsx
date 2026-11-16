@@ -5,6 +5,7 @@ import type { TileParams } from '../shared/types'
 import { TAB_COLORS, tabColor, tabMenu, type TabColor } from '../shared/menus'
 import { ICON } from './icons'
 import { closeTiles, focusTile, openFolder } from './tiles'
+import { popup } from './menuIcons'
 
 // the palette as the theme paints it now (teal is the accent)
 const themeDots = () => {
@@ -48,7 +49,7 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
       onContextMenu={async e => {
         e.preventDefault()
         const others = containerApi.panels.filter(p => p.id !== api.id)
-        const choice = await window.api.popupMenu(tabMenu({ maximized: api.isMaximized(), others: others.length > 0, color, named: !!name, dots: themeDots() }))
+        const choice = await popup(tabMenu({ maximized: api.isMaximized(), others: others.length > 0, color, named: !!name, dots: themeDots() }))
         if (choice === 'rename') rename()
         if (choice === 'unname') save({ name: undefined })
         if (choice?.startsWith('color:')) save({ color: tabColor(choice.slice(6)) })

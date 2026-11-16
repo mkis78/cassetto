@@ -1,5 +1,11 @@
 import type { DockviewApi, IDockviewPanel } from 'dockview-react'
 import type { TileParams } from '../shared/types'
+import type { Command } from './Palette'
+
+// what each tab offers the action bar, asked for when the bar opens (so it sees the selection of that moment)
+const actions = new Map<string, () => Command[]>()
+export const setTileActions = (id: string, f: () => Command[]) => (actions.set(id, f), () => void actions.delete(id))
+export const tileActions = (id: string) => actions.get(id)
 
 export const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p
 

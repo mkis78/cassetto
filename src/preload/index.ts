@@ -16,7 +16,7 @@ const api = {
   pickFolder: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('pickFolder', defaultPath),
   loadState: (): Promise<AppState> => ipcRenderer.invoke('state:load'),
   saveState: (s: AppState) => ipcRenderer.send('state:save', s),
-  popupMenu: (items: MenuItem[]): Promise<string | null> => ipcRenderer.invoke('menu:popup', items),
+  popupMenu: (items: MenuItem[], at?: { x: number; y: number }): Promise<string | null> => ipcRenderer.invoke('menu:popup', items, at),
   clipboardWrite: (t: string): Promise<void> => ipcRenderer.invoke('clipboard:write', t),
   sshHosts: (): Promise<string[]> => ipcRenderer.invoke('ssh:hosts'),
   search: (tileId: string, host: string | null, cwd: string, q: SearchQuery): Promise<SearchResult> => ipcRenderer.invoke('search:run', tileId, host, cwd, q),
@@ -25,6 +25,7 @@ const api = {
   preview: (host: string | null, path: string): Promise<Preview> => ipcRenderer.invoke('files:preview', host, path),
   imageBytes: (host: string | null, path: string): Promise<Uint8Array<ArrayBuffer> | null> => ipcRenderer.invoke('files:image', host, path),
   fileOp: (host: string | null, op: FileOp): Promise<OpResult> => ipcRenderer.invoke('files:op', host, op),
+  shortcutConflict: (shortcut: string): Promise<string | null> => ipcRenderer.invoke('shortcut:conflict', shortcut),
   openPath: (p: string): Promise<string> => ipcRenderer.invoke('openPath', p),
   homeDir: (): string => ipcRenderer.sendSync('homeDir'),
   onOpenSettings: listen<[]>('settings:open'),
@@ -32,7 +33,7 @@ const api = {
   onNewTile: listen<[]>('tile:new'),
   onCloseTile: listen<[]>('tile:close'),
   onCycleTile: listen<[number]>('tile:cycle'),
-  onOpenPalette: listen<[boolean]>('palette:open')
+  onOpenPalette: listen<['files' | 'commands' | 'bar']>('palette:open')
 }
 
 export type Api = typeof api

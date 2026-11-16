@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { filesMenu, searchMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
+import { actionsMenu, filesMenu, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
 
 const ids = (items: MenuItem[]): string[] => items.flatMap(i => (i.submenu ? [i.id ?? i.label, ...ids(i.submenu)] : i.id ? [i.id] : []))
 const find = (items: MenuItem[], id: string): MenuItem | undefined => items.flatMap(i => [i, ...(i.submenu ?? [])]).find(i => i.id === id)
@@ -41,4 +41,19 @@ test('tab colour: only the palette passes', () => {
   expect(tabColor('red')).toBe('red')
   expect(tabColor('pink')).toBeUndefined()
   expect(tabColor(undefined)).toBeUndefined()
+})
+
+test('view menu: the current view and toggles ticked, no side preview in the gallery', () => {
+  const m = viewMenu({ view: 'icons', hidden: true, preview: false })
+  expect(ids(m)).toEqual(['view:list', 'view:icons', 'view:columns', 'view:gallery', 'hidden', 'preview'])
+  expect(m.filter(i => i.checked).map(i => i.id)).toEqual(['view:icons', 'hidden'])
+  expect(find(m, 'preview')?.checked).toBe(false) // still a checkbox
+  expect(find(viewMenu({ view: 'gallery', hidden: false, preview: true }), 'preview')?.enabled).toBe(false)
+})
+
+test('actions menu: nothing to create in a folder that failed, paste only from the same host', () => {
+  expect(ids(actionsMenu({ ready: true, paste: null }))).toEqual(['newFile', 'newFolder', 'paste', 'refresh'])
+  expect(find(actionsMenu({ ready: false, paste: 'ok' }), 'newFile')?.enabled).toBe(false)
+  expect(find(actionsMenu({ ready: true, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
+  expect(find(actionsMenu({ ready: true, paste: 'ok' }), 'paste')?.enabled).toBe(true)
 })

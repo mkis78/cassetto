@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
+import { execFile } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -10,10 +11,12 @@ import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
 import { shortcut, type MenuItem } from '../shared/menus'
 import { loadState, saveState } from './store'
+import { DEFAULT_BAR, systemConflict, type SymbolicHotkeys } from '../shared/shortcuts'
 
 if (process.env.CASSETTO_USERDATA) app.setPath('userData', process.env.CASSETTO_USERDATA)
 const stateFile = () => join(app.getPath('userData'), 'state.json')
 let win: BrowserWindow | null = null
+let barShortcut = DEFAULT_BAR // shown in the menu; the renderer listens for the key itself
 
 function createWindow(): void {
   win = new BrowserWindow({
@@ -61,10 +64,20 @@ function dotIcon(hex: string, hollow = false): Electron.NativeImage | undefined 
   return nativeImage.createFromBitmap(buf, { width: n, height: n, scaleFactor: 2 })
 }
 
+// a menu icon drawn by the renderer: a PNG at 2x, nothing else; a template, so macOS colours it
+function menuImage(dataUrl: string): Electron.NativeImage | undefined {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl)
+  if (!m) return undefined
+  const img = nativeImage.createFromBuffer(Buffer.from(m[1], 'base64'), { scaleFactor: 2 })
+  if (img.isEmpty()) return undefined
+  img.setTemplateImage(true)
+  return img
+}
+
 // native context menu built from data; resolves with the chosen id, or null when dismissed
 handle(
   'menu:popup',
-  (items: MenuItem[]) =>
+  (items: MenuItem[], at?: { x: number; y: number }) =>
     new Promise<string | null>(resolve => {
       let done = false
       const pick = (id: string | null) => !done && ((done = true), resolve(id))
@@ -72,9 +85,9 @@ handle(
         list.map(i =>
           i.separator
             ? { type: 'separator' }
-            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : undefined, click: i.id ? () => pick(i.id!) : undefined }
+            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : i.image ? menuImage(i.image) : undefined, ...(i.checked !== undefined && { type: 'checkbox' as const, checked: i.checked }), click: i.id ? () => pick(i.id!) : undefined }
         )
-      Menu.buildFromTemplate(build(items)).popup({ window: win!, callback: () => setTimeout(() => pick(null), 50) })
+      Menu.buildFromTemplate(build(items)).popup({ window: win!, ...(at && { x: at.x, y: at.y }), callback: () => setTimeout(() => pick(null), 50) })
     })
 )
 handle('clipboard:write', (t: string) => clipboard.writeText(t))
@@ -109,7 +122,24 @@ handle('search:run', async (tileId: string, host: string | null, cwd: string, q:
     if (searches.get(tileId) === ac) searches.delete(tileId)
   }
 })
+// a command's output, or '' when it fails (not installed, no such preference)
+const run = (file: string, args: string[]) => new Promise<string>(ok => execFile(file, args, { timeout: 3000 }, (err, out) => ok(err ? '' : out)))
+
+// macOS: the system shortcut (or Raycast's) that would take this one before the window sees it
+handle('shortcut:conflict', async (shortcut: string) => {
+  if (process.platform !== 'darwin' || typeof shortcut !== 'string') return null
+  let hotkeys: SymbolicHotkeys = {}
+  try {
+    hotkeys = JSON.parse(await run('plutil', ['-convert', 'json', '-o', '-', join(homedir(), 'Library/Preferences/com.apple.symbolichotkeys.plist')])).AppleSymbolicHotKeys ?? {}
+  } catch {
+    // no preferences file: the defaults of a fresh Mac
+  }
+  return systemConflict(shortcut, hotkeys, (await run('defaults', ['read', 'com.raycast.macos', 'raycastGlobalHotkey'])).trim())
+})
+
 on('state:save', (s: AppState) => {
+  const bar = s?.settings?.barShortcut ?? DEFAULT_BAR
+  if (bar !== barShortcut) ((barShortcut = bar), setMenu())
   try {
     saveState(stateFile(), s)
   } catch (err) {
@@ -133,8 +163,9 @@ function setMenu(): void {
         submenu: [
           { label: 'Nuovo tab', accelerator: shortcut('T', p), click: send('tile:new') },
           { label: 'Connetti a server SSH…', accelerator: p === 'darwin' ? 'Cmd+K' : 'Ctrl+Shift+K', click: send('ssh:open') },
-          { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', false) },
-          ...(p === 'darwin' ? [{ label: 'Comandi…', accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', true) }] : []),
+          { label: 'Barra azioni…', accelerator: barShortcut, registerAccelerator: false, click: send('palette:open', 'bar') },
+          { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', 'files') },
+          ...(p === 'darwin' ? [{ label: 'Comandi…', accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', 'commands') }] : []),
           { type: 'separator' },
           // shown here, handled by the renderer
           { label: 'Tab successivo', accelerator: shortcut(']', p), registerAccelerator: false, click: send('tile:cycle', 1) },
@@ -149,6 +180,7 @@ function setMenu(): void {
 }
 
 app.whenReady().then(() => {
+  barShortcut = loadState(stateFile()).settings?.barShortcut ?? DEFAULT_BAR
   if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '../../build/icon.png')) // the packaged app gets it from the bundle
   setMenu()
   createWindow()

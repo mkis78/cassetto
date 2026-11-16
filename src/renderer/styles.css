@@ -229,16 +229,31 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .update { margin-right: 8px; font-size: 11px; color: var(--olive); border-color: var(--olive); }
 .spinner { width: 10px; height: 10px; border: 2px solid #a9b66544; border-top-color: var(--olive); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.search-bar input { flex: 1; min-width: 80px; background: var(--bg); color: var(--fg-strong); border: 1px solid var(--line2); border-radius: 4px; padding: 3px 7px; font: 12px Menlo, monospace; outline: none; }
-.search-bar input:focus { border-color: var(--accent); }
-.search-bar button { margin-right: 0; display: inline-flex; align-items: center; }
-.search-file { color: var(--fg); margin-top: 4px; }
-.search-path { overflow: hidden; text-overflow: ellipsis; }
-.search-count { color: var(--muted); font-size: 11px; }
-.search-hit { gap: 8px; padding-left: 22px; }
-.search-line { color: var(--muted); min-width: 3ch; text-align: right; }
-.search-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--fg2); }
-.search-text mark { background: #a9b66533; color: var(--fg-bright); border-radius: 2px; }
+/* search: one field with the lens inside, a two-way switch, the options of a content search */
+.search-bar { flex-wrap: nowrap; gap: 6px; }
+.search-field { flex: 1; min-width: 80px; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 8px; background: var(--bg); border: 1px solid var(--line2); border-radius: 6px; color: var(--fg3); cursor: text; }
+.search-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.search-field.active { color: var(--accent); }
+.search-field input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--fg-strong); font: 12px system-ui, -apple-system, sans-serif; padding: 0; }
+.search-bar .search-clear { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin: 0; padding: 0; border: 0; border-radius: 50%; background: var(--line2); color: var(--fg); cursor: pointer; }
+.search-bar .search-clear:hover { background: var(--fg3); color: var(--bg); }
+.segmented { display: inline-flex; padding: 2px; background: var(--raised); border: 1px solid var(--line2); border-radius: 6px; }
+.files-bar .segmented button { margin: 0; padding: 1px 10px; border: 0; border-radius: 4px; background: none; color: var(--fg3); font-size: 12px; }
+.files-bar .segmented button.on { background: var(--line2); color: var(--fg-strong); }
+.files-bar button.opt { margin: 0; padding: 2px 5px; display: inline-flex; align-items: center; }
+/* results: a summary that stays on top, names before folders, matches lit */
+.search-summary { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--bar); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.search-truncated { color: var(--warn-fg); }
+.search-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
+.search-name b { font-weight: 600; color: var(--fg-strong); flex: none; max-width: 70%; overflow: hidden; text-overflow: ellipsis; }
+.search-dir { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; } /* the end of a long folder stays visible */
+.search-group + .search-group { border-top: 1px solid var(--line); }
+.search-file { margin-top: 2px; }
+.search-count { flex: none; min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--raised); color: var(--fg3); font-size: 10px; text-align: center; line-height: 16px; }
+.search-hit { gap: 10px; padding-left: 28px; }
+.search-line { flex: none; color: var(--muted); min-width: 4ch; text-align: right; font: 11px Menlo, monospace; }
+.search-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--fg2); font: 12px Menlo, monospace; }
+.search-results mark { background: color-mix(in srgb, var(--yellow) 30%, transparent); color: var(--fg-bright); border-radius: 2px; }
 .search-more { visibility: hidden; background: none; border: none; color: var(--fg3); cursor: pointer; padding: 0 4px; display: inline-flex; }
 .file:hover .search-more { visibility: visible; }
 .search-more:hover { color: var(--fg-strong); }

@@ -97,8 +97,40 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
     e.preventDefault()
   }
 
+  const marked = (text: string, query: SearchQuery) =>
+    highlight(text, query).map((p, i) => (p.match ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))
+  // a file name lights up only for a plain word: a glob (*.ts) matches it whole
+  const nameQuery = /[*?]/.test(shown.text) ? null : { ...shown, regex: false, word: false }
+  // name and folder of a hit, the name first: what is looked for stands out, the folder says where
+  const nameDir = (path: string) => {
+    const cut = path.lastIndexOf('/')
+    const name = path.slice(cut + 1)
+    return (
+      <span className="search-name">
+        <b>{nameQuery ? marked(name, nameQuery) : name}</b>
+        {cut > 0 && <span className="search-dir">{path.slice(0, cut)}</span>}
+      </span>
+    )
+  }
+  const files = q.mode === 'content' ? groups.size : (result?.hits.length ?? 0)
+  const where = cwd.split('/').filter(Boolean).pop() ?? '/'
+  const summary = busy
+    ? 'Cerco…'
+    : result && !result.error
+      ? q.mode === 'content'
+        ? `${result.hits.length} ${result.hits.length === 1 ? 'risultato' : 'risultati'} in ${files} file · ${where}`
+        : `${files} file · ${where}`
+      : null
+
   return (
-    <div ref={listRef} tabIndex={0} data-autofocus className={'files-list' + (busy ? ' loading' : '')} onKeyDown={keys}>
+    <div ref={listRef} tabIndex={0} data-autofocus className="files-list search-results" onKeyDown={keys}>
+      {summary && (
+        <div className="search-summary">
+          {busy && <span className="spinner" />}
+          {summary}
+          {result?.truncated && !busy && <span className="search-truncated"> · solo i primi: restringi la ricerca</span>}
+        </div>
+      )}
       {result?.error && (
         <div className="files-error">
           <pre>{result.error}</pre>
@@ -106,29 +138,29 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
       )}
       {q.mode === 'content'
         ? [...groups].map(([path, hits]) => (
-            <div key={path}>
+            <div key={path} className="search-group">
               <div {...row({ path }, 'search-file')} title={path}>
-                <File {...ICON} /> <span className="search-path">{path}</span> <span className="search-count">{hits.length}</span>
+                <File {...ICON} />
+                {nameDir(path)}
+                <span className="search-count">{hits.length}</span>
               </div>
               {hits.map(h => (
                 <div key={h.line} {...row(h, 'search-hit')}>
                   <span className="search-line">{h.line}</span>
-                  <span className="search-text">
-                    {highlight(h.text ?? '', shown).map((p, i) => (p.match ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}
-                  </span>
+                  <span className="search-text">{marked((h.text ?? '').trimStart(), shown)}</span>
                   {more(h)}
                 </div>
               ))}
             </div>
           ))
         : result?.hits.map(h => (
-            <div key={h.path} {...row(h, 'search-hit')} title={h.path}>
-              <File {...ICON} /> <span className="search-text">{h.path}</span>
+            <div key={h.path} {...row(h, 'search-name-hit')} title={h.path}>
+              <File {...ICON} />
+              {nameDir(h.path)}
               {more(h)}
             </div>
           ))}
-      {result && !result.error && !result.hits.length && !busy && <div className="files-empty">Nessun risultato</div>}
-      {result?.truncated && <div className="files-empty">Mostrati i primi {result.hits.length} risultati: restringi la ricerca</div>}
+      {result && !result.error && !result.hits.length && !busy && <div className="files-empty">Nessun risultato per «{shown.text}»</div>}
     </div>
   )
 }

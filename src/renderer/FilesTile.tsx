@@ -611,32 +611,46 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
         </button>
       </div>
       <div className="files-bar search-bar">
-        <input
-          ref={inputRef}
-          spellCheck={false}
-          value={q.text}
-          placeholder={q.mode === 'content' ? 'Cerca nel contenuto…' : 'Cerca: nome, *.ts, src/**/*.tsx…'}
-          onChange={e => set({ text: e.target.value })}
-          onKeyDown={e => {
-            if (e.key === 'Escape') set({ text: '' })
-            if (e.key === 'ArrowDown') {
-              e.preventDefault()
-              rootRef.current?.querySelector<HTMLElement>('.files-list')?.focus() // from the box down into the list or the results
-            }
-          }}
-        />
-        <button className={q.mode === 'name' ? 'on' : ''} onClick={() => set({ mode: 'name' })}>
-          Nome
-        </button>
-        <button className={q.mode === 'content' ? 'on' : ''} onClick={() => set({ mode: 'content' })}>
-          Contenuto
-        </button>
-        <button className={q.regex ? 'on' : ''} disabled={q.mode === 'name'} title="Espressione regolare" onClick={() => set({ regex: !q.regex })}>
-          <Regex {...ICON} />
-        </button>
-        <button className={q.word ? 'on' : ''} disabled={q.mode === 'name'} title="Parola intera" onClick={() => set({ word: !q.word })}>
-          <WholeWord {...ICON} />
-        </button>
+        {/* one field, Finder-like: the lens, the text, a clear button; options only where they apply */}
+        <label className={'search-field' + (q.text ? ' active' : '')}>
+          <Search {...ICON} />
+          <input
+            ref={inputRef}
+            spellCheck={false}
+            value={q.text}
+            placeholder={q.mode === 'content' ? 'Cerca nel contenuto dei file…' : 'Cerca per nome: foto, *.pdf, src/**/*.ts…'}
+            onChange={e => set({ text: e.target.value })}
+            onKeyDown={e => {
+              if (e.key === 'Escape') set({ text: '' })
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                rootRef.current?.querySelector<HTMLElement>('.files-list')?.focus() // from the box down into the list or the results
+              }
+            }}
+          />
+          {q.text && (
+            <button className="search-clear" title="Svuota (Esc)" onClick={() => (set({ text: '' }), inputRef.current?.focus())}>
+              <X size={12} strokeWidth={2} />
+            </button>
+          )}
+        </label>
+        <div className="segmented" role="radiogroup" aria-label="Cerca in">
+          {(['name', 'content'] as const).map(m => (
+            <button key={m} role="radio" aria-checked={q.mode === m} className={q.mode === m ? 'on' : ''} onClick={() => (set({ mode: m }), inputRef.current?.focus())}>
+              {m === 'name' ? 'Nome' : 'Contenuto'}
+            </button>
+          ))}
+        </div>
+        {q.mode === 'content' && (
+          <>
+            <button className={'opt' + (q.regex ? ' on' : '')} title="Espressione regolare" aria-pressed={q.regex} onClick={() => set({ regex: !q.regex })}>
+              <Regex {...ICON} />
+            </button>
+            <button className={'opt' + (q.word ? ' on' : '')} title="Parola intera" aria-pressed={q.word} onClick={() => set({ word: !q.word })}>
+              <WholeWord {...ICON} />
+            </button>
+          </>
+        )}
       </div>
       {notice && (
         <div className="files-notice">

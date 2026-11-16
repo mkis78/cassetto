@@ -8,6 +8,11 @@ export interface SearchQuery {
   mode: 'content' | 'name'
   regex: boolean
   word: boolean
+  subfolders?: boolean // look below the folder too; unset counts as yes
+  case?: 'smart' | 'match' | 'ignore' // unset: smart (see shared/query)
+  include?: string // only these files: names or paths, comma separated ("*.ts, docs/*.md")
+  exclude?: string // never these files or folders, same form ("node_modules, *.log")
+  max?: number // hits at most; unset: DEFAULT_MAX
 }
 
 export interface SearchHit {

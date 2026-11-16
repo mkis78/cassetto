@@ -1,4 +1,5 @@
 import type { SearchQuery } from './types'
+import { ignoreCase } from './query'
 
 export interface Part {
   text: string
@@ -6,12 +7,12 @@ export interface Part {
 }
 
 // The parts of a result line that the query matched, for highlighting. Mirrors the search rules
-// (lower-case query ignores case); a regex JavaScript cannot read just leaves the line plain.
+// (the query's case option); a regex JavaScript cannot read just leaves the line plain.
 export function highlight(line: string, q: SearchQuery): Part[] {
   let re: RegExp
   try {
     const src = q.regex ? q.text : q.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    re = new RegExp(q.word ? `\\b(?:${src})\\b` : src, q.text === q.text.toLowerCase() ? 'gi' : 'g')
+    re = new RegExp(q.word ? `\\b(?:${src})\\b` : src, ignoreCase(q) ? 'gi' : 'g')
   } catch {
     return [{ text: line, match: false }]
   }

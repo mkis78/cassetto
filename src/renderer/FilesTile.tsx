@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List, Regex, WholeWord } from 'lucide-react'
+import { ArrowUp, ChevronDown, SlidersHorizontal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
@@ -11,6 +11,8 @@ import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
 import { baseName, openFolder, setTileActions } from './tiles'
 import type { Command } from './Palette'
+import SearchOptions from './SearchOptions'
+import { changedOptions } from '../shared/query'
 import { getSettings } from './settings'
 import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
 import type { FileOp, OpResult } from '../shared/types'
@@ -74,6 +76,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   // reopen with the same view after a restart (dockview merges these into the saved params)
   useEffect(() => void api.updateParameters({ hidden, preview: showPreview, query: q, view }), [hidden, showPreview, q, view])
   const set = (o: Partial<SearchQuery>) => setQ(s => ({ ...s, ...o }))
+  const [showOpts, setShowOpts] = useState(false) // the search criteria panel
+  const closeOpts = useCallback(() => setShowOpts(false), [])
 
   useEffect(() => {
     if (!(showPreview || view === 'gallery') || !sel || sel.dir) return
@@ -522,6 +526,12 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     )
   }
 
+  // where the search box looks: the folder being worked in (in the columns view, the column holding the selection),
+  // taken when the search starts or the tile moves to another folder, not when a result is picked (that moves the selection)
+  const workDir = error ? null : (col?.path ?? listing?.path ?? null)
+  const [searchDir, setSearchDir] = useState<string | null>(null)
+  useEffect(() => setSearchDir(q.text ? workDir : null), [!!q.text, listing?.path])
+
   // the bar's two menus
   const ViewIcon = VIEW_ICON[view]
   // under the button, like a dropdown
@@ -611,32 +621,41 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
         </button>
       </div>
       <div className="files-bar search-bar">
-        <input
-          ref={inputRef}
-          spellCheck={false}
-          value={q.text}
-          placeholder={q.mode === 'content' ? 'Cerca nel contenuto…' : 'Cerca: nome, *.ts, src/**/*.tsx…'}
-          onChange={e => set({ text: e.target.value })}
-          onKeyDown={e => {
-            if (e.key === 'Escape') set({ text: '' })
-            if (e.key === 'ArrowDown') {
-              e.preventDefault()
-              rootRef.current?.querySelector<HTMLElement>('.files-list')?.focus() // from the box down into the list or the results
-            }
-          }}
-        />
-        <button className={q.mode === 'name' ? 'on' : ''} onClick={() => set({ mode: 'name' })}>
-          Nome
+        {/* one field, Finder-like: the lens, the text, a clear button; options only where they apply */}
+        <label className={'search-field' + (q.text ? ' active' : '')}>
+          <Search {...ICON} />
+          <input
+            ref={inputRef}
+            spellCheck={false}
+            value={q.text}
+            placeholder={q.mode === 'content' ? 'Cerca nel contenuto dei file…' : 'Cerca per nome: foto, *.pdf, src/**/*.ts…'}
+            onChange={e => set({ text: e.target.value })}
+            onKeyDown={e => {
+              if (e.key === 'Escape') set({ text: '' })
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                rootRef.current?.querySelector<HTMLElement>('.files-list')?.focus() // from the box down into the list or the results
+              }
+            }}
+          />
+          {q.text && (
+            <button className="search-clear" title="Svuota (Esc)" onClick={() => (set({ text: '' }), inputRef.current?.focus())}>
+              <X size={12} strokeWidth={2} />
+            </button>
+          )}
+        </label>
+        <div className="segmented" role="radiogroup" aria-label="Cerca in">
+          {(['name', 'content'] as const).map(m => (
+            <button key={m} role="radio" aria-checked={q.mode === m} className={q.mode === m ? 'on' : ''} onClick={() => (set({ mode: m }), inputRef.current?.focus())}>
+              {m === 'name' ? 'Nome' : 'Contenuto'}
+            </button>
+          ))}
+        </div>
+        <button className={'opt search-opts-btn' + (showOpts ? ' on' : '')} title="Opzioni di ricerca" aria-expanded={showOpts} onClick={() => setShowOpts(v => !v)}>
+          <SlidersHorizontal {...ICON} /> Opzioni
+          {changedOptions(q) > 0 && <span className="opt-badge">{changedOptions(q)}</span>}
         </button>
-        <button className={q.mode === 'content' ? 'on' : ''} onClick={() => set({ mode: 'content' })}>
-          Contenuto
-        </button>
-        <button className={q.regex ? 'on' : ''} disabled={q.mode === 'name'} title="Espressione regolare" onClick={() => set({ regex: !q.regex })}>
-          <Regex {...ICON} />
-        </button>
-        <button className={q.word ? 'on' : ''} disabled={q.mode === 'name'} title="Parola intera" onClick={() => set({ word: !q.word })}>
-          <WholeWord {...ICON} />
-        </button>
+        {showOpts && <SearchOptions q={q} set={set} onClose={closeOpts} />}
       </div>
       {notice && (
         <div className="files-notice">
@@ -656,7 +675,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       ) : (
         <div className="files-body">
           {searching && listing ? (
-            <FileSearch tileId={api.id} host={host} cwd={listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} />
+            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} />
           ) : (
             <div ref={listRef} tabIndex={0} data-autofocus className={`files-list files-${view}` + (loading ? ' loading' : '')} onKeyDown={keys}>
               {view === 'columns'

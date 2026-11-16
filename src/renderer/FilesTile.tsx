@@ -34,8 +34,12 @@ const MAX_SHOWN = 2000
 
 // copy/cut, shared by every Files tile; the paths belong to the host they were taken from
 let clip: { host: string | null; paths: string[]; cut: boolean } | null = null
-// what a drag carries: the tile it started in and its paths (moves stay within one tile)
+// what a drag carries: the host and the paths; also kept here, since a dragover cannot read the data, only its types
 const DND = 'application/x-cassetto-files'
+let dragging: { host: string | null; paths: string[] } | null = null
+// a tile changed these folders: the other tiles showing one of them list it again
+const CHANGED = 'cassetto:changed'
+const changed = (from: string, dirs: string[]) => window.dispatchEvent(new CustomEvent(CHANGED, { detail: { from, dirs } }))
 type Editing = { dir: string; kind: 'newFile' | 'newFolder' | 'rename'; name: string; from?: string; error?: string }
 
 const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1)
@@ -215,6 +219,14 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const chain = useRef<string[]>([])
   chain.current = listing ? [listing.path, ...cols.map(c => c.path)] : []
   const refreshTo = (keep?: string) => reload(chain.current, keep)
+  useEffect(() => {
+    const f = (e: Event) => {
+      const { from, dirs } = (e as CustomEvent<{ from: string; dirs: string[] }>).detail
+      if (from !== api.id && chain.current.some(d => dirs.includes(d))) void reload(chain.current)
+    }
+    window.addEventListener(CHANGED, f)
+    return () => window.removeEventListener(CHANGED, f)
+  }, [reload])
 
   // what an action works on: the selection when the clicked entry is part of it, otherwise that entry alone
   const chosen = (full?: string) => (full && !picked.has(full) ? [full] : [...picked])
@@ -267,6 +279,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const before = refused.length ? [`Non sostituiti (sostituirebbero sé stessi): ${refused.join(', ')}`] : []
     if (!items.length) return report({ failed: [] }, before), false
     report(await window.api.fileOp(host, { op: mode, items }), before)
+    changed(api.id, [destDir, ...(mode === 'move' ? srcs.map(dirOf) : [])])
     await refreshTo(items.length === 1 ? items[0].dest : undefined)
     return true
   }
@@ -282,6 +295,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const c = confirm!
     setConfirm(null)
     const r = await window.api.fileOp(host, { op: c.permanent ? 'delete' : 'trash', paths: c.paths })
+    changed(api.id, c.paths.map(dirOf))
     await refreshTo()
     // the trash refused some: never fall back by itself, ask again in the permanent wording
     if (!c.permanent && r.failed.length) setConfirm({ paths: r.failed.map(f => f.path), permanent: true, note: `Il Cestino non ha accettato questi elementi (${r.failed[0].error}).` })
@@ -316,6 +330,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     busy.current = true
     const r = await window.api.fileOp(host, op).finally(() => (busy.current = false))
     if (r.failed.length) return fail(r.failed[0].error)
+    changed(api.id, [ed.dir])
     close()
     await refreshTo(path)
     listRef.current?.focus()
@@ -351,14 +366,17 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     setSel(s)
   }
 
-  // drag the selection onto a folder (or a column's background): move, or copy with Alt; only within this tile
+  // drag the selection onto a folder or a folder's background, in this tile or another on the same host:
+  // move, or copy with Alt
   const drag = (ev: React.DragEvent, full: string) => {
-    ev.dataTransfer.setData(DND, JSON.stringify({ tile: api.id, paths: chosen(full) }))
+    dragging = { host, paths: chosen(full) }
+    ev.dataTransfer.setData(DND, JSON.stringify(dragging))
     ev.dataTransfer.effectAllowed = 'copyMove'
   }
   const dropProps = (dir: string) => ({
     onDragOver: (ev: React.DragEvent) => {
-      if (!ev.dataTransfer.types.includes(DND)) return
+      // ponytail: no drops across hosts; copying between machines needs a transfer of its own
+      if (!ev.dataTransfer.types.includes(DND) || dragging?.host !== host) return
       ev.preventDefault()
       ev.stopPropagation()
       ev.dataTransfer.dropEffect = ev.altKey ? 'copy' : 'move'
@@ -371,8 +389,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       if (!raw) return
       ev.preventDefault()
       ev.stopPropagation()
-      const { tile, paths } = JSON.parse(raw) as { tile: string; paths: string[] }
-      if (tile === api.id && !paths.includes(dir)) transfer(ev.altKey ? 'copy' : 'move', paths, dir)
+      const d = JSON.parse(raw) as { host: string | null; paths: string[] }
+      if (d.host === host && !d.paths.includes(dir)) transfer(ev.altKey ? 'copy' : 'move', d.paths, dir)
     }
   })
 
@@ -472,6 +490,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
               onDoubleClick={() => open(full, e.dir)}
               draggable={!renaming}
               onDragStart={ev => drag(ev, full)}
+              onDragEnd={() => (dragging = null)}
               {...(e.dir ? dropProps(full) : {})}
               onContextMenu={ev => menu(ev, l.path, e)}
               title={tiles ? e.name : 'doppio clic: apri'}

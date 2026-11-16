@@ -23,7 +23,7 @@ Node.js LTS.
 
 ```sh
 npm install
-npm run dev      # con hot reload
+npm run dev      # hot reload; main e preload si ricompilano e l'app si riavvia
 npm test         # vitest
 npm run dist     # dist/Cassetto-<version>-arm64.dmg
 ```

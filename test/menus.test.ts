@@ -69,3 +69,7 @@ test('saving a layout under a taken name replaces it in place', () => {
   expect(putLayout(list, { name: 'c', layout: 4 }).map(l => l.name)).toEqual(['a', 'b', 'c'])
   expect(putLayout(undefined, { name: 'a', layout: 1 })).toHaveLength(1)
 })
+
+test('layouts menu: the arrangements first, then save and the saved ones', () => {
+  expect(ids(layoutsMenu(['Foto'], [{ id: 'two', label: 'Due affiancati' }, { id: 'grid', label: 'Griglia 2×2' }]))).toEqual(['arrange:two', 'arrange:grid', 'save', 'layout:Foto', 'Elimina', 'delete:Foto'])
+})

@@ -97,9 +97,11 @@ export function tabMenu(c: { maximized: boolean; others: boolean; color?: TabCol
   ]
 }
 
-// the top bar's "Layout" button: save what is open, reopen or delete a saved layout (ids carry the name)
-export function layoutsMenu(names: string[]): MenuItem[] {
+// the top bar's "Layout" button: arrange the open tabs, save them, reopen or delete a saved layout (ids carry the name)
+export function layoutsMenu(names: string[], arrangements: { id: string; label: string }[] = []): MenuItem[] {
   return [
+    ...arrangements.map(a => ({ id: `arrange:${a.id}`, label: a.label })),
+    ...(arrangements.length ? [sep] : []),
     { id: 'save', label: 'Salva layout corrente…' },
     ...(names.length
       ? [

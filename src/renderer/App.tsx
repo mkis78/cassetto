@@ -135,7 +135,9 @@ export default function App() {
   const deleteLayout = (name: string) => confirm(`Eliminare il layout «${name}»?`) && update(s => ({ ...s, layouts: (s.layouts ?? []).filter(l => l.name !== name) }))
   const layoutChoice = async (e: React.MouseEvent) => {
     const r = e.currentTarget.getBoundingClientRect()
-    const choice = await popup(layoutsMenu(layouts.map(l => l.name)), { x: Math.round(r.left), y: Math.round(r.bottom + 2) })
+    const arrangements = (Object.keys(PRESETS) as Preset[]).map(id => ({ id, label: PRESETS[id].label }))
+    const choice = await popup(layoutsMenu(layouts.map(l => l.name), arrangements), { x: Math.round(r.left), y: Math.round(r.bottom + 2) })
+    if (choice?.startsWith('arrange:')) arrangeTabs(choice.slice(8) as Preset)
     if (choice === 'save') setSaving(true)
     if (choice?.startsWith('layout:')) openLayout(choice.slice(7))
     if (choice?.startsWith('delete:')) deleteLayout(choice.slice(7))
@@ -178,17 +180,7 @@ export default function App() {
     <div className={`app platform-${window.api.platform}`}>
       <div className="topbar">
         <div className="spacer" />
-        <div className="arrange" role="group" aria-label="Disposizione dei tab">
-          {(Object.keys(PRESETS) as Preset[]).map(k => {
-            const I = ARRANGE_ICON[k]
-            return (
-              <button key={k} title={PRESETS[k].label} aria-label={PRESETS[k].label} onClick={() => arrangeTabs(k)}>
-                <I {...ICON} />
-              </button>
-            )
-          })}
-        </div>
-        <button className="topbar-btn" title="Layout salvati" onClick={layoutChoice}>
+        <button className="topbar-btn" title="Disposizione e layout salvati" onClick={layoutChoice}>
           <LayoutDashboard {...ICON} /> {lastLayout || 'Layout'} <ChevronDown size={12} strokeWidth={2} />
         </button>
         <span className="version">{__VERSION__}</span>

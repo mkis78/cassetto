@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
 import { execFile } from 'node:child_process'
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, SearchHit, SearchQuery } from '../shared/types'
@@ -11,6 +11,7 @@ import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
 import { shortcut, type MenuItem } from '../shared/menus'
 import { loadState, saveState } from './store'
+import { parseDf, parseDu, type Disk } from '../shared/status'
 import { DEFAULT_BAR, systemConflict, type SymbolicHotkeys } from '../shared/shortcuts'
 
 if (process.env.CASSETTO_USERDATA) app.setPath('userData', process.env.CASSETTO_USERDATA)
@@ -96,6 +97,29 @@ handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
 handle('files:op', (host: string | null, op: FileOp) => (host ? runOpRemote(host, op) : runOpLocal(op, p => electronShell.trashItem(p))))
 handle('openPath', (p: string) => electronShell.openPath(p))
+
+// free and total space of the disk holding `path`; null when it cannot be read
+handle('files:disk', async (host: string | null, path: string): Promise<Disk | null> => {
+  try {
+    if (host) {
+      const r = await sshRun(host, `df -Pk -- ${shQuote(path)}`, { timeout: 15_000 })
+      return r.ok ? parseDf(r.out.toString()) : null
+    }
+    const s = await statfs(path) // ponytail: "available" without the purgeable space macOS can free on demand; Finder counts that too
+    return { free: s.bavail * s.bsize, total: s.blocks * s.bsize }
+  } catch {
+    return null
+  }
+})
+// what a folder weighs with everything inside; can take a while, so only on request
+handle('files:du', async (host: string | null, path: string): Promise<number | null> => {
+  if (host) {
+    const r = await sshRun(host, `du -sk -- ${shQuote(path)} 2>/dev/null; true`, { timeout: 300_000 })
+    return r.ok ? parseDu(r.out.toString()) : null
+  }
+  // du exits 1 when some folder inside cannot be read, and still prints the total of the rest
+  return new Promise(ok => execFile('du', ['-sk', '--', path], { timeout: 300_000 }, (_e, out) => ok(parseDu(out ?? ''))))
+})
 
 // An image's bytes for a thumbnail; the renderer scales it down (Chromium decodes off the main thread,
 // the same formats everywhere). Big files are skipped: a thumbnail is not worth reading them, least of all over ssh.

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppState, FileOp, ListResult, OpResult, Preview, SearchHit, SearchQuery, SearchResult } from '../shared/types'
 import type { MenuItem } from '../shared/menus'
+import type { Disk } from '../shared/status'
 
 // a listener for a message from main; returns how to remove it
 const listen =
@@ -26,6 +27,8 @@ const api = {
   listFiles: (cwd: string): Promise<{ root: string; files: string[]; truncated: boolean }> => ipcRenderer.invoke('files:all', cwd),
   preview: (host: string | null, path: string): Promise<Preview> => ipcRenderer.invoke('files:preview', host, path),
   imageBytes: (host: string | null, path: string): Promise<Uint8Array<ArrayBuffer> | null> => ipcRenderer.invoke('files:image', host, path),
+  disk: (host: string | null, path: string): Promise<Disk | null> => ipcRenderer.invoke('files:disk', host, path),
+  folderSize: (host: string | null, path: string): Promise<number | null> => ipcRenderer.invoke('files:du', host, path),
   fileOp: (host: string | null, op: FileOp): Promise<OpResult> => ipcRenderer.invoke('files:op', host, op),
   shortcutConflict: (shortcut: string): Promise<string | null> => ipcRenderer.invoke('shortcut:conflict', shortcut),
   openPath: (p: string): Promise<string> => ipcRenderer.invoke('openPath', p),

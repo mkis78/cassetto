@@ -511,3 +511,17 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .search-opts .opt-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
 .search-opts .opt-actions button { background: var(--raised); color: var(--fg); border: 1px solid var(--line2); border-radius: 4px; padding: 2px 10px; cursor: pointer; }
 .search-opts .opt-actions button.primary { background: var(--primary); border-color: var(--accent); color: #fff; }
+
+/* status bar at the foot of a files tile */
+.status-bar { display: flex; align-items: center; gap: 12px; min-height: 24px; padding: 0 10px; border-top: 1px solid var(--line); background: var(--bar); color: var(--muted); font: 11px system-ui, -apple-system, sans-serif; white-space: nowrap; }
+.status-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; overflow: hidden; text-overflow: ellipsis; }
+.status-left b { color: var(--fg-strong); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.status-left > * + *::before { content: '·'; margin-right: 10px; color: var(--dim); text-decoration: none; display: inline-block; }
+.status-link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.status-link:hover { text-decoration: underline; }
+.status-busy { display: inline-flex; align-items: center; gap: 5px; }
+.status-disk { flex: none; display: flex; align-items: center; gap: 6px; }
+.status-meter { width: 60px; height: 5px; border-radius: 3px; background: var(--line2); overflow: hidden; }
+.status-meter > span { display: block; height: 100%; background: var(--accent); }
+.status-disk.full .status-meter > span { background: var(--red); }
+.status-disk.full { color: var(--red); }

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { actionsMenu, filesMenu, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
+import { actionsMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
 
 const ids = (items: MenuItem[]): string[] => items.flatMap(i => (i.submenu ? [i.id ?? i.label, ...ids(i.submenu)] : i.id ? [i.id] : []))
 const find = (items: MenuItem[], id: string): MenuItem | undefined => items.flatMap(i => [i, ...(i.submenu ?? [])]).find(i => i.id === id)
@@ -56,4 +56,16 @@ test('actions menu: nothing to create in a folder that failed, paste only from t
   expect(find(actionsMenu({ ready: false, paste: 'ok' }), 'newFile')?.enabled).toBe(false)
   expect(find(actionsMenu({ ready: true, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
   expect(find(actionsMenu({ ready: true, paste: 'ok' }), 'paste')?.enabled).toBe(true)
+})
+
+test('layouts menu: save, then each layout to open and to delete', () => {
+  expect(ids(layoutsMenu([]))).toEqual(['save'])
+  expect(ids(layoutsMenu(['Foto', 'Progetto X']))).toEqual(['save', 'layout:Foto', 'layout:Progetto X', 'Elimina', 'delete:Foto', 'delete:Progetto X'])
+})
+
+test('saving a layout under a taken name replaces it in place', () => {
+  const list = [{ name: 'a', layout: 1 }, { name: 'b', layout: 2 }]
+  expect(putLayout(list, { name: 'a', layout: 3 })).toEqual([{ name: 'a', layout: 3 }, { name: 'b', layout: 2 }])
+  expect(putLayout(list, { name: 'c', layout: 4 }).map(l => l.name)).toEqual(['a', 'b', 'c'])
+  expect(putLayout(undefined, { name: 'a', layout: 1 })).toHaveLength(1)
 })

@@ -24,6 +24,7 @@ export interface SearchResult {
 
 export interface AppState {
   layout: unknown | null // dockview toJSON()
+  layouts?: SavedLayout[] // saved by name, to reopen later
   settings?: Settings
 }
 
@@ -60,3 +61,9 @@ export type FileOp =
 export type OpResult = { failed: { path: string; error: string }[] } // empty: everything went through
 
 export type Preview = { kind: 'text'; text: string; truncated: boolean } | { kind: 'image'; src: string } | { kind: 'binary' } | { kind: 'error'; error: string }
+
+// a set of tabs and where they were, saved under a name
+export interface SavedLayout {
+  name: string
+  layout: unknown // dockview toJSON()
+}

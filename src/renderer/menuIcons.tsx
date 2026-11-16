@@ -1,6 +1,6 @@
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { ArrowRightLeft, ClipboardPaste, Columns2, Columns3, Copy, CopyPlus, Eye, ExternalLink, FilePlus, FolderOpen, FolderPlus, GalleryHorizontal, LayoutGrid, Link, List, Maximize2, Minimize2, PanelRight, Pencil, Plus, RotateCw, Scissors, Trash2, X, XSquare, type LucideIcon } from 'lucide-react'
+import { ArrowRightLeft, LayoutDashboard, Save, ClipboardPaste, Columns2, Columns3, Copy, CopyPlus, Eye, ExternalLink, FilePlus, FolderOpen, FolderPlus, GalleryHorizontal, LayoutGrid, Link, List, Maximize2, Minimize2, PanelRight, Pencil, Plus, RotateCw, Scissors, Trash2, X, XSquare, type LucideIcon } from 'lucide-react'
 import type { MenuItem } from '../shared/menus'
 
 // the icon of each menu item, by its id
@@ -29,7 +29,10 @@ const BY_ID: Record<string, LucideIcon> = {
   maximize: Maximize2,
   restore: Minimize2,
   close: X,
-  closeOthers: XSquare
+  closeOthers: XSquare,
+  save: Save,
+  'layout:': LayoutDashboard,
+  'delete:': Trash2
 }
 
 // 16pt at 2x, black: main marks it a template image, so macOS paints it in the menu's own colour (dark mode, highlight)
@@ -64,7 +67,8 @@ function png(Icon: LucideIcon): Promise<string | null> {
 const withIcons = (items: MenuItem[]): Promise<MenuItem[]> =>
   Promise.all(
     items.map(async i => {
-      const Icon = i.id && !i.dot ? BY_ID[i.id] : undefined
+      // by id, else by its prefix ("layout:Progetto" → "layout:")
+      const Icon = i.id && !i.dot ? (BY_ID[i.id] ?? BY_ID[i.id.slice(0, i.id.indexOf(':') + 1)]) : undefined
       const image = Icon ? await png(Icon) : null
       return { ...i, ...(image && { image }), ...(i.submenu && { submenu: await withIcons(i.submenu) }) }
     })

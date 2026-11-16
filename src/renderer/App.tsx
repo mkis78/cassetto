@@ -5,12 +5,15 @@ import FilesTile from './FilesTile'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
-import { Columns2, FolderOpen, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
+import { ChevronDown, Columns2, FolderOpen, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
 import { closeTiles, cycleTile, focusTile, openFolder, tileActions, tileFolder } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
+import { layoutsMenu, putLayout } from '../shared/menus'
+import { popup } from './menuIcons'
+import { ICON } from './icons'
 
 const components = { files: FilesTile }
 
@@ -19,6 +22,8 @@ export default function App() {
   const [sshDialog, setSshDialog] = useState(false)
   const [palette, setPalette] = useState<{ mode: 'files' | 'commands' | 'bar' } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [saving, setSaving] = useState(false) // the dialog that names the layout to save
+  const [lastLayout, setLastLayout] = useState('') // the one opened or saved last: the name the save dialog offers
   const [conflict, setConflict] = useState<{ shortcut: string; with: string } | null>(null) // the bar's shortcut is taken by the system
   const dv = useRef<DockviewApi | null>(null)
   const theme = useTheme() === 'light' ? themeLight : themeDark
@@ -107,6 +112,34 @@ export default function App() {
     setTimeout(() => focusTile(api.activePanel), 50)
   }
 
+  // saved layouts: the tabs, their folders, views and places, under a name
+  const layouts = state.layouts ?? []
+  const saveLayout = (name: string) => {
+    if (!dv.current) return
+    const item = { name, layout: dv.current.toJSON() }
+    update(s => ({ ...s, layouts: putLayout(s.layouts, item) }))
+    setLastLayout(name)
+  }
+  const openLayout = (name: string) => {
+    const l = layouts.find(x => x.name === name)
+    if (!l || !dv.current) return
+    try {
+      dv.current.fromJSON(l.layout as SerializedDockview) // replaces what is open; the layout as it was stays saved
+      setLastLayout(name)
+      setTimeout(() => focusTile(dv.current?.activePanel), 50)
+    } catch {
+      alert(`Il layout «${name}» non si può aprire: forse è di una versione diversa di Cassetto.`)
+    }
+  }
+  const deleteLayout = (name: string) => confirm(`Eliminare il layout «${name}»?`) && update(s => ({ ...s, layouts: (s.layouts ?? []).filter(l => l.name !== name) }))
+  const layoutChoice = async (e: React.MouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const choice = await popup(layoutsMenu(layouts.map(l => l.name)), { x: Math.round(r.left), y: Math.round(r.bottom + 2) })
+    if (choice === 'save') setSaving(true)
+    if (choice?.startsWith('layout:')) openLayout(choice.slice(7))
+    if (choice?.startsWith('delete:')) deleteLayout(choice.slice(7))
+  }
+
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }
   const paletteActions = (): Command[] => {
     const p = active()
@@ -121,14 +154,21 @@ export default function App() {
       ...(p ? [{ label: 'Chiudi tab', hint: 'Cmd+W', run: () => closeTiles([p]), icon: X }, { label: p.api.isMaximized() ? 'Ripristina pannello' : 'Massimizza pannello', run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()), icon: p.api.isMaximized() ? Minimize2 : Maximize2 }] : []),
       { label: 'Impostazioni…', hint: 'Cmd+,', run: () => setSettingsOpen(true), icon: Settings }
     ].map(c => ({ ...c, group }))
+    const saved: Command[] = [
+      { label: 'Salva layout corrente…', run: () => setSaving(true), icon: Save },
+      ...layouts.map(l => ({ label: `Apri layout: ${l.name}`, run: () => openLayout(l.name), icon: LayoutDashboard }))
+    ].map(c => ({ ...c, group: 'Layout' }))
     // what the tab in front can do with its selection and its folder first
-    return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general]
+    return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general, ...saved]
   }
 
   return (
     <div className={`app platform-${window.api.platform}`}>
       <div className="topbar">
         <div className="spacer" />
+        <button className="topbar-btn" title="Layout salvati" onClick={layoutChoice}>
+          <LayoutDashboard {...ICON} /> {lastLayout || 'Layout'} <ChevronDown size={12} strokeWidth={2} />
+        </button>
         <span className="version">{__VERSION__}</span>
       </div>
       {conflict && state.settings?.ignoredConflict !== conflict.shortcut && !settingsOpen && (
@@ -156,6 +196,14 @@ export default function App() {
         />
       )}
       {settingsOpen && <SettingsDialog settings={{ ...DEFAULT_SETTINGS, ...state.settings }} onChange={settings => update(s => ({ ...s, settings }))} onClose={() => setSettingsOpen(false)} />}
+      {saving && (
+        <SaveLayoutDialog
+          initial={lastLayout}
+          taken={layouts.map(l => l.name)}
+          onSave={name => (setSaving(false), saveLayout(name))}
+          onCancel={() => setSaving(false)}
+        />
+      )}
       {sshDialog && (
         <SshDialog
           onPick={host => {
@@ -165,6 +213,30 @@ export default function App() {
           onCancel={() => setSshDialog(false)}
         />
       )}
+    </div>
+  )
+}
+
+// the name to save the open tabs under; a taken name asks before replacing that layout
+function SaveLayoutDialog({ initial, taken, onSave, onCancel }: { initial: string; taken: string[]; onSave: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState(initial)
+  const n = name.trim()
+  const replaces = taken.includes(n)
+  const save = () => n && (!replaces || n === initial || confirm(`Esiste già un layout «${n}»: sostituirlo?`)) && onSave(n)
+  return (
+    <div className="overlay" onMouseDown={e => e.target === e.currentTarget && onCancel()}>
+      <div className="dialog" onKeyDown={e => e.key === 'Escape' && onCancel()}>
+        <h3>Salva layout</h3>
+        <label>Nome</label>
+        <input autoFocus value={name} placeholder="es. Progetto X" onFocus={e => e.target.select()} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
+        {replaces && <p className="path">Sostituirà il layout salvato con questo nome.</p>}
+        <div className="actions">
+          <button onClick={onCancel}>Annulla</button>
+          <button className="primary" disabled={!n} onClick={save}>
+            Salva
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

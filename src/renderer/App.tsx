@@ -5,13 +5,14 @@ import FilesTile from './FilesTile'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
-import { ChevronDown, Columns2, FolderOpen, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
+import { ChevronDown, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
 import { closeTiles, cycleTile, focusTile, openFolder, tileActions, tileFolder } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
+import { arrange, PRESETS, type Layout, type Preset } from '../shared/arrange'
 import { popup } from './menuIcons'
 import { ICON } from './icons'
 
@@ -140,6 +141,16 @@ export default function App() {
     if (choice?.startsWith('delete:')) deleteLayout(choice.slice(7))
   }
 
+  // quick arrangements: the open tabs into 1, 2, 3 or 4 panels
+  const ARRANGE_ICON: Record<Preset, typeof Square> = { one: Square, two: Columns2, stacked: Rows2, three: Columns3, mainSide: LayoutPanelLeft, grid: Grid2x2 }
+  const arrangeTabs = (preset: Preset) => {
+    const api = dv.current
+    if (!api || !api.panels.length) return
+    const active = api.activePanel?.id
+    api.fromJSON(arrange(api.toJSON() as unknown as Layout, preset, active, () => crypto.randomUUID()) as unknown as SerializedDockview)
+    setTimeout(() => focusTile(api.activePanel), 50)
+  }
+
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }
   const paletteActions = (): Command[] => {
     const p = active()
@@ -154,18 +165,29 @@ export default function App() {
       ...(p ? [{ label: 'Chiudi tab', hint: 'Cmd+W', run: () => closeTiles([p]), icon: X }, { label: p.api.isMaximized() ? 'Ripristina pannello' : 'Massimizza pannello', run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()), icon: p.api.isMaximized() ? Minimize2 : Maximize2 }] : []),
       { label: 'Impostazioni…', hint: 'Cmd+,', run: () => setSettingsOpen(true), icon: Settings }
     ].map(c => ({ ...c, group }))
+    const arrangements: Command[] = (Object.keys(PRESETS) as Preset[]).map(k => ({ label: `Disponi: ${PRESETS[k].label.toLowerCase()}`, run: () => arrangeTabs(k), icon: ARRANGE_ICON[k], group: 'Disposizione' }))
     const saved: Command[] = [
       { label: 'Salva layout corrente…', run: () => setSaving(true), icon: Save },
       ...layouts.map(l => ({ label: `Apri layout: ${l.name}`, run: () => openLayout(l.name), icon: LayoutDashboard }))
     ].map(c => ({ ...c, group: 'Layout' }))
     // what the tab in front can do with its selection and its folder first
-    return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general, ...saved]
+    return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general, ...arrangements, ...saved]
   }
 
   return (
     <div className={`app platform-${window.api.platform}`}>
       <div className="topbar">
         <div className="spacer" />
+        <div className="arrange" role="group" aria-label="Disposizione dei tab">
+          {(Object.keys(PRESETS) as Preset[]).map(k => {
+            const I = ARRANGE_ICON[k]
+            return (
+              <button key={k} title={PRESETS[k].label} aria-label={PRESETS[k].label} onClick={() => arrangeTabs(k)}>
+                <I {...ICON} />
+              </button>
+            )
+          })}
+        </div>
         <button className="topbar-btn" title="Layout salvati" onClick={layoutChoice}>
           <LayoutDashboard {...ICON} /> {lastLayout || 'Layout'} <ChevronDown size={12} strokeWidth={2} />
         </button>

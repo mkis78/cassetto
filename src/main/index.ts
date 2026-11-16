@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
 import { execFile } from 'node:child_process'
 import { readFile, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -244,6 +244,9 @@ function setMenu(): void {
 }
 
 app.whenReady().then(() => {
+  // the page never needs camera, microphone, location, notifications…: Electron would grant them all by default
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(permission === 'fullscreen'))
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'fullscreen')
   barShortcut = loadState(stateFile()).settings?.barShortcut ?? DEFAULT_BAR
   if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '../../build/icon.png')) // the packaged app gets it from the bundle
   setMenu()

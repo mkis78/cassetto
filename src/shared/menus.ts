@@ -9,6 +9,7 @@ export interface MenuItem {
   submenu?: MenuItem[]
   dot?: string // #rrggbb: a coloured dot as the item's icon
   hollow?: boolean // the dot as a ring ("no colour")
+  checked?: boolean // a tick: set, even to false, makes it a checkbox item
 }
 
 export const TAB_COLORS = ['red', 'yellow', 'green', 'teal', 'blue', 'purple'] as const
@@ -42,6 +43,28 @@ export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: bo
   if (c.target === 'file') return [{ id: 'open', label: 'Apri' }, { id: 'copyPath', label: 'Copia percorso' }, ...edit]
   if (c.target === 'dir') return [{ id: 'open', label: 'Apri' }, ...split, { id: 'copyPath', label: 'Copia percorso' }, ...create, ...edit]
   return [{ id: 'refresh', label: 'Aggiorna' }, ...create]
+}
+
+// the files tile's "Vista" button: how the folder is drawn, what shows
+export function viewMenu(c: { view: 'list' | 'icons' | 'columns' | 'gallery'; hidden: boolean; preview: boolean }): MenuItem[] {
+  const views = [['list', 'Elenco'], ['icons', 'Icone'], ['columns', 'Colonne'], ['gallery', 'Galleria']] as const
+  return [
+    ...views.map(([id, label]) => ({ id: `view:${id}`, label, checked: c.view === id })),
+    sep,
+    { id: 'hidden', label: 'Mostra file nascosti', checked: c.hidden },
+    { id: 'preview', label: 'Anteprima', accelerator: 'Space', checked: c.preview, enabled: c.view !== 'gallery' } // the gallery has its own
+  ]
+}
+
+// the files tile's "Azioni" button: on the folder shown
+export function actionsMenu(c: { ready: boolean; paste: 'ok' | 'other-host' | null }): MenuItem[] {
+  return [
+    { id: 'newFile', label: 'Nuovo file', enabled: c.ready },
+    { id: 'newFolder', label: 'Nuova cartella', enabled: c.ready },
+    { id: 'paste', label: c.paste === 'other-host' ? 'Incolla (solo dallo stesso host)' : 'Incolla', enabled: c.ready && c.paste === 'ok' },
+    sep,
+    { id: 'refresh', label: 'Aggiorna' }
+  ]
 }
 
 // a search hit: `line` when it comes from a content search

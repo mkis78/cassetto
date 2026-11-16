@@ -64,7 +64,7 @@ function dotIcon(hex: string, hollow = false): Electron.NativeImage | undefined 
 // native context menu built from data; resolves with the chosen id, or null when dismissed
 handle(
   'menu:popup',
-  (items: MenuItem[]) =>
+  (items: MenuItem[], at?: { x: number; y: number }) =>
     new Promise<string | null>(resolve => {
       let done = false
       const pick = (id: string | null) => !done && ((done = true), resolve(id))
@@ -72,9 +72,9 @@ handle(
         list.map(i =>
           i.separator
             ? { type: 'separator' }
-            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : undefined, click: i.id ? () => pick(i.id!) : undefined }
+            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : undefined, ...(i.checked !== undefined && { type: 'checkbox' as const, checked: i.checked }), click: i.id ? () => pick(i.id!) : undefined }
         )
-      Menu.buildFromTemplate(build(items)).popup({ window: win!, callback: () => setTimeout(() => pick(null), 50) })
+      Menu.buildFromTemplate(build(items)).popup({ window: win!, ...(at && { x: at.x, y: at.y }), callback: () => setTimeout(() => pick(null), 50) })
     })
 )
 handle('clipboard:write', (t: string) => clipboard.writeText(t))

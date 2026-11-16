@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronRight, FilePlus, FolderPlus, House, X, Columns3, GalleryHorizontal, Eye, EyeOff, File, Folder, LayoutGrid, List, PanelRight, Regex, RotateCw, WholeWord } from 'lucide-react'
+import { ArrowUp, ChevronDown, ChevronRight, Ellipsis, House, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List, Regex, WholeWord } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
 import FileSearch, { dirOf } from './FileSearch'
-import { filesMenu } from '../shared/menus'
+import { actionsMenu, filesMenu, viewMenu } from '../shared/menus'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
 import { baseName, openFolder } from './tiles'
@@ -20,12 +20,7 @@ type Sort = { key: SortKey; desc: boolean }
 type Params = { kind: 'files'; host: string | null; path: string | null; hidden?: boolean; preview?: boolean; query?: SearchQuery | null; view?: View; sort?: Sort; cols?: string[] }
 type Col = Listing & { error?: string } // a folder in the columns view, or why it could not be opened
 
-const VIEWS = [
-  { id: 'list', title: 'Elenco', Icon: List },
-  { id: 'icons', title: 'Icone', Icon: LayoutGrid },
-  { id: 'columns', title: 'Colonne', Icon: Columns3 },
-  { id: 'gallery', title: 'Galleria', Icon: GalleryHorizontal }
-] as const
+const VIEW_ICON = { list: List, icons: LayoutGrid, columns: Columns3, gallery: GalleryHorizontal }
 
 const EMPTY: SearchQuery = { text: '', mode: 'name', regex: false, word: false }
 
@@ -524,6 +519,28 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     )
   }
 
+  // the bar's two menus
+  const ViewIcon = VIEW_ICON[view]
+  // under the button, like a dropdown
+  const below = (e: React.MouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return { x: Math.round(r.left), y: Math.round(r.bottom + 2) }
+  }
+  const viewChoice = async (e: React.MouseEvent) => {
+    const choice = await window.api.popupMenu(viewMenu({ view, hidden, preview: showPreview }), below(e))
+    if (choice?.startsWith('view:')) setView(choice.slice(5) as View), setCols([])
+    if (choice === 'hidden') setHidden(h => !h)
+    if (choice === 'preview') setShowPreview(v => !v)
+  }
+  const actionChoice = async (e: React.MouseEvent) => {
+    const at = below(e)
+    const dir = error ? null : (col?.path ?? listing?.path ?? null)
+    const choice = await window.api.popupMenu(actionsMenu({ ready: !!dir, paste: clipFor() }), at)
+    if ((choice === 'newFile' || choice === 'newFolder') && dir) startCreate(choice, dir)
+    if (choice === 'paste' && dir) paste(dir)
+    if (choice === 'refresh') refresh()
+  }
+
   return (
     // Cmd/Ctrl+F: to the search box from anywhere in the tile
     <div ref={rootRef} className="files-tile" onKeyDown={e => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && (e.preventDefault(), inputRef.current?.focus())}>
@@ -541,25 +558,11 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             {here ?? '~'}
           </bdi>
         </span>
-        {VIEWS.map(({ id, title, Icon }) => (
-          <button key={id} className={'view' + (view === id ? ' on' : '')} title={title} onClick={() => (setView(id), setCols([]))}>
-            <Icon {...ICON} />
-          </button>
-        ))}
-        <button className={hidden ? 'on' : ''} title={hidden ? 'Nascondi file nascosti' : 'Mostra file nascosti'} onClick={() => setHidden(h => !h)}>
-          {hidden ? <Eye {...ICON} /> : <EyeOff {...ICON} />}
+        <button title="Vista" onClick={viewChoice}>
+          <ViewIcon {...ICON} /> <ChevronDown size={12} strokeWidth={2} />
         </button>
-        <button className={showPreview ? 'on' : ''} title="Anteprima (spazio)" onClick={() => setShowPreview(v => !v)}>
-          <PanelRight {...ICON} />
-        </button>
-        <button title="Nuovo file" disabled={!listing || !!error} onClick={() => startCreate('newFile', col?.path ?? listing!.path)}>
-          <FilePlus {...ICON} />
-        </button>
-        <button title="Nuova cartella" disabled={!listing || !!error} onClick={() => startCreate('newFolder', col?.path ?? listing!.path)}>
-          <FolderPlus {...ICON} />
-        </button>
-        <button title="Aggiorna" onClick={refresh}>
-          <RotateCw {...ICON} />
+        <button title="Azioni" onClick={actionChoice}>
+          <Ellipsis {...ICON} /> <ChevronDown size={12} strokeWidth={2} />
         </button>
       </div>
       <div className="files-bar search-bar">

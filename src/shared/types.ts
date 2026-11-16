@@ -8,6 +8,7 @@ export interface SearchQuery {
   mode: 'content' | 'name'
   regex: boolean
   word: boolean
+  subfolders?: boolean // look below the folder too; unset counts as yes
 }
 
 export interface SearchHit {

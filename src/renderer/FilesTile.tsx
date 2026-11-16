@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List, Regex, WholeWord } from 'lucide-react'
+import { ArrowUp, ChevronDown, FolderTree, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List, Regex, WholeWord } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
@@ -522,6 +522,12 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     )
   }
 
+  // where the search box looks: the folder being worked in (in the columns view, the column holding the selection),
+  // taken when the search starts or the tile moves to another folder, not when a result is picked (that moves the selection)
+  const workDir = error ? null : (col?.path ?? listing?.path ?? null)
+  const [searchDir, setSearchDir] = useState<string | null>(null)
+  useEffect(() => setSearchDir(q.text ? workDir : null), [!!q.text, listing?.path])
+
   // the bar's two menus
   const ViewIcon = VIEW_ICON[view]
   // under the button, like a dropdown
@@ -641,6 +647,14 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             </button>
           ))}
         </div>
+        <button
+          className={'opt' + (q.subfolders !== false ? ' on' : '')}
+          title={q.subfolders !== false ? 'Cerca anche nelle sottocartelle' : 'Cerca solo in questa cartella'}
+          aria-pressed={q.subfolders !== false}
+          onClick={() => set({ subfolders: q.subfolders === false })}
+        >
+          <FolderTree {...ICON} /> Sottocartelle
+        </button>
         {q.mode === 'content' && (
           <>
             <button className={'opt' + (q.regex ? ' on' : '')} title="Espressione regolare" aria-pressed={q.regex} onClick={() => set({ regex: !q.regex })}>
@@ -670,7 +684,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       ) : (
         <div className="files-body">
           {searching && listing ? (
-            <FileSearch tileId={api.id} host={host} cwd={listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} />
+            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} />
           ) : (
             <div ref={listRef} tabIndex={0} data-autofocus className={`files-list files-${view}` + (loading ? ' loading' : '')} onKeyDown={keys}>
               {view === 'columns'

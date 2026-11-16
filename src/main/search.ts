@@ -40,16 +40,23 @@ export const posixRegex = (re: string) => re.replace(/\\(.)/g, (m, c: string) =>
 const inRepo = (cwd: string) =>
   new Promise<boolean>(ok => execFile('git', ['rev-parse', '--is-inside-work-tree'], { cwd, timeout: 5000 }, (err, out) => ok(!err && out.trim() === 'true')))
 
+// without subfolders: git's top-level pathspec (a glob * never crosses "/"), find's -maxdepth 1
 function command(q: SearchQuery, git: boolean): [string, string[]] {
+  const deep = q.subfolders !== false
+  const here = deep ? '.' : ':(glob)*'
   if (q.mode === 'name')
     return git
-      ? ['git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard']]
-      : ['find', ['.', '(', ...SKIP_DIRS.flatMap((d, i) => [...(i ? ['-o'] : []), '-name', d]), ')', '-prune', '-o', '-type', 'f', '-print0']]
+      ? ['git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', here]]
+      : deep
+        ? ['find', ['.', '(', ...SKIP_DIRS.flatMap((d, i) => [...(i ? ['-o'] : []), '-name', d]), ')', '-prune', '-o', '-type', 'f', '-print0']]
+        : ['find', ['.', '-maxdepth', '1', '-type', 'f', '-print0']]
   const pattern = q.regex ? posixRegex(q.text) : q.text
   const opts = [...(caseSensitive(q.text) ? [] : ['-i']), q.regex ? '-E' : '-F', ...(q.word ? ['-w'] : []), '-I', '-n']
-  return git
-    ? ['git', ['grep', '-z', '--untracked', ...opts, '-e', pattern, '--', '.']]
-    : ['grep', ['-r', '--null', ...SKIP_DIRS.map(d => `--exclude-dir=${d}`), ...opts, '-e', pattern, '.']]
+  if (git) return ['git', ['grep', '-z', '--untracked', ...opts, '-e', pattern, '--', here]]
+  // ponytail: through find, a broken regex reads as "no match" (find folds grep's exit 2 into 1); git grep and grep -r still say it
+  return deep
+    ? ['grep', ['-r', '--null', ...SKIP_DIRS.map(d => `--exclude-dir=${d}`), ...opts, '-e', pattern, '.']]
+    : ['find', ['.', '-maxdepth', '1', '-type', 'f', '-exec', 'grep', '-H', '--null', ...opts, '-e', pattern, '{}', '+']]
 }
 
 // one output record as a hit: a file name that matches the pattern, or a content line
@@ -114,12 +121,11 @@ export async function runSearchRemote(host: string, cwd: string, q: SearchQuery,
   return { hits, truncated: false, error: null }
 }
 
-// Every file of the project around `cwd`, for quick open: from the repository's root when inside one
-// (tracked and untracked, ignored ones left out), else below `cwd` without .git and node_modules.
+// Every file below `cwd`, for quick open and the action bar: inside a repository through git
+// (tracked and untracked, ignored ones left out), else without .git and node_modules.
 export async function listFiles(cwd: string, max = 20_000): Promise<{ root: string; files: string[]; truncated: boolean }> {
-  const top = await new Promise<string | null>(ok => execFile('git', ['rev-parse', '--show-toplevel'], { cwd, timeout: 5000 }, (err, out) => ok(err ? null : out.trim())))
-  const root = top ?? cwd
-  const [cmd, args] = command({ text: '', mode: 'name', regex: false, word: false }, !!top)
+  const root = cwd
+  const [cmd, args] = command({ text: '', mode: 'name', regex: false, word: false }, onPath('git') && (await inRepo(cwd)))
   return new Promise(resolve => {
     const files: string[] = []
     let rest = ''

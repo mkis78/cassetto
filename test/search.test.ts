@@ -68,6 +68,15 @@ describe.each([true, false])('content search (git repository: %s)', git => {
     expect(await names('src/*.ts')).toEqual(['src/app.ts', 'src/new.ts'])
     expect(await names('*.js')).toEqual([])
   })
+
+  test('without subfolders: only what is right in the folder', async () => {
+    const top = (o: Partial<SearchQuery>) => runSearch(d, { ...q('parselog'), subfolders: false, ...o })
+    expect((await top({})).hits.map(h => h.path)).toEqual(['README.md'])
+    expect((await top({ text: 'nothing-here' })).error).toBeNull()
+    expect((await top({ text: '*.md', mode: 'name' })).hits.map(h => h.path)).toEqual(['README.md'])
+    expect((await top({ text: '*.ts', mode: 'name' })).hits).toEqual([])
+    expect((await runSearch(join(d, 'src'), { ...q('*.ts', { mode: 'name' }), subfolders: false })).hits.map(h => h.path).sort()).toEqual(['app.ts', 'new.ts'])
+  })
 })
 
 test('an aborted search ends quietly', async () => {
@@ -99,12 +108,12 @@ test('name patterns', () => {
   expect(nameMatcher('tile')('src/dir-tile/a.ts')).toBe(false) // plain words look at the file name only
 })
 
-test('quick open lists the whole project from its root, ignored folders left out', async () => {
+test('quick open lists the folder it is asked from and below, ignored folders left out', async () => {
   for (const git of [true, false]) {
     const d = realpathSync(project(git))
-    const from = await listFiles(join(d, 'src', 'deep')) // asked from a subfolder
-    expect(from.root).toBe(git ? d : join(d, 'src', 'deep'))
-    if (git) expect(from.files.sort()).toEqual(['.gitignore', 'README.md', 'src/app.ts', 'src/deep/My Tile.tsx', 'src/new.ts'])
+    const from = await listFiles(join(d, 'src')) // a subfolder, also inside a repository
+    expect(from.root).toBe(join(d, 'src'))
+    expect(from.files.sort()).toEqual(['app.ts', 'deep/My Tile.tsx', 'new.ts'])
     const all = await listFiles(d)
     expect(all.files).not.toContain('node_modules/lib/index.js')
     expect((await listFiles(d, 2)).truncated).toBe(true)

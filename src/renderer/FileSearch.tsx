@@ -113,7 +113,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
     )
   }
   const files = q.mode === 'content' ? groups.size : (result?.hits.length ?? 0)
-  const where = cwd.split('/').filter(Boolean).pop() ?? '/'
+  const where = (cwd.split('/').filter(Boolean).pop() ?? '/') + (q.subfolders === false ? ' (senza sottocartelle)' : ' e sottocartelle')
   const summary = busy
     ? 'Cerco…'
     : result && !result.error

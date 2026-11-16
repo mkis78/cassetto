@@ -10,6 +10,7 @@ import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
 import { closeTiles, cycleTile, focusTile, openFolder, tileActions, tileFolder } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
+import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 
 const components = { files: FilesTile }
 
@@ -18,11 +19,20 @@ export default function App() {
   const [sshDialog, setSshDialog] = useState(false)
   const [palette, setPalette] = useState<{ mode: 'files' | 'commands' | 'bar' } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [conflict, setConflict] = useState<{ shortcut: string; with: string } | null>(null) // the bar's shortcut is taken by the system
   const dv = useRef<DockviewApi | null>(null)
   const theme = useTheme() === 'light' ? themeLight : themeDark
 
   useEffect(() => void window.api.loadState().then(setState), [])
   useEffect(() => applySettings(state?.settings), [state?.settings])
+  // at start and after each change: warn when macOS (or Raycast) keeps the bar's shortcut for itself
+  const bar = state?.settings?.barShortcut ?? DEFAULT_BAR
+  useEffect(() => {
+    if (!state) return
+    let live = true
+    window.api.shortcutConflict(bar).then(c => live && setConflict(c ? { shortcut: bar, with: c } : null))
+    return () => void (live = false)
+  }, [bar, !!state])
   useEffect(() => {
     if (!state) return
     const t = setTimeout(() => window.api.saveState(state), 500)
@@ -46,8 +56,9 @@ export default function App() {
     const cycle = (step: number) => cycleTile(dv.current ?? undefined, step)
     // captured before the lists see them: Cmd+P quick open, Cmd+Shift+P commands, Cmd+] Cmd+[ between tabs
     const keys = (e: KeyboardEvent) => {
-      // Ctrl+Space: the action bar (ponytail: macOS may keep it for switching input source; then use the menu or rebind)
-      if (e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Space') return void (e.preventDefault(), e.stopPropagation(), setPalette({ mode: 'bar' }))
+      if ((document.activeElement as HTMLElement | null)?.closest('[data-recording]')) return // a shortcut being set in Impostazioni
+      // the action bar, Ctrl+Space unless changed; checked first, so it wins whatever it was set to
+      if (fromEvent(e) === (getSettings().barShortcut ?? DEFAULT_BAR)) return void (e.preventDefault(), e.stopPropagation(), setPalette({ mode: 'bar' }))
       if (!(window.api.platform === 'darwin' ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey)) return
       const act = { KeyP: () => setPalette({ mode: window.api.platform === 'darwin' && e.shiftKey ? 'commands' : 'files' }), BracketRight: () => cycle(1), BracketLeft: () => cycle(-1) }[e.code]
       if (!act) return
@@ -120,6 +131,15 @@ export default function App() {
         <div className="spacer" />
         <span className="version">{__VERSION__}</span>
       </div>
+      {conflict && state.settings?.ignoredConflict !== conflict.shortcut && !settingsOpen && (
+        <div className="app-notice" role="alert">
+          <span>
+            La barra azioni si apre con <b>{shortcutLabel(conflict.shortcut)}</b>, ma macOS la usa già per «{conflict.with}» e non la passa a Cassetto.
+          </span>
+          <button className="primary" onClick={() => setSettingsOpen(true)}>Cambia scorciatoia</button>
+          <button onClick={() => update(s => ({ ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings, ignoredConflict: conflict.shortcut } }))}>Ignora</button>
+        </div>
+      )}
       <WelcomeContext.Provider value={welcome}>
         <div className="ws-body">
           <DockviewReact theme={theme} components={components} onReady={onReady} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} leftHeaderActionsComponent={NewTabButton} watermarkComponent={Welcome} />

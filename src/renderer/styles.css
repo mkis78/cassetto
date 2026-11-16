@@ -463,3 +463,12 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .palette-group { padding: 8px 12px 3px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .palette-row .palette-icon { flex: none; align-self: center; color: var(--fg3); }
 .palette-row.sel .palette-icon { color: var(--fg-strong); }
+
+/* the bar's shortcut: the field that records it, and the warnings when the system keeps it */
+.dialog.settings button.shortcut { min-width: 140px; font: 12px Menlo, monospace; }
+.dialog.settings button.shortcut.recording { border-color: var(--accent); color: var(--fg-strong); }
+.shortcut-conflict { margin: 4px 0 0; color: var(--warn-fg); font-size: 12px; }
+.app-notice { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--warn-bg); border-bottom: 1px solid var(--yellow); color: var(--warn-fg); font-size: 12px; }
+.app-notice span { flex: 1; }
+.app-notice button { background: var(--raised); color: var(--fg); border: 1px solid var(--line2); border-radius: 4px; padding: 2px 10px; cursor: pointer; }
+.app-notice button.primary { background: var(--primary); border-color: var(--accent); color: #fff; }

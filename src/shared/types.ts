@@ -30,6 +30,8 @@ export interface AppState {
 export interface Settings {
   theme: 'dark' | 'light' | 'system'
   filesHome?: string // where a new tab and its Home button go; unset: the user's home
+  barShortcut?: string // the action bar's, an accelerator (shared/shortcuts); unset: DEFAULT_BAR
+  ignoredConflict?: string // the shortcut whose clash with the system the user chose to keep
 }
 
 export interface DirEntry {

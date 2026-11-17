@@ -141,3 +141,25 @@ test('a failed ssh run says the outcome is unknown, not that every item failed',
   expect(r.failed.map(f => f.path)).toEqual(['/a', '/b'])
   expect(r.failed[0].error).toContain('esito incerto')
 })
+
+// runOpLocal's `trashed`: every item sent to the Trash, with where it went; failures excluded
+const fakeBin = (fail: string[] = []) => async (ps: string[]) => ps.map(path => (fail.includes(path) ? { path, error: 'no' } : { path, trashed: `/bin${path}` }))
+
+test('a trash op reports each item and where it went', async () => {
+  const r = await runOpLocal({ op: 'trash', paths: ['/x/a', '/x/b'] }, fakeBin())
+  expect(r.trashed).toEqual([{ path: '/x/a', trashed: '/bin/x/a' }, { path: '/x/b', trashed: '/bin/x/b' }])
+})
+
+test.each(['copy', 'move'] as const)('%s with replace reports the replaced destination', async op => {
+  const d = dir()
+  writeFileSync(join(d, 's'), 'src')
+  writeFileSync(join(d, 'd'), 'dest')
+  const r = await runOpLocal({ op, items: [{ src: join(d, 's'), dest: join(d, 'd'), replace: true }] }, fakeBin())
+  expect(r.trashed).toEqual([{ path: join(d, 'd'), trashed: `/bin${join(d, 'd')}` }])
+})
+
+test('an item the trash refuses is failed, not trashed', async () => {
+  const r = await runOpLocal({ op: 'trash', paths: ['/x/a', '/x/b'] }, fakeBin(['/x/a']))
+  expect(r.failed).toEqual([{ path: '/x/a', error: 'no' }])
+  expect(r.trashed).toEqual([{ path: '/x/b', trashed: '/bin/x/b' }])
+})

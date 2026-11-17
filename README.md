@@ -63,6 +63,23 @@ Cassetto works alongside the Finder or your Linux file manager rather than repla
 - **Preview** text, Markdown and images with the space bar.
 - **Status bar** at the foot of each panel: what the folder holds and how much it weighs, the selected file's kind, size and date, the total of a folder on request, and the free space on the disk.
 
+### Sidebar
+
+A sidebar with the places you go to most. **Cmd+Alt+S** (Ctrl+Alt+S on Linux) switches it between the full panel and a slim icon rail.
+
+- **Favourites**, **Places**, **Disks** (with an eject button and a meter of the space used) and **Servers**, the hosts of your SSH config.
+- **Click** an item to open it in the active panel, **Cmd+click** to open it in a new tab, or drag it onto a panel to open it there.
+- **Drop files on an item** to move them there (hold Option to copy).
+- **Favourites**: add a folder with right-click → **Add to Favourites**, from the action bar, or by dragging it into the sidebar. Drag to reorder; right-click to rename, colour or remove. In Settings, show them as a **List** or as **Tiles**.
+
+### Undo
+
+**Cmd+Z** (Ctrl+Z on Linux) in a files panel undoes the last move, copy, rename, new file or folder, or move to the Trash, which brings the item back from the Trash. It is also in the action bar. Permanent deletes can't be undone. On an SSH server, a created item is removed only if you haven't changed it since.
+
+### Open With
+
+Right-click a local file → **Open With** lists the apps that can open it, the default first, plus **Other app…** to pick any other. It is in the action bar too. On macOS the apps show their icons.
+
 ### Action bar
 
 ![The action bar on a selected file](docs/screenshots/action-bar.png)
@@ -138,8 +155,8 @@ The keys below are for macOS. On Linux, Ctrl takes the place of Cmd; the window-
 
 | Where | Keys |
 |---|---|
-| Anywhere | Ctrl+Space action bar · Cmd+P go to a file · Cmd+Shift+P commands · Cmd+T new tab · Cmd+W close tab · Cmd+] / Cmd+[ next / previous tab · Cmd+Alt+T terminal here · Cmd+K SSH server · Cmd+, settings |
-| Files | ↑↓ (←→ in icons, gallery and columns) select · Return or Cmd+↓ open · Backspace or Cmd+↑ enclosing folder · Space preview · F2 rename · Cmd+C/X/V copy, cut, paste · Cmd+Backspace move to Trash · Cmd+A select all · Cmd+F search · a letter jumps to the next name |
+| Anywhere | Ctrl+Space action bar · Cmd+P go to a file · Cmd+Shift+P commands · Cmd+T new tab · Cmd+W close tab · Cmd+] / Cmd+[ next / previous tab · Cmd+Alt+T terminal here · Cmd+K SSH server · Cmd+, settings · Cmd+Alt+S sidebar: full / icons |
+| Files | ↑↓ (←→ in icons, gallery and columns) select · Return or Cmd+↓ open · Backspace or Cmd+↑ enclosing folder · Space preview · F2 rename · Cmd+C/X/V copy, cut, paste · Cmd+Backspace move to Trash · Cmd+Z undo · Cmd+A select all · Cmd+F search · a letter jumps to the next name |
 | Editor | Cmd+S save · Cmd+F find · Cmd+D next occurrence · Cmd+Ctrl+G all occurrences · Cmd+Shift+L split into lines · Cmd+Ctrl+↑↓ move line · Cmd+Shift+D duplicate line · Cmd+Shift+K delete line · Cmd+J join lines · F5 sort lines · Cmd+/ comment · Cmd+K Cmd+U/L upper / lower case · Ctrl+G go to line · Cmd+R go to symbol · Alt+Z word wrap |
 | Markdown | Cmd+Shift+V preview · Cmd+B bold · Cmd+I italic · Cmd+E code · Cmd+Alt+K link · Cmd+Alt+1/2/3 headings |
 | Terminal | Cmd+F search the output · Cmd+C/V copy, paste |

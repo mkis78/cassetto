@@ -5,8 +5,9 @@ import { execFile } from 'node:child_process'
 import { readFile, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AppState, FileOp, SearchHit, SearchQuery } from '../shared/types'
+import type { AppState, FileOp, SearchHit, SearchQuery, Trashed, UndoResult } from '../shared/types'
 import { runOpLocal, runOpRemote } from './fileOps'
+import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
 import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
@@ -137,7 +138,32 @@ handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
 handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
 handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: t('testo non valido') } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
-handle('files:op', (host: string | null, op: FileOp) => (host ? runOpRemote(host, op) : runOpLocal(op, trashItems)))
+// Cmd+Z: the inverse of each successful op, in memory
+const undos = new UndoStack()
+const stampOf = async (host: string, path: string) => {
+  const r = await sshRun(host, stampScript(path), { timeout: 60_000 })
+  return r.ok ? r.out.toString() : null
+}
+handle('files:op', async (host: string | null, op: FileOp) => {
+  const res = host ? await runOpRemote(host, op) : await runOpLocal(op, trashItems)
+  const failed = new Set(res.failed.map(f => f.path))
+  const stamps = new Map<string, string>()
+  if (host && (op.op === 'mkdir' || op.op === 'touch' || op.op === 'copy')) {
+    const made = 'items' in op ?op.items.filter(i => !failed.has(i.src)).map(i => i.dest) : [op.path]
+    for (const p of made) {
+      const s = await stampOf(host, p)
+      if (s !== null) stamps.set(p, s)
+    }
+  }
+  const rec = inverseOf(host, op, failed, 'trashed' in res ? (res.trashed as Trashed[]) : [], stamps)
+  if (rec) undos.push(rec)
+  return { failed: res.failed }
+})
+handle('files:undo', async (): Promise<UndoResult> => {
+  const r = undos.pop()
+  return r ? runUndo(r, { local: op => runOpLocal(op, trashItems), remote: runOpRemote, stamp: stampOf, remove: (host, path) => runOpRemote(host, { op: 'delete', paths: [path] }) }) : null
+})
+handle('files:undoLabel', () => undos.peek()?.label ?? null)
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
 let release: Release | null = null
 const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })

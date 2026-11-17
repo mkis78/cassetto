@@ -37,4 +37,4 @@ export function pathFilter(q: Pick<SearchQuery, 'include' | 'exclude'>): (path: 
 
 // the options set away from their defaults, for the badge on the Opzioni button
 export const changedOptions = (q: SearchQuery) =>
-  [q.case && q.case !== 'smart', q.mode === 'content' && q.regex, q.mode === 'content' && q.word, q.subfolders === false, patterns(q.include).length > 0, patterns(q.exclude).length > 0, (q.max ?? DEFAULT_MAX) !== DEFAULT_MAX].filter(Boolean).length
+  [q.mode !== 'tag' && q.case && q.case !== 'smart', q.mode === 'content' && q.regex, q.mode === 'content' && q.word, q.subfolders === false, patterns(q.include).length > 0, patterns(q.exclude).length > 0, (q.max ?? DEFAULT_MAX) !== DEFAULT_MAX].filter(Boolean).length

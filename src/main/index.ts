@@ -11,6 +11,8 @@ import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOption
 import { spawn as spawnPty } from 'node-pty'
 import { existsSync } from 'node:fs'
 import { PtyManager, terminalLaunch } from './terminal'
+import { editTags, folderTags, runTagSearch } from './tags'
+import type { Tag } from '../shared/tags'
 import { listLocal, previewLocal, readLocal, writeLocal } from './files'
 import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
@@ -118,7 +120,16 @@ handle('pty:create', (id: string, p: { host: string | null; cwd: string }, cols:
 on('pty:write', (id: string, d: string) => ptys.write(id, d))
 on('pty:resize', (id: string, c: number, r: number) => ptys.resize(id, c, r))
 on('pty:kill', (id: string) => ptys.kill(id))
-handle('files:list', (host: string | null, path: string | null) => (host ? listRemote(host, path) : listLocal(path ?? homedir())))
+// a local listing carries the Finder tags of what it holds
+handle('files:list', async (host: string | null, path: string | null) => {
+  if (host) return listRemote(host, path)
+  const r = await listLocal(path ?? homedir())
+  if (!r.ok) return r
+  const tags = await folderTags(r.listing.path)
+  if (tags.size) r.listing.entries = r.listing.entries.map(e => (tags.has(e.name) ? { ...e, tags: tags.get(e.name) } : e))
+  return r
+})
+handle('tags:edit', (paths: string[], change: { add?: Tag[]; remove?: string[] }) => editTags(paths, change))
 handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
 handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
@@ -182,6 +193,7 @@ handle('search:run', async (tileId: string, run: number, host: string | null, cw
     timer ??= setTimeout(flush, 80)
   }
   try {
+    if (q.mode === 'tag') return host ? { hits: [], truncated: false, error: 'I tag esistono solo per i file del Mac' } : await runTagSearch(cwd, q, ac.signal, onHits)
     return await (host ? runSearchRemote(host, cwd, q, ac.signal, onHits) : runSearch(cwd, q, ac.signal, onHits))
   } finally {
     if (timer) clearTimeout(timer) // what is left comes with the reply

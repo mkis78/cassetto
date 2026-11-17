@@ -23,8 +23,22 @@ export const shortcut = (key: string, platform: string): string => (platform ===
 
 const sep: MenuItem = { label: '', separator: true }
 
-// count: entries selected; paste: what the internal clipboard holds ('other-host': copied on another host, null: nothing)
-export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null }): MenuItem[] {
+// The "Tag" submenu: each known tag ticked when every selected item has it; ids "tag:<index in known>".
+// dots: each colour's hex (index 0, no colour, is a ring)
+export function tagsMenu(c: { known: { name: string; color: number }[]; has: (name: string) => 'all' | 'some' | 'none'; dots: string[] }): MenuItem {
+  return {
+    label: 'Tag',
+    submenu: [
+      ...c.known.map((t, i) => ({ id: `tag:${i}`, label: t.name + (c.has(t.name) === 'some' ? ' (alcuni)' : ''), checked: c.has(t.name) === 'all', dot: t.color ? c.dots[t.color] : c.dots[1], hollow: !t.color })),
+      sep,
+      { id: 'tags', label: 'Modifica tag…' }
+    ]
+  }
+}
+
+// count: entries selected; paste: what the internal clipboard holds ('other-host': copied on another host, null: nothing);
+// tags: the Tag submenu, for local files
+export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem }): MenuItem[] {
   const create = [
     sep,
     { id: 'newFile', label: 'Nuovo file' },
@@ -41,8 +55,9 @@ export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: bo
     { id: 'delete', label: c.remote ? 'Elimina definitivamente…' : 'Sposta nel Cestino' }
   ]
   const split = [sep, { id: 'split:right', label: 'Apri in un pannello a destra' }, { id: 'split:within', label: 'Apri in un nuovo tab' }, { id: 'terminal', label: 'Apri terminale qui' }]
-  if (c.target === 'file') return [{ id: 'open', label: c.remote ? 'Apri nell\'editor' : 'Apri' }, ...(c.remote ? [] : [{ id: 'edit', label: 'Modifica nell\'editor' }]), { id: 'copyPath', label: 'Copia percorso' }, ...edit]
-  if (c.target === 'dir') return [{ id: 'open', label: 'Apri' }, ...split, { id: 'copyPath', label: 'Copia percorso' }, ...create, ...edit]
+  const tag = c.tags ? [sep, c.tags] : []
+  if (c.target === 'file') return [{ id: 'open', label: c.remote ? 'Apri nell\'editor' : 'Apri' }, ...(c.remote ? [] : [{ id: 'edit', label: 'Modifica nell\'editor' }]), { id: 'copyPath', label: 'Copia percorso' }, ...tag, ...edit]
+  if (c.target === 'dir') return [{ id: 'open', label: 'Apri' }, ...split, { id: 'copyPath', label: 'Copia percorso' }, ...tag, ...create, ...edit]
   return [{ id: 'refresh', label: 'Aggiorna' }, { id: 'terminal', label: 'Apri terminale qui' }, ...create]
 }
 

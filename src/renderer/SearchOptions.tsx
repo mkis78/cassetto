@@ -21,6 +21,8 @@ export default function SearchOptions({ q, set, onClose }: { q: SearchQuery; set
   const caseNow = CASES.find(c => c.id === (q.case ?? 'smart'))!
   return (
     <div ref={ref} className="search-opts" role="dialog" aria-label="Opzioni di ricerca" onKeyDown={e => e.key === 'Escape' && (e.stopPropagation(), onClose())}>
+      {q.mode !== 'tag' && (
+      <>
       <div className="opt-row">
         <span className="opt-label">Maiuscole</span>
         <div className="segmented">
@@ -32,6 +34,8 @@ export default function SearchOptions({ q, set, onClose }: { q: SearchQuery; set
         </div>
       </div>
       <p className="opt-hint">{caseNow.hint}</p>
+      </>
+      )}
 
       <label className="opt-check">
         <input type="checkbox" checked={q.subfolders !== false} onChange={e => set({ subfolders: e.target.checked })} /> Cerca anche nelle sottocartelle

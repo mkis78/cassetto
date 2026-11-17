@@ -1,5 +1,5 @@
 import { cp, link, lstat, mkdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
-import type { FileOp, OpResult } from '../shared/types'
+import type { FileOp, OpResult, Trashed } from '../shared/types'
 import { shQuote, sshRun } from './ssh'
 import { t, tx } from '../shared/i18n'
 
@@ -51,7 +51,23 @@ async function place(src: string, dest: string): Promise<void> {
 // errorOnExist + force:false: cp itself refuses to write over something that appeared after our check
 const copy = (src: string, dest: string) => cp(src, dest, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true })
 
-export function runOpLocal(op: FileOp, trash: (p: string) => Promise<void>): Promise<OpResult> {
+// `trashed` lists every item the op sent to the Trash, replaced ones included, for undo
+export async function runOpLocal(op: FileOp, trashAll: (paths: string[]) => Promise<Trashed[]>): Promise<OpResult & { trashed: Trashed[] }> {
+  const trashed: Trashed[] = []
+  const trash = async (paths: string[]) => {
+    const r = await trashAll(paths)
+    trashed.push(...r.filter(x => !x.error))
+    return r
+  }
+  const trashOne = async (p: string) => {
+    const [r] = await trash([p])
+    if (r?.error) throw new Error(r.error)
+  }
+  const res = await localOp(op, trash, trashOne)
+  return { ...res, trashed }
+}
+
+function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]>, trashOne: (p: string) => Promise<void>): Promise<OpResult> {
   switch (op.op) {
     case 'mkdir':
       return each([[op.path, () => fresh(op.path).then(() => mkdir(op.path))]])
@@ -65,14 +81,14 @@ export function runOpLocal(op: FileOp, trash: (p: string) => Promise<void>): Pro
         op.items.map(({ src, dest, replace }) => [
           src,
           async () => {
-            if (replace && (await exists(dest))) await trash(dest)
+            if (replace && (await exists(dest))) await trashOne(dest)
             if (op.op === 'copy') return fresh(dest).then(() => copy(src, dest))
             try {
               await place(src, dest)
             } catch (e) {
               if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
               await copy(src, dest) // another volume: copy, then the original goes to the trash
-              await trash(src).catch(e2 => {
+              await trashOne(src).catch(e2 => {
                 throw new Error(t("Copiato, ma l'originale non è stato spostato nel Cestino: {error}", { error: (e2 as Error).message }))
               })
             }
@@ -80,7 +96,7 @@ export function runOpLocal(op: FileOp, trash: (p: string) => Promise<void>): Pro
         ])
       )
     case 'trash':
-      return each(op.paths.map(p => [p, () => trash(p)]))
+      return trash(op.paths).then(r => ({ failed: r.filter(x => x.error).map(x => ({ path: x.path, error: x.error! })) }))
     case 'delete':
       return each(op.paths.map(p => [p, () => rm(p, { recursive: true })]))
   }

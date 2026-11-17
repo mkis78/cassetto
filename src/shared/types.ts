@@ -74,6 +74,7 @@ export type FileOp =
   | { op: 'copy' | 'move'; items: { src: string; dest: string; replace: boolean }[] }
   | { op: 'trash' | 'delete'; paths: string[] }
 export type OpResult = { failed: { path: string; error: string }[] } // empty: everything went through
+export type Trashed = { path: string; trashed?: string; error?: string } // trashed: where it is now in the Trash
 
 export type Preview = { kind: 'text'; text: string; truncated: boolean } | { kind: 'image'; src: string } | { kind: 'binary' } | { kind: 'error'; error: string }
 

@@ -11,7 +11,15 @@ const dir = () => mkdtempSync(join(tmpdir(), 'tops-'))
 const sh = async (op: FileOp): Promise<OpResult> => parseOpOutput(execFileSync('/bin/sh', ['-c', remoteOpScript(op)]).toString())
 const trashed: string[] = []
 const bin = dir()
-const local = (op: FileOp) => runOpLocal(op, async p => (trashed.push(p), renameSync(p, join(bin, basename(p) + Math.random()))))
+const local = (op: FileOp) =>
+  runOpLocal(op, async ps =>
+    ps.map(p => {
+      trashed.push(p)
+      const to = join(bin, basename(p) + Math.random())
+      renameSync(p, to)
+      return { path: p, trashed: to }
+    })
+  ).then(({ failed }) => ({ failed }))
 
 describe.each([['local', local], ['remote script', sh]] as const)('%s', (_, run) => {
   test('touch creates an empty file and never overwrites', async () => {
@@ -104,9 +112,7 @@ test('local replace sends the old destination to the trash', async () => {
 test('a failing trash leaves the file where it was', async () => {
   const d = dir()
   writeFileSync(join(d, 'a'), 'a')
-  const r = await runOpLocal({ op: 'trash', paths: [join(d, 'a')] }, async () => {
-    throw new Error('no trash')
-  })
+  const r = await runOpLocal({ op: 'trash', paths: [join(d, 'a')] }, async ps => ps.map(path => ({ path, error: 'no trash' })))
   expect(r.failed).toEqual([{ path: join(d, 'a'), error: 'no trash' }])
   expect(existsSync(join(d, 'a'))).toBe(true)
 })

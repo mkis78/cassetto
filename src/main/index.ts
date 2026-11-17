@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, SearchHit, SearchQuery } from '../shared/types'
 import { runOpLocal, runOpRemote } from './fileOps'
+import { trashItems } from './platform/trash'
 import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
 import { existsSync } from 'node:fs'
@@ -136,7 +137,7 @@ handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
 handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
 handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: t('testo non valido') } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
-handle('files:op', (host: string | null, op: FileOp) => (host ? runOpRemote(host, op) : runOpLocal(op, p => electronShell.trashItem(p))))
+handle('files:op', (host: string | null, op: FileOp) => (host ? runOpRemote(host, op) : runOpLocal(op, trashItems)))
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
 let release: Release | null = null
 const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })

@@ -10,7 +10,11 @@
     "test": "vitest run",
     "dist": "electron-vite build && electron-builder --mac",
     "dist:linux": "electron-vite build && electron-builder --linux",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "release": "npm test && npm version $BUMP -m \"chore: release v%s\" && git push --follow-tags",
+    "release:patch": "BUMP=patch npm run release",
+    "release:minor": "BUMP=minor npm run release",
+    "release:major": "BUMP=major npm run release"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

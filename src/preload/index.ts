@@ -3,6 +3,7 @@ import type { AppState, FileOp, ListResult, OpResult, Preview, ReadResult, Searc
 import type { MenuItem } from '../shared/menus'
 import type { Disk } from '../shared/status'
 import type { Tag } from '../shared/tags'
+import type { UpdateStatus } from '../main/release'
 
 // a listener for a message from main; returns how to remove it
 const listen =
@@ -47,6 +48,10 @@ const api = {
   readFile: (host: string | null, path: string): Promise<ReadResult> => ipcRenderer.invoke('files:read', host, path),
   writeFile: (host: string | null, path: string, text: string): Promise<WriteResult> => ipcRenderer.invoke('files:write', host, path, text),
   quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
+  checkUpdate: (): Promise<{ version: string } | null> => ipcRenderer.invoke('update:check'),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: listen<[UpdateStatus]>('update:status'),
+  onUpdateFound: listen<[string]>('update:found'),
   editTags: (paths: string[], change: { add?: Tag[]; remove?: string[] }): Promise<OpResult> => ipcRenderer.invoke('tags:edit', paths, change),
   fileOp: (host: string | null, op: FileOp): Promise<OpResult> => ipcRenderer.invoke('files:op', host, op),
   shortcutConflict: (shortcut: string): Promise<string | null> => ipcRenderer.invoke('shortcut:conflict', shortcut),

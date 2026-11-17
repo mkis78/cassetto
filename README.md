@@ -20,6 +20,10 @@
 - **Editor** (CodeMirror 6): «Modifica nell'editor» dal menu di un file; evidenziazione per decine di linguaggi, Cmd+F, Cmd+S, più cursori. I file remoti si aprono qui.
 - **Terminale** (Cmd+Alt+T, o «Apri terminale qui» dal menu): una shell in un tab, nella cartella scelta; su un server SSH si apre lì.
 
+## Lingue
+
+Italiano e inglese: la lingua segue quella del Mac e si cambia in Impostazioni (si applica al riavvio). Nel codice ogni testo visibile passa da `t('…')` di `src/shared/i18n.ts`, con l'italiano come chiave e le variabili tra graffe (`t('{n} elementi', { n })`); le traduzioni stanno in `src/shared/locales/`. Per aggiungere una lingua basta un nuovo dizionario; `test/i18n.test.ts` fallisce se un testo resta senza traduzione.
+
 ## Sviluppo
 
 Node.js LTS.

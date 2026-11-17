@@ -2,6 +2,7 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import type { SearchHit, SearchQuery, SearchResult } from '../shared/types'
 import { globToRegex, ignoreCase, maxHits, pathFilter, patterns } from '../shared/query'
 import { isValidHost, onPath, remoteSh, shQuote, sshOptions } from './ssh'
+import { t } from '../shared/i18n'
 
 // outside a repository there is no .gitignore to honour: skip at least these
 const SKIP_DIRS = ['.git', 'node_modules']
@@ -113,12 +114,12 @@ function collect(child: ChildProcess, q: SearchQuery, signal: AbortSignal | unde
 // below `cwd` on this machine: git grep / git ls-files inside a repository, else grep and find
 export async function runSearch(cwd: string, q: SearchQuery, signal?: AbortSignal, onHits?: Hits): Promise<SearchResult> {
   const [cmd, args] = command(q, onPath('git') && (await inRepo(cwd)))
-  return collect(spawn(cmd, args, { cwd, signal }), q, signal, onHits, (code, err) => err || `${cmd} è terminato con codice ${code}`)
+  return collect(spawn(cmd, args, { cwd, signal }), q, signal, onHits, (code, err) => err || t('{cmd} è terminato con codice {code}', { cmd, code }))
 }
 
 // The same search on an ssh host, streamed like the local one; gives up after a minute.
 export async function runSearchRemote(host: string, cwd: string, q: SearchQuery, signal?: AbortSignal, onHits?: Hits): Promise<SearchResult> {
-  if (!isValidHost(host)) return { hits: [], truncated: false, error: `Host non valido: ${host}` }
+  if (!isValidHost(host)) return { hits: [], truncated: false, error: t('Host non valido: {host}', { host }) }
   const sh = ([cmd, args]: [string, string[]]) => [cmd, ...args].map(shQuote).join(' ')
   const script =
     `cd -- ${shQuote(cwd)} && { if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; ` +
@@ -133,9 +134,9 @@ export async function runSearchRemote(host: string, cwd: string, q: SearchQuery,
   child.stdin.end()
   let timedOut = false
   const timer = setTimeout(() => ((timedOut = true), child.kill()), 60_000)
-  const r = await collect(child, q, signal, onHits, (code, err) => (code === 255 ? err || `Connessione a ${host} non riuscita` : err || `ricerca terminata con codice ${code}`))
+  const r = await collect(child, q, signal, onHits, (code, err) => (code === 255 ? err || t('Connessione a {host} non riuscita', { host }) : err || t('ricerca terminata con codice {code}', { code })))
   clearTimeout(timer)
-  return timedOut ? { ...r, error: `Timeout: la ricerca su ${host} ha impiegato più di un minuto` } : r
+  return timedOut ? { ...r, error: t('Timeout: la ricerca su {host} ha impiegato più di un minuto', { host }) } : r
 }
 
 // Every file below `cwd`, for quick open and the action bar: inside a repository through git

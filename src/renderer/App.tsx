@@ -18,11 +18,12 @@ import { layoutsMenu, putLayout } from '../shared/menus'
 import { arrange, PRESETS, type Layout, type Preset } from '../shared/arrange'
 import { popup } from './menuIcons'
 import { ICON } from './icons'
+import { t, setLang, resolveLang } from '../shared/i18n'
 
 // CodeMirror loads with the first editor tab, not with the app
 const Editor = lazy(() => import('./EditorTile'))
 const EditorTile = (props: React.ComponentProps<typeof Editor>) => (
-  <Suspense fallback={<div className="files-empty">Apro l'editor…</div>}>
+  <Suspense fallback={<div className="files-empty">{t("Apro l'editor…")}</div>}>
     <Editor {...props} />
   </Suspense>
 )
@@ -44,8 +45,8 @@ export default function App() {
     return () => (clearInterval(t), offs.forEach(off => off()))
   }, [])
   const install = () => {
-    if (!confirm(`Aggiornare Cassetto alla versione ${newVersion}? L'app si chiude e si riapre: i terminali aperti vengono chiusi.`)) return
-    setUpdateStatus({ label: 'Avvio…', progress: null }) // at once, before main reports the first step
+    if (!confirm(t("Aggiornare Cassetto alla versione {version}? L'app si chiude e si riapre: i terminali aperti vengono chiusi.", { version: newVersion ?? '' }))) return
+    setUpdateStatus({ label: t('Avvio…'), progress: null }) // at once, before main reports the first step
     void window.api.installUpdate()
   }
   const [saving, setSaving] = useState(false) // the dialog that names the layout to save
@@ -54,7 +55,8 @@ export default function App() {
   const dv = useRef<DockviewApi | null>(null)
   const theme = useTheme() === 'light' ? themeLight : themeDark
 
-  useEffect(() => void window.api.loadState().then(setState), [])
+  // the language first: everything after is drawn in it
+  useEffect(() => void window.api.loadState().then(s => (setLang(resolveLang(s.settings?.language, navigator.language)), setState(s))), [])
   useEffect(() => applySettings(state?.settings), [state?.settings])
   // at start and after each change: warn when macOS (or Raycast) keeps the bar's shortcut for itself
   const bar = state?.settings?.barShortcut ?? DEFAULT_BAR
@@ -170,13 +172,13 @@ export default function App() {
       setLastLayout(name)
       setTimeout(() => focusTile(dv.current?.activePanel), 50)
     } catch {
-      alert(`Il layout «${name}» non si può aprire: forse è di una versione diversa di Cassetto.`)
+      alert(t('Il layout «{name}» non si può aprire: forse è di una versione diversa di Cassetto.', { name }))
     }
   }
-  const deleteLayout = (name: string) => confirm(`Eliminare il layout «${name}»?`) && update(s => ({ ...s, layouts: (s.layouts ?? []).filter(l => l.name !== name) }))
+  const deleteLayout = (name: string) => confirm(t('Eliminare il layout «{name}»?', { name })) && update(s => ({ ...s, layouts: (s.layouts ?? []).filter(l => l.name !== name) }))
   const layoutChoice = async (e: React.MouseEvent) => {
     const r = e.currentTarget.getBoundingClientRect()
-    const arrangements = (Object.keys(PRESETS) as Preset[]).map(id => ({ id, label: PRESETS[id].label }))
+    const arrangements = (Object.keys(PRESETS) as Preset[]).map(id => ({ id, label: t(PRESETS[id].label) }))
     const choice = await popup(layoutsMenu(layouts.map(l => l.name), arrangements), { x: Math.round(r.left), y: Math.round(r.bottom + 2) })
     if (choice?.startsWith('arrange:')) arrangeTabs(choice.slice(8) as Preset)
     if (choice === 'save') setSaving(true)
@@ -197,23 +199,23 @@ export default function App() {
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }
   const paletteActions = (): Command[] => {
     const p = active()
-    const group = 'Generali'
+    const group = t('Generali')
     const general: Command[] = [
-      { label: 'Nuovo tab', hint: 'Cmd+T', run: newTab, icon: PanelTopOpen },
-      { label: 'Apri cartella…', run: pick, icon: FolderOpen },
-      { label: 'Nuovo terminale qui', hint: 'Cmd+Alt+T', run: newTerminal, icon: SquareTerminal },
-      { label: 'Connetti a server SSH…', hint: 'Cmd+K', run: () => setSshDialog(true), icon: Server },
-      ...(p && dv.current ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(dv.current!, whereOf(p), p.id, 'right'), icon: Columns2 }] : []),
-      { label: 'Tab successivo', hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1), icon: SquareArrowRight },
-      { label: 'Tab precedente', hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1), icon: SquareArrowLeft },
-      ...(p ? [{ label: 'Chiudi tab', hint: 'Cmd+W', run: () => closeTiles([p]), icon: X }, { label: p.api.isMaximized() ? 'Ripristina pannello' : 'Massimizza pannello', run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()), icon: p.api.isMaximized() ? Minimize2 : Maximize2 }] : []),
-      { label: 'Impostazioni…', hint: 'Cmd+,', run: () => setSettingsOpen(true), icon: Settings }
+      { label: t('Nuovo tab'), hint: 'Cmd+T', run: newTab, icon: PanelTopOpen },
+      { label: t('Apri cartella…'), run: pick, icon: FolderOpen },
+      { label: t('Nuovo terminale qui'), hint: 'Cmd+Alt+T', run: newTerminal, icon: SquareTerminal },
+      { label: t('Connetti a server SSH…'), hint: 'Cmd+K', run: () => setSshDialog(true), icon: Server },
+      ...(p && dv.current ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(dv.current!, whereOf(p), p.id, 'right'), icon: Columns2 }] : []),
+      { label: t('Tab successivo'), hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1), icon: SquareArrowRight },
+      { label: t('Tab precedente'), hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1), icon: SquareArrowLeft },
+      ...(p ? [{ label: t('Chiudi tab'), hint: 'Cmd+W', run: () => closeTiles([p]), icon: X }, { label: p.api.isMaximized() ? t('Ripristina pannello') : t('Massimizza pannello'), run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()), icon: p.api.isMaximized() ? Minimize2 : Maximize2 }] : []),
+      { label: t('Impostazioni…'), hint: 'Cmd+,', run: () => setSettingsOpen(true), icon: Settings }
     ].map(c => ({ ...c, group }))
-    const arrangements: Command[] = (Object.keys(PRESETS) as Preset[]).map(k => ({ label: `Disponi: ${PRESETS[k].label.toLowerCase()}`, run: () => arrangeTabs(k), icon: ARRANGE_ICON[k], group: 'Disposizione' }))
+    const arrangements: Command[] = (Object.keys(PRESETS) as Preset[]).map(k => ({ label: t('Disponi: {how}', { how: t(PRESETS[k].label).toLowerCase() }), run: () => arrangeTabs(k), icon: ARRANGE_ICON[k], group: t('Disposizione') }))
     const saved: Command[] = [
-      { label: 'Salva layout corrente…', run: () => setSaving(true), icon: Save },
-      ...layouts.map(l => ({ label: `Apri layout: ${l.name}`, run: () => openLayout(l.name), icon: LayoutDashboard }))
-    ].map(c => ({ ...c, group: 'Layout' }))
+      { label: t('Salva layout corrente…'), run: () => setSaving(true), icon: Save },
+      ...layouts.map(l => ({ label: t('Apri layout: {name}', { name: l.name }), run: () => openLayout(l.name), icon: LayoutDashboard }))
+    ].map(c => ({ ...c, group: t('Layout') }))
     // what the tab in front can do with its selection and its folder first
     return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general, ...arrangements, ...saved]
   }
@@ -222,12 +224,12 @@ export default function App() {
     <div className={`app platform-${window.api.platform}`}>
       <div className="topbar">
         <div className="spacer" />
-        <button className="topbar-btn" title="Disposizione e layout salvati" onClick={layoutChoice}>
-          <LayoutDashboard {...ICON} /> {lastLayout || 'Layout'} <ChevronDown size={12} strokeWidth={2} />
+        <button className="topbar-btn" title={t('Disposizione e layout salvati')} onClick={layoutChoice}>
+          <LayoutDashboard {...ICON} /> {lastLayout || t('Layout')} <ChevronDown size={12} strokeWidth={2} />
         </button>
         <span className="version">{__VERSION__}</span>
         {newVersion && !updateStatus && (
-          <button className="update" title="Scarica la nuova versione e riavvia" onClick={install}>
+          <button className="update" title={t('Scarica la nuova versione e riavvia')} onClick={install}>
             ↑ v{newVersion}
           </button>
         )}
@@ -235,11 +237,9 @@ export default function App() {
       {updateStatus && <UpdateBanner status={updateStatus} />}
       {conflict && state.settings?.ignoredConflict !== conflict.shortcut && !settingsOpen && (
         <div className="app-notice" role="alert">
-          <span>
-            La barra azioni si apre con <b>{shortcutLabel(conflict.shortcut)}</b>, ma macOS la usa già per «{conflict.with}» e non la passa a Cassetto.
-          </span>
-          <button className="primary" onClick={() => setSettingsOpen(true)}>Cambia scorciatoia</button>
-          <button onClick={() => update(s => ({ ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings, ignoredConflict: conflict.shortcut } }))}>Ignora</button>
+          <span>{t('La barra azioni si apre con {keys}, ma macOS la usa già per «{what}» e non la passa a Cassetto.', { keys: shortcutLabel(conflict.shortcut), what: conflict.with })}</span>
+          <button className="primary" onClick={() => setSettingsOpen(true)}>{t('Cambia scorciatoia')}</button>
+          <button onClick={() => update(s => ({ ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings, ignoredConflict: conflict.shortcut } }))}>{t('Ignora')}</button>
         </div>
       )}
       <WelcomeContext.Provider value={welcome}>
@@ -284,18 +284,18 @@ function SaveLayoutDialog({ initial, taken, onSave, onCancel }: { initial: strin
   const [name, setName] = useState(initial)
   const n = name.trim()
   const replaces = taken.includes(n)
-  const save = () => n && (!replaces || n === initial || confirm(`Esiste già un layout «${n}»: sostituirlo?`)) && onSave(n)
+  const save = () => n && (!replaces || n === initial || confirm(t('Esiste già un layout «{name}»: sostituirlo?', { name: n }))) && onSave(n)
   return (
     <div className="overlay" onMouseDown={e => e.target === e.currentTarget && onCancel()}>
       <div className="dialog" onKeyDown={e => e.key === 'Escape' && onCancel()}>
-        <h3>Salva layout</h3>
-        <label>Nome</label>
-        <input autoFocus value={name} placeholder="es. Progetto X" onFocus={e => e.target.select()} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
-        {replaces && <p className="path">Sostituirà il layout salvato con questo nome.</p>}
+        <h3>{t('Salva layout')}</h3>
+        <label>{t('Nome')}</label>
+        <input autoFocus value={name} placeholder={t('es. Progetto X')} onFocus={e => e.target.select()} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
+        {replaces && <p className="path">{t('Sostituirà il layout salvato con questo nome.')}</p>}
         <div className="actions">
-          <button onClick={onCancel}>Annulla</button>
+          <button onClick={onCancel}>{t('Annulla')}</button>
           <button className="primary" disabled={!n} onClick={save}>
-            Salva
+            {t('Salva')}
           </button>
         </div>
       </div>
@@ -309,13 +309,13 @@ function UpdateBanner({ status }: { status: NonNullable<UpdateStatus> }) {
   return (
     <div className="update-banner" role="status">
       <span className="spinner" />
-      <b>Aggiornamento di Cassetto</b>
+      <b>{t('Aggiornamento di Cassetto')}</b>
       <span className="label">{status.label}</span>
       <div className={'bar' + (pct === null ? ' indeterminate' : '')}>
         <div style={pct === null ? undefined : { width: `${pct}%` }} />
       </div>
       <span className="pct">{pct === null ? '' : `${pct}%`}</span>
-      <span className="hint">Al termine l'app si riavvia</span>
+      <span className="hint">{t("Al termine l'app si riavvia")}</span>
     </div>
   )
 }

@@ -1,9 +1,10 @@
 import { cp, link, lstat, mkdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
 import type { FileOp, OpResult } from '../shared/types'
 import { shQuote, sshRun } from './ssh'
+import { t, tx } from '../shared/i18n'
 
 // Nothing here overwrites unless an item says replace: an existing name fails with this.
-const EXISTS = 'Esiste già'
+const EXISTS = tx('Esiste già')
 
 const exists = (p: string) => lstat(p).then(() => true, () => false)
 // two names for one file: a case-only rename on a case-insensitive disk (macOS)
@@ -23,14 +24,14 @@ async function each(steps: [string, () => Promise<unknown>][]): Promise<OpResult
 }
 
 const fresh = async (p: string) => {
-  if (await exists(p)) throw new Error(EXISTS)
+  if (await exists(p)) throw new Error(t(EXISTS))
 }
 
 // src to dest without ever replacing what is there: the new name is claimed first, atomically
 // (mkdir for a folder, which rename then takes over since it is empty; a hard link for a file)
 async function place(src: string, dest: string): Promise<void> {
   const claim = (e: unknown) => {
-    throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(EXISTS) : e
+    throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(t(EXISTS)) : e
   }
   const st = await lstat(src)
   if (st.isDirectory()) {
@@ -71,8 +72,8 @@ export function runOpLocal(op: FileOp, trash: (p: string) => Promise<void>): Pro
             } catch (e) {
               if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
               await copy(src, dest) // another volume: copy, then the original goes to the trash
-              await trash(src).catch(t => {
-                throw new Error(`Copiato, ma l'originale non è stato spostato nel Cestino: ${(t as Error).message}`)
+              await trash(src).catch(e2 => {
+                throw new Error(t("Copiato, ma l'originale non è stato spostato nel Cestino: {error}", { error: (e2 as Error).message }))
               })
             }
           }
@@ -94,7 +95,7 @@ export function remoteOpScript(op: FileOp): string {
   const taken = (p: string) => `{ [ -e ${q(p)} ] || [ -L ${q(p)} ]; }`
   // run `cmd`, unless `guard` names a path that already exists
   const step = (p: string, cmd: string, guard?: string) =>
-    `${guard ? `if ${guard === p ? '' : `! [ ${q(p)} -ef ${q(guard)} ] && `}${taken(guard)}; then ${err(p, q(EXISTS))}; el` : ''}if e=$(${cmd} 2>&1); then ${ok(p)}; else ${err(p, '"$e"')}; fi`
+    `${guard ? `if ${guard === p ? '' : `! [ ${q(p)} -ef ${q(guard)} ] && `}${taken(guard)}; then ${err(p, q(t(EXISTS)))}; el` : ''}if e=$(${cmd} 2>&1); then ${ok(p)}; else ${err(p, '"$e"')}; fi`
   switch (op.op) {
     case 'mkdir':
       return step(op.path, `mkdir -- ${q(op.path)}`, op.path)
@@ -112,7 +113,7 @@ export function remoteOpScript(op: FileOp): string {
         .join('\n')
     }
     case 'trash':
-      return op.paths.map(p => err(p, q('Sul server non c\'è un Cestino'))).join('\n')
+      return op.paths.map(p => err(p, q(t("Sul server non c'è un Cestino")))).join('\n')
     case 'delete':
       return op.paths.map(p => step(p, `rm -rf -- ${q(p)}`)).join('\n')
   }
@@ -131,5 +132,5 @@ const pathsOf = (op: FileOp): string[] => ('items' in op ? op.items.map(i => i.s
 export async function runOpRemote(host: string, op: FileOp): Promise<OpResult> {
   const r = await sshRun(host, remoteOpScript(op), { timeout: 10 * 60_000 })
   // ssh may have dropped halfway: some items may be done, so the report says so instead of calling them all failed
-  return r.ok ? parseOpOutput(r.out.toString()) : { failed: pathsOf(op).map(path => ({ path, error: `${r.error} (esito incerto: aggiorna per vedere cosa è cambiato)` })) }
+  return r.ok ? parseOpOutput(r.out.toString()) : { failed: pathsOf(op).map(path => ({ path, error: t('{error} (esito incerto: aggiorna per vedere cosa è cambiato)', { error: r.error }) })) }
 }

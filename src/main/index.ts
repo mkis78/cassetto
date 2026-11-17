@@ -19,6 +19,7 @@ import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
 import { shortcut, type MenuItem } from '../shared/menus'
 import { loadState, saveState } from './store'
+import { resolveLang, setLang, t } from '../shared/i18n'
 import { parseDf, parseDu, type Disk } from '../shared/status'
 import { DEFAULT_BAR, systemConflict, type SymbolicHotkeys } from '../shared/shortcuts'
 
@@ -103,12 +104,12 @@ handle(
       Menu.buildFromTemplate(build(items)).popup({ window: win!, ...(at && { x: at.x, y: at.y }), callback: () => setTimeout(() => pick(null), 50) })
     })
 )
-handle('clipboard:write', (t: string) => clipboard.writeText(t))
+handle('clipboard:write', (text: string) => clipboard.writeText(text))
 handle('clipboard:read', () => clipboard.readText())
 
 // terminal tabs: one pty each, its output and exit sent to the window
 handle('pty:create', (id: string, p: { host: string | null; cwd: string }, cols: number, rows: number) => {
-  if (!p.host && !existsSync(p.cwd)) throw new Error(`Cartella non trovata: ${p.cwd}`) // node-pty would report only "exit 1"
+  if (!p.host && !existsSync(p.cwd)) throw new Error(t('Cartella non trovata: {path}', { path: p.cwd })) // node-pty would report only "exit 1"
   ptys.create(
     id,
     terminalLaunch(p, { shell, home: homedir(), sshOptions }),
@@ -134,7 +135,7 @@ handle('tags:edit', (paths: string[], change: { add?: Tag[]; remove?: string[] }
 handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
 handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
-handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: 'testo non valido' } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
+handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: t('testo non valido') } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
 handle('files:op', (host: string | null, op: FileOp) => (host ? runOpRemote(host, op) : runOpLocal(op, p => electronShell.trashItem(p))))
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
 let release: Release | null = null
@@ -147,13 +148,15 @@ handle('update:check', async () => {
 handle('update:install', () => release && installRelease(release, s => win?.webContents.send('update:status', s)))
 // from the menu: the same check, and an answer even when there is nothing new
 async function checkNow(): Promise<void> {
-  if (!selfUpdate()) return void dialog.showMessageBox(win!, { message: "Gli aggiornamenti funzionano nell'app installata", detail: 'Avviata con npm run dev si aggiorna con git pull.' })
+  if (!selfUpdate()) return void dialog.showMessageBox(win!, { message: t("Gli aggiornamenti funzionano nell'app installata"), detail: t('Avviata con npm run dev si aggiorna con git pull.') })
   release = await checkRelease(app.getVersion())
   if (release) win?.webContents.send('update:found', release.version)
-  else dialog.showMessageBox(win!, { message: 'Cassetto è aggiornato', detail: `Versione ${app.getVersion()}` })
+  else dialog.showMessageBox(win!, { message: t('Cassetto è aggiornato'), detail: t('Versione {version}', { version: app.getVersion() }) })
 }
 handle('openPath', (p: string) => electronShell.openPath(p))
 handle('app:quit', () => app.quit())
+// a new language takes effect on the next start: menus, dialogs and every tab are built in it from scratch
+handle('app:relaunch', () => (app.relaunch(), app.quit()))
 
 // free and total space of the disk holding `path`; null when it cannot be read
 handle('files:disk', async (host: string | null, path: string): Promise<Disk | null> => {
@@ -210,7 +213,7 @@ handle('search:run', async (tileId: string, run: number, host: string | null, cw
     timer ??= setTimeout(flush, 80)
   }
   try {
-    if (q.mode === 'tag') return host ? { hits: [], truncated: false, error: 'I tag esistono solo per i file del Mac' } : await runTagSearch(cwd, q, ac.signal, onHits)
+    if (q.mode === 'tag') return host ? { hits: [], truncated: false, error: t('I tag esistono solo per i file del Mac') } : await runTagSearch(cwd, q, ac.signal, onHits)
     return await (host ? runSearchRemote(host, cwd, q, ac.signal, onHits) : runSearch(cwd, q, ac.signal, onHits))
   } finally {
     if (timer) clearTimeout(timer) // what is left comes with the reply
@@ -246,37 +249,39 @@ ipcMain.on('homeDir', e => (e.returnValue = homedir()))
 function setMenu(): void {
   const p = process.platform
   const send = (ch: string, ...a: unknown[]) => () => win?.webContents.send(ch, ...a)
-  const settings: MenuItemConstructorOptions = { label: 'Impostazioni…', accelerator: p === 'darwin' ? 'Cmd+,' : 'Ctrl+,', click: send('settings:open') }
+  const settings: MenuItemConstructorOptions = { label: t('Impostazioni…'), accelerator: p === 'darwin' ? 'Cmd+,' : 'Ctrl+,', click: send('settings:open') }
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       p === 'darwin'
-        ? { role: 'appMenu', submenu: [{ role: 'about' }, { label: 'Controlla aggiornamenti…', click: () => void checkNow() }, settings, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }
-        : { label: 'Cassetto', submenu: [{ label: 'Controlla aggiornamenti…', click: () => void checkNow() }, settings, { type: 'separator' }, { role: 'quit' }] },
+        ? { role: 'appMenu', submenu: [{ role: 'about' }, { label: t('Controlla aggiornamenti…'), click: () => void checkNow() }, settings, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }
+        : { label: 'Cassetto', submenu: [{ label: t('Controlla aggiornamenti…'), click: () => void checkNow() }, settings, { type: 'separator' }, { role: 'quit' }] },
       { role: 'editMenu' },
       {
-        label: 'Archivio',
+        label: t('Archivio'),
         submenu: [
-          { label: 'Nuovo tab', accelerator: shortcut('T', p), click: send('tile:new') },
-          { label: 'Nuovo terminale qui', accelerator: 'CmdOrCtrl+Alt+T', click: send('terminal:new') },
+          { label: t('Nuovo tab'), accelerator: shortcut('T', p), click: send('tile:new') },
+          { label: t('Nuovo terminale qui'), accelerator: 'CmdOrCtrl+Alt+T', click: send('terminal:new') },
           // shown here, handled by the renderer: inside the editor Cmd+K starts chords (Cmd+K Cmd+U)
-          { label: 'Connetti a server SSH…', accelerator: shortcut('K', p), registerAccelerator: false, click: send('ssh:open') },
-          { label: 'Barra azioni…', accelerator: barShortcut, registerAccelerator: false, click: send('palette:open', 'bar') },
-          { label: 'Vai a file…', accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', 'files') },
-          ...(p === 'darwin' ? [{ label: 'Comandi…', accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', 'commands') }] : []),
+          { label: t('Connetti a server SSH…'), accelerator: shortcut('K', p), registerAccelerator: false, click: send('ssh:open') },
+          { label: t('Barra azioni…'), accelerator: barShortcut, registerAccelerator: false, click: send('palette:open', 'bar') },
+          { label: t('Vai a file…'), accelerator: shortcut('P', p), registerAccelerator: false, click: send('palette:open', 'files') },
+          ...(p === 'darwin' ? [{ label: t('Comandi…'), accelerator: 'Cmd+Shift+P', registerAccelerator: false, click: send('palette:open', 'commands') }] : []),
           { type: 'separator' },
           // shown here, handled by the renderer
-          { label: 'Tab successivo', accelerator: shortcut(']', p), registerAccelerator: false, click: send('tile:cycle', 1) },
-          { label: 'Tab precedente', accelerator: shortcut('[', p), registerAccelerator: false, click: send('tile:cycle', -1) },
-          { label: 'Chiudi tab', accelerator: shortcut('W', p), click: send('tile:close') }
+          { label: t('Tab successivo'), accelerator: shortcut(']', p), registerAccelerator: false, click: send('tile:cycle', 1) },
+          { label: t('Tab precedente'), accelerator: shortcut('[', p), registerAccelerator: false, click: send('tile:cycle', -1) },
+          { label: t('Chiudi tab'), accelerator: shortcut('W', p), click: send('tile:close') }
         ]
       },
-      { label: 'Vista', submenu: [{ role: 'toggleDevTools' }, { role: 'togglefullscreen' }] },
-      p === 'darwin' ? { role: 'windowMenu' } : { label: 'Finestra', submenu: [{ role: 'minimize', registerAccelerator: false }] }
+      { label: t('Vista'), submenu: [{ role: 'toggleDevTools' }, { role: 'togglefullscreen' }] },
+      p === 'darwin' ? { role: 'windowMenu' } : { label: t('Finestra'), submenu: [{ role: 'minimize', registerAccelerator: false }] }
     ])
   )
 }
 
 app.whenReady().then(() => {
+  // the language of menus and messages; a change in Impostazioni applies at the next start
+  setLang(resolveLang(loadState(stateFile()).settings?.language, app.getLocale()))
   const root = join(__dirname, '../renderer')
   protocol.handle('app', req => {
     const file = appFile(root, req.url)

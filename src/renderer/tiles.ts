@@ -1,6 +1,7 @@
 import type { DockviewApi, IDockviewPanel } from 'dockview-react'
 import type { TileParams } from '../shared/types'
 import type { Command } from './Palette'
+import { t } from '../shared/i18n'
 
 // what each tab offers the action bar, asked for when the bar opens (so it sees the selection of that moment)
 const actions = new Map<string, () => Command[]>()
@@ -37,22 +38,27 @@ export const setDirty = (id: string, d: boolean) => {
 }
 export const isDirty = (id: string) => dirty.has(id)
 export const onDirty = (f: () => void) => (dirtySubs.add(f), () => void dirtySubs.delete(f))
-const lose = (n: number) => `${n === 1 ? 'Un file ha' : `${n} file hanno`} modifiche non salvate: andranno perse.`
+const lose = (n: number) => (n === 1 ? t('Un file ha modifiche non salvate: andranno perse.') : t('{n} file hanno modifiche non salvate: andranno perse.', { n }))
 
 export function closeTiles(panels: IDockviewPanel[]): void {
   const n = panels.filter(p => dirty.has(p.id)).length
-  if (n && !confirm(`${lose(n)} Chiudere comunque?`)) return
+  if (n && !confirm(`${lose(n)} ${t('Chiudere comunque?')}`)) return
   panels.forEach(p => (dirty.delete(p.id), p.api.close()))
 }
 
 // quitting (Cmd+Q, the window's close button) with unsaved editors: stop, ask, then quit for real
 let leaving = false
+// a restart asked for in the app: asks here, once, so the quit that follows does not ask again (or stay pending)
+export function leaveAsking(): boolean {
+  if (dirty.size && !confirm(`${lose(dirty.size)} ${t('Riavviare comunque?')}`)) return false
+  return (leaving = true)
+}
 window.addEventListener('beforeunload', e => {
   if (leaving || !dirty.size) return
   e.preventDefault()
   e.returnValue = false
   setTimeout(() => {
-    if (!confirm(`${lose(dirty.size)} Uscire comunque?`)) return
+    if (!confirm(`${lose(dirty.size)} ${t('Uscire comunque?')}`)) return
     leaving = true
     void window.api.quit()
   })

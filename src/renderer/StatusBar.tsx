@@ -5,12 +5,13 @@ import { formatSize } from '../shared/format'
 import { diskSummary, folderSummary, kindOf, selectionSummary, type Disk } from '../shared/status'
 import { ICON } from './icons'
 import { TagChip } from './Tags'
+import { locale, t } from '../shared/i18n'
 
 // folders already weighed, by host and path, for this session
 // ponytail: never refreshed by itself; "Ricalcola" when the folder changed
 const sizes = new Map<string, number | null>()
 
-const when = (ms: number) => new Date(ms).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
+const when = (ms: number) => new Date(ms).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' })
 
 // at the foot of a files tile: the folder (or the selection) on the left, the disk on the right
 export default function StatusBar({ host, col, shown, hidden, picked }: { host: string | null; col: Listing | null; shown: DirEntry[]; hidden: number; picked: { path: string; entry: DirEntry }[] }) {
@@ -48,21 +49,21 @@ export default function StatusBar({ host, col, shown, hidden, picked }: { host: 
         {e.dir &&
           (weighing === path ? (
             <span className="status-busy">
-              <span className="spinner" /> calcolo…
+              <span className="spinner" /> {t('calcolo…')}
             </span>
           ) : sizes.has(key) ? (
             <span>
-              {known === null ? 'dimensione non disponibile' : `${formatSize(known!)} con il contenuto`}{' '}
-              <button className="status-link" onClick={() => weigh(path)}>Ricalcola</button>
+              {known === null ? t('dimensione non disponibile') : t('{size} con il contenuto', { size: formatSize(known!) })}{' '}
+              <button className="status-link" onClick={() => weigh(path)}>{t('Ricalcola')}</button>
             </span>
           ) : (
-            <button className="status-link" onClick={() => weigh(path)}>Calcola dimensione</button>
+            <button className="status-link" onClick={() => weigh(path)}>{t('Calcola dimensione')}</button>
           ))}
-        {e.mtime !== undefined && <span>modificato {when(e.mtime)}</span>}
+        {e.mtime !== undefined && <span>{t('modificato {when}', { when: when(e.mtime) })}</span>}
         {!!e.tags?.length && (
           <span className="status-tags">
-            {e.tags.map(t => (
-              <TagChip key={t.name} tag={t} />
+            {e.tags.map(x => (
+              <TagChip key={x.name} tag={x} />
             ))}
           </span>
         )}
@@ -75,7 +76,7 @@ export default function StatusBar({ host, col, shown, hidden, picked }: { host: 
     <div className="status-bar">
       <div className="status-left">{left}</div>
       {disk && (
-        <div className={'status-disk' + (used > 0.9 ? ' full' : '')} title={`Occupato il ${Math.round(used * 100)}%`}>
+        <div className={'status-disk' + (used > 0.9 ? ' full' : '')} title={t('Occupato il {pct}%', { pct: Math.round(used * 100) })}>
           <HardDrive {...ICON} />
           <span className="status-meter">
             <span style={{ width: `${Math.round(used * 100)}%` }} />

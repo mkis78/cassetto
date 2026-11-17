@@ -1,4 +1,5 @@
 import type { Tag } from './tags'
+import type { LangSetting } from './i18n'
 import type { TabColor } from './menus'
 
 // name, color: what the user gave the tab; without a name it shows the folder's
@@ -43,6 +44,7 @@ export interface AppState {
 export interface Settings {
   theme: 'dark' | 'light' | 'system'
   filesHome?: string // where a new tab and its Home button go; unset: the user's home
+  language?: LangSetting // the interface's; unset: the system's (see shared/i18n)
   barShortcut?: string // the action bar's, an accelerator (shared/shortcuts); unset: DEFAULT_BAR
   ignoredConflict?: string // the shortcut whose clash with the system the user chose to keep
 }

@@ -7,6 +7,7 @@ import { highlight } from '../shared/highlight'
 import { searchMenu } from '../shared/menus'
 import { listKey } from '../shared/listNav'
 import { popup } from './menuIcons'
+import { t } from '../shared/i18n'
 
 type Props = {
   tileId: string
@@ -37,7 +38,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
     const n = ++seq.current
     if (!q.text) return void (setAnswer(null), setBusy(false))
     let off = () => {}
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setBusy(true)
       off = window.api.onSearchHits(tileId, n, hits =>
         setAnswer(a => (a?.n === n ? { ...a, r: { ...a.r, hits: [...a.r.hits, ...hits] } } : { n, q, r: { hits, truncated: false, error: null } }))
@@ -48,7 +49,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
       setBusy(false)
       setAnswer({ n, q, r }) // the whole result, the hits not streamed yet included
     }, 200)
-    return () => (clearTimeout(t), off())
+    return () => (clearTimeout(timer), off())
   }, [q, cwd, host])
 
 
@@ -67,7 +68,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
     if (choice) act(choice, hit)
   }
   const more = (hit: SearchHit) => (
-    <button className="search-more" title="Azioni" onClick={e => menu(e, hit)}>
+    <button className="search-more" title={t('Azioni')} onClick={e => menu(e, hit)}>
       <Ellipsis {...ICON} />
     </button>
   )
@@ -121,16 +122,21 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
     )
   }
   const files = q.mode === 'content' ? groups.size : (result?.hits.length ?? 0)
-  const where = (cwd.split('/').filter(Boolean).pop() ?? '/') + (q.subfolders === false ? ' (senza sottocartelle)' : ' e sottocartelle')
+  const dirName = cwd.split('/').filter(Boolean).pop() ?? '/'
+  const where = q.subfolders === false ? t('{dir} (senza sottocartelle)', { dir: dirName }) : t('{dir} e sottocartelle', { dir: dirName })
   const streaming = busy && answer?.n === seq.current // hits of the search still running are on screen
   const summary = busy
     ? streaming
-      ? `Cerco… ${result?.hits.length ?? 0} trovati finora · ${where}`
-      : `Cerco in ${where}…`
+      ? t('Cerco… {n} trovati finora · {where}', { n: result?.hits.length ?? 0, where })
+      : t('Cerco in {where}…', { where })
     : result && !result.error
       ? q.mode === 'content'
-        ? `${result.hits.length} ${result.hits.length === 1 ? 'risultato' : 'risultati'} in ${files} file · ${where}`
-        : `${files} file · ${where}`
+        ? result.hits.length === 1
+          ? t('1 risultato in {files} file · {where}', { files, where })
+          : t('{n} risultati in {files} file · {where}', { n: result.hits.length, files, where })
+        : files === 1
+          ? t('1 file · {where}', { where })
+          : t('{files} file|plurale · {where}', { files, where })
       : null
 
   return (
@@ -139,7 +145,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
         <div className="search-summary">
           {busy && <span className="spinner" />}
           {summary}
-          {result?.truncated && !busy && <span className="search-truncated"> · solo i primi: restringi la ricerca</span>}
+          {result?.truncated && !busy && <span className="search-truncated"> · {t('solo i primi: restringi la ricerca')}</span>}
         </div>
       )}
       {result?.error && (
@@ -165,14 +171,14 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
             </div>
           ))
         : result?.hits.map(h => (
-            <div key={h.path} {...row(h, 'search-name-hit')} title={h.tags ? `${h.path}\n${h.tags.map(t => t.name).join(', ')}` : h.path}>
+            <div key={h.path} {...row(h, 'search-name-hit')} title={h.tags ? `${h.path}\n${h.tags.map(x => x.name).join(', ')}` : h.path}>
               <File {...ICON} />
               {nameDir(h.path)}
               <TagDots tags={h.tags} />
               {more(h)}
             </div>
           ))}
-      {result && !result.error && !result.hits.length && !busy && <div className="files-empty">Nessun risultato per «{shown.text}»</div>}
+      {result && !result.error && !result.hits.length && !busy && <div className="files-empty">{t('Nessun risultato per «{text}»', { text: shown.text })}</div>}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import { shQuote } from './ssh'
+import { t } from '../shared/i18n'
 
 // what an update is doing, for the banner under the top bar; progress 0…1, null when it cannot be measured
 export type UpdateStatus = { label: string; progress: number | null } | null
@@ -49,7 +50,7 @@ export async function checkRelease(current: string): Promise<Release | null> {
 }
 
 export const downloadStatus = (received: number, total: number): UpdateStatus =>
-  total > 0 ? { label: 'Download della nuova versione…', progress: Math.floor((received / total) * 100) / 100 } : { label: `Download della nuova versione: ${Math.round(received / 1e6)} MB`, progress: null }
+  total > 0 ? { label: t('Download della nuova versione…'), progress: Math.floor((received / total) * 100) / 100 } : { label: t('Download della nuova versione: {mb} MB', { mb: Math.round(received / 1e6) }), progress: null }
 
 export const fileSha256 = (file: string) =>
   new Promise<string>((ok, ko) => {
@@ -72,9 +73,9 @@ export async function installRelease(r: Release, report: (s: UpdateStatus) => vo
   try {
     const dir = await mkdtemp(join(app.getPath('temp'), 'cassetto-update-'))
     const file = join(dir, r.url.split('/').pop() || 'download')
-    report({ label: 'Download della nuova versione…', progress: 0 })
+    report({ label: t('Download della nuova versione…'), progress: 0 })
     const res = await fetch(r.url)
-    if (!res.ok || !res.body) throw new Error(`Download fallito (${res.status})`)
+    if (!res.ok || !res.body) throw new Error(t('Download fallito ({status})', { status: res.status }))
     const total = Number(res.headers.get('content-length')) || 0
     let received = 0
     let shown = ''
@@ -87,14 +88,14 @@ export async function installRelease(r: Release, report: (s: UpdateStatus) => vo
     })
     await pipeline(body, createWriteStream(file))
     // what GitHub says the file is: a broken or swapped download never replaces the app
-    report({ label: 'Verifica…', progress: null })
-    if (r.sha256 && (await fileSha256(file)) !== r.sha256) throw new Error("Il file scaricato non corrisponde a quello pubblicato (SHA-256 diverso): l'aggiornamento è stato annullato.")
-    report({ label: 'Installazione…', progress: null })
+    report({ label: t('Verifica…'), progress: null })
+    if (r.sha256 && (await fileSha256(file)) !== r.sha256) throw new Error(t("Il file scaricato non corrisponde a quello pubblicato (SHA-256 diverso): l'aggiornamento è stato annullato."))
+    report({ label: t('Installazione…'), progress: null })
     let swap: string
     if (process.platform === 'darwin') {
       await promisify(execFile)('ditto', ['-x', '-k', file, dir])
       const built = join(dir, 'Cassetto.app')
-      if (!existsSync(built)) throw new Error("L'archivio scaricato non contiene Cassetto.app")
+      if (!existsSync(built)) throw new Error(t("L'archivio scaricato non contiene Cassetto.app"))
       const target = resolve(app.getPath('exe'), '../../..')
       swap = `${swapScript(process.pid, built, target)}; open ${shQuote(target)}`
     } else {
@@ -102,12 +103,12 @@ export async function installRelease(r: Release, report: (s: UpdateStatus) => vo
       await chmod(file, 0o755)
       swap = `${swapScript(process.pid, file, target, 'cp -p')}; ${shQuote(target)}`
     }
-    report({ label: 'Riavvio…', progress: 1 })
+    report({ label: t('Riavvio…'), progress: 1 })
     spawn('/bin/sh', ['-c', swap], { detached: true, stdio: 'ignore' }).unref()
     app.quit()
   } catch (err) {
     installing = false // let the user retry
     report(null)
-    dialog.showErrorBox('Aggiornamento non riuscito', (err as Error).message)
+    dialog.showErrorBox(t('Aggiornamento non riuscito'), (err as Error).message)
   }
 }

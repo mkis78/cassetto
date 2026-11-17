@@ -48,6 +48,7 @@ const api = {
   readFile: (host: string | null, path: string): Promise<ReadResult> => ipcRenderer.invoke('files:read', host, path),
   writeFile: (host: string | null, path: string, text: string): Promise<WriteResult> => ipcRenderer.invoke('files:write', host, path, text),
   quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
+  relaunch: (): Promise<void> => ipcRenderer.invoke('app:relaunch'),
   checkUpdate: (): Promise<{ version: string } | null> => ipcRenderer.invoke('update:check'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('update:install'),
   onUpdateStatus: listen<[UpdateStatus]>('update:status'),

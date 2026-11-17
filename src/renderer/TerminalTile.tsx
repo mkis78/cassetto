@@ -6,6 +6,7 @@ import { terminalMenu } from '../shared/menus'
 import { popup } from './menuIcons'
 import { closeTiles, openFolder } from './tiles'
 import { attachTerminal, endFind, findInTerminal, focusTerminal, hasSelection, onFindResults, terminalAction } from './terminals'
+import { t } from '../shared/i18n'
 
 // a shell in its own tab
 export default function TerminalTile({ api, containerApi, params }: IDockviewPanelProps<TerminalParams>) {
@@ -49,7 +50,7 @@ function FindBar({ id, focusAgain, onClose }: { id: string; focusAgain: number; 
         ref={input}
         spellCheck={false}
         value={text}
-        placeholder="Cerca nel terminale"
+        placeholder={t('Cerca nel terminale')}
         onChange={e => (setText(e.target.value), findInTerminal(id, e.target.value, { typing: true }), !e.target.value && setFound(null))}
         onKeyDown={e => {
           if (e.key === 'Enter') find(e.shiftKey)
@@ -58,14 +59,14 @@ function FindBar({ id, focusAgain, onClose }: { id: string; focusAgain: number; 
           e.preventDefault()
         }}
       />
-      <span className="count">{text && found ? (found.count ? `${found.index + 1}/${found.count}` : 'nessuno') : ''}</span>
-      <button title="Precedente (Shift+Invio)" onClick={() => find(true)}>
+      <span className="count">{text && found ? (found.count ? `${found.index + 1}/${found.count}` : t('nessuno')) : ''}</span>
+      <button title={t('Precedente (Shift+Invio)')} onClick={() => find(true)}>
         <ChevronUp size={14} />
       </button>
-      <button title="Successivo (Invio)" onClick={() => find()}>
+      <button title={t('Successivo (Invio)')} onClick={() => find()}>
         <ChevronDown size={14} />
       </button>
-      <button title="Chiudi (Esc)" onClick={onClose}>
+      <button title={t('Chiudi (Esc)')} onClick={onClose}>
         <X size={14} />
       </button>
     </div>

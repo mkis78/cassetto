@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'node:child_process'
 import type { OpResult, SearchHit, SearchQuery, SearchResult } from '../shared/types'
-import { decodeTags, encodeTags, TAG_ATTR, type Tag } from '../shared/tags'
+import { COLOR_NAMES, decodeTags, encodeTags, TAG_ATTR, type Tag } from '../shared/tags'
 import { maxHits, pathFilter, patterns } from '../shared/query'
+import { t } from '../shared/i18n'
 
 // ponytail: macOS only, through its own xattr and find; Linux has user.xdg.tags when Cassetto goes there
 export const tagsSupported = process.platform === 'darwin'
@@ -50,7 +51,7 @@ const hex = (b: Uint8Array) => [...b].map(x => x.toString(16).padStart(2, '0')).
 
 // add and take off tags on files and folders (a tag is its name: adding one already there changes its colour)
 export async function editTags(paths: string[], change: { add?: Tag[]; remove?: string[] }): Promise<OpResult> {
-  if (!tagsSupported) return { failed: paths.map(path => ({ path, error: 'I tag si usano solo sul Mac' })) }
+  if (!tagsSupported) return { failed: paths.map(path => ({ path, error: t('I tag si usano solo sul Mac') })) }
   const now = await readTags(paths)
   const failed: OpResult['failed'] = []
   for (const path of paths) {
@@ -58,7 +59,7 @@ export async function editTags(paths: string[], change: { add?: Tag[]; remove?: 
     const tags = [...(now.get(path) ?? []).filter(t => !drop.has(t.name)), ...(change.add ?? [])]
     const r = tags.length ? await run('xattr', ['-wx', TAG_ATTR, hex(encodeTags(tags)), path]) : await run('xattr', ['-d', TAG_ATTR, path])
     // taking off tags a file never had is no failure
-    if (r.code && !(tags.length === 0 && /No such xattr/i.test(r.err))) failed.push({ path, error: r.err.trim().replace(/^xattr: /, '') || `xattr: codice ${r.code}` })
+    if (r.code && !(tags.length === 0 && /No such xattr/i.test(r.err))) failed.push({ path, error: r.err.trim().replace(/^xattr: /, '') || t('xattr: codice {code}', { code: r.code }) })
   }
   return { failed }
 }
@@ -66,11 +67,12 @@ export async function editTags(paths: string[], change: { add?: Tag[]; remove?: 
 // Search by tag below `cwd`: find lists what carries tags (subfolders, exclusions as for the other searches),
 // in batches their tags are read, and what has a tag (or a tag colour) matching the text is a hit.
 export async function runTagSearch(cwd: string, q: SearchQuery, signal?: AbortSignal, onHits?: (h: SearchHit[]) => void): Promise<SearchResult> {
-  if (!tagsSupported) return { hits: [], truncated: false, error: 'La ricerca per tag funziona solo sul Mac' }
+  if (!tagsSupported) return { hits: [], truncated: false, error: t('La ricerca per tag funziona solo sul Mac') }
   const max = maxHits(q)
   const keep = pathFilter(q)
   const want = q.text.trim().toLowerCase()
-  const COLORS = ['', 'grigio', 'verde', 'viola', 'blu', 'giallo', 'rosso', 'arancione']
+  // a colour word in Italian or in the language of the interface (index 0, no colour, matches nothing)
+  const colorMatch = (c: number) => c > 0 && (COLOR_NAMES[c].toLowerCase() === want || t(COLOR_NAMES[c]).toLowerCase() === want)
   const prune = patterns(q.exclude).filter(p => !p.includes('/'))
   const args = [
     '.',
@@ -93,10 +95,10 @@ export async function runTagSearch(cwd: string, q: SearchQuery, signal?: AbortSi
         const tags = await readTags(paths.map(p => `${cwd.replace(/\/$/, '')}/${p}`))
         const batch: SearchHit[] = []
         for (const p of paths) {
-          const t = tags.get(`${cwd.replace(/\/$/, '')}/${p}`) ?? []
-          if (!keep(p) || !t.some(x => x.name.toLowerCase().includes(want) || COLORS[x.color] === want)) continue
+          const found = tags.get(`${cwd.replace(/\/$/, '')}/${p}`) ?? []
+          if (!keep(p) || !found.some(x => x.name.toLowerCase().includes(want) || colorMatch(x.color))) continue
           if (hits.length === max) return void ((truncated = true), child.kill())
-          const hit = { path: p, tags: t }
+          const hit = { path: p, tags: found }
           hits.push(hit)
           batch.push(hit)
         }

@@ -3,6 +3,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import { Terminal } from '@xterm/xterm'
 import type { TerminalParams } from '../shared/types'
 import { onSettings, resolvedTheme } from './settings'
+import { t } from '../shared/i18n'
 
 // VS Code's light terminal colours: the default ANSI ones are unreadable on white
 const LIGHT = {
@@ -48,7 +49,7 @@ export function attachTerminal(id: string, params: TerminalParams, el: HTMLEleme
     const input = term.onData(d => window.api.ptyWrite(id, d))
     const off = [
       window.api.onPtyData(id, d => term.write(d)),
-      window.api.onPtyExit(id, code => term.write(`\r\n\x1b[90m[terminale chiuso, codice ${code}]\x1b[0m\r\n`)),
+      window.api.onPtyExit(id, code => term.write(`\r\n\x1b[90m[${t('terminale chiuso, codice {code}', { code })}]\x1b[0m\r\n`)),
       () => input.dispose()
     ]
     e = { term, fit, search, off, onFind }

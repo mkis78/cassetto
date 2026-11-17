@@ -5,6 +5,7 @@ import { basename, dirname, join } from 'node:path'
 import { sortEntries } from '../shared/sortEntries'
 import type { Listing, ListResult, Preview, ReadResult, WriteResult } from '../shared/types'
 import { EDIT_LIMIT, previewLimit, toPreview, toText } from './files'
+import { t } from '../shared/i18n'
 
 // Host aliases from an ssh config, without patterns; Include is followed one level deep.
 export function parseSshHosts(text: string, readInclude: (pattern: string) => string[]): string[] {
@@ -62,7 +63,7 @@ export const shQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`
 export function assertPrivateDir(d: string): void {
   const st = lstatSync(d)
   if (!st.isDirectory() || st.uid !== process.getuid?.() || (st.mode & 0o077) !== 0) {
-    throw new Error(`${d} non è una cartella privata di questo utente: rimuovila e riprova`)
+    throw new Error(t('{dir} non è una cartella privata di questo utente: rimuovila e riprova', { dir: d }))
   }
 }
 
@@ -87,7 +88,7 @@ export function onPath(cmd: string, path = process.env.PATH ?? ''): boolean {
 }
 
 export function sshError(err: { killed?: boolean; message: string }, stderr: string, host: string): string {
-  if (err.killed) return `Timeout: ${host} non risponde`
+  if (err.killed) return t('Timeout: {host} non risponde', { host })
   return stderr.trim() || err.message
 }
 
@@ -124,7 +125,7 @@ export function parseRemoteListing(out: string): Listing {
 // Runs `script` under sh on `host` over the shared connection, `input` on its stdin.
 // BatchMode: never ask for input here; the user authenticates in an SSH tile, which opens the shared connection
 export function sshRun(host: string, script: string, o: { input?: string; maxBuffer?: number; timeout?: number; signal?: AbortSignal } = {}): Promise<{ ok: true; out: Buffer } | { ok: false; error: string }> {
-  if (!isValidHost(host)) return Promise.resolve({ ok: false, error: `Host non valido: ${host}` })
+  if (!isValidHost(host)) return Promise.resolve({ ok: false, error: t('Host non valido: {host}', { host }) })
   let opts: string[]
   try {
     opts = sshOptions()

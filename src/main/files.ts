@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { sortEntries } from '../shared/sortEntries'
 import { imageType } from '../shared/format'
 import type { ListResult, Preview, ReadResult, WriteResult } from '../shared/types'
+import { t } from '../shared/i18n'
 
 export async function listLocal(path: string): Promise<ListResult> {
   try {
@@ -28,7 +29,7 @@ export const previewLimit = (path: string): number => (imageType(path) ? 10 * 10
 export function toPreview(path: string, buf: Buffer): Preview {
   const limit = previewLimit(path)
   const type = imageType(path)
-  if (type) return buf.length > limit ? { kind: 'error', error: 'Immagine troppo grande per l\'anteprima' } : { kind: 'image', src: `data:${type};base64,${buf.toString('base64')}` }
+  if (type) return buf.length > limit ? { kind: 'error', error: t("Immagine troppo grande per l'anteprima") } : { kind: 'image', src: `data:${type};base64,${buf.toString('base64')}` }
   if (buf.subarray(0, 8000).includes(0)) return { kind: 'binary' } // git's rule: a NUL near the start means binary
   return { kind: 'text', text: buf.subarray(0, limit).toString('utf8'), truncated: buf.length > limit }
 }
@@ -53,8 +54,8 @@ export const EDIT_LIMIT = 20 * 1024 * 1024
 
 // the first EDIT_LIMIT + 1 bytes of a file, as text for the editor
 export function toText(buf: Buffer): ReadResult {
-  if (buf.length > EDIT_LIMIT) return { ok: false, error: `File troppo grande per l'editor (oltre ${EDIT_LIMIT / 1024 / 1024} MB)` }
-  if (buf.subarray(0, 8000).includes(0)) return { ok: false, error: 'File binario', binary: true }
+  if (buf.length > EDIT_LIMIT) return { ok: false, error: t("File troppo grande per l'editor (oltre {mb} MB)", { mb: EDIT_LIMIT / 1024 / 1024 }) }
+  if (buf.subarray(0, 8000).includes(0)) return { ok: false, error: t('File binario'), binary: true }
   return { ok: true, text: buf.toString('utf8') }
 }
 

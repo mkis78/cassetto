@@ -16,6 +16,7 @@ import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
 import { changedOptions } from '../shared/query'
+import { locale, t, tx } from '../shared/i18n'
 import { getSettings } from './settings'
 import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
 import type { FileOp, OpResult } from '../shared/types'
@@ -28,7 +29,7 @@ type Params = { kind: 'files'; host: string | null; path: string | null; hidden?
 type Col = Listing & { error?: string } // a folder in the columns view, or why it could not be opened
 
 const VIEW_ICON = { list: List, icons: LayoutGrid, columns: Columns3, gallery: GalleryHorizontal }
-const VIEW_NAME = { list: 'Elenco', icons: 'Icone', columns: 'Colonne', gallery: 'Galleria' }
+const VIEW_NAME = { list: tx('Elenco'), icons: tx('Icone'), columns: tx('Colonne'), gallery: tx('Galleria') }
 
 const EMPTY: SearchQuery = { text: '', mode: 'name', regex: false, word: false }
 
@@ -240,7 +241,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   // what failed, after any message the caller already has; nothing to say leaves the notice alone
   const report = (r: OpResult, before: string[] = []) => {
     const n = r.failed.length
-    const lines = n ? [...before, `${n === 1 ? '1 operazione non riuscita' : `${n} operazioni non riuscite`}:\n` + r.failed.map(f => `${nameOf(f.path)}: ${f.error}`).join('\n')] : before
+    const lines = n ? [...before, `${n === 1 ? t('1 operazione non riuscita') : t('{n} operazioni non riuscite', { n })}:\n` + r.failed.map(f => `${nameOf(f.path)}: ${f.error}`).join('\n')] : before
     if (lines.length) setNotice(lines.join('\n\n'))
   }
   // a Mac disk does not tell "a" from "A": names clash without regard to case there
@@ -251,7 +252,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const transfer = async (mode: 'copy' | 'move', srcs: string[], destDir: string, keepAll = false): Promise<boolean> => {
     if (mode === 'move') srcs = srcs.filter(s => dirOf(s) !== destDir) // already there
     if (!srcs.length) return false
-    if (srcs.some(s => isInside(s, destDir))) return setNotice('Non puoi copiare o spostare una cartella dentro sé stessa'), false
+    if (srcs.some(s => isInside(s, destDir))) return setNotice(t('Non puoi copiare o spostare una cartella dentro sé stessa')), false
     const r = await window.api.listDir(host, destDir) // fresh: the listing on screen may be old
     if (!r.ok) return setNotice(r.error), false
     const taken = new Set(r.listing.entries.map(e => fold(e.name)))
@@ -281,7 +282,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       taken.add(fold(n))
       items.push({ src, dest: child(destDir, n), replace: false })
     }
-    const before = refused.length ? [`Non sostituiti (sostituirebbero sé stessi): ${refused.join(', ')}`] : []
+    const before = refused.length ? [t('Non sostituiti (sostituirebbero sé stessi): {names}', { names: refused.join(', ') })] : []
     if (!items.length) return report({ failed: [] }, before), false
     report(await window.api.fileOp(host, { op: mode, items }), before)
     changed(api.id, [destDir, ...(mode === 'move' ? srcs.map(dirOf) : [])])
@@ -300,7 +301,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const [tagging, setTagging] = useState<string[] | null>(null) // the paths the tag dialog works on
   const seenTags = () => columns.flatMap(c => c.entries.flatMap(e => e.tags ?? []))
   const tagState = (paths: string[]) => (name: string) => {
-    const n = paths.filter(p => entryOf(p)?.tags?.some(t => t.name === name)).length
+    const n = paths.filter(p => entryOf(p)?.tags?.some(x => x.name === name)).length
     return n === paths.length ? 'all' : n ? 'some' : 'none'
   }
   const applyTags = async (paths: string[], change: { add?: Tag[]; remove?: string[] }) => {
@@ -318,7 +319,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     changed(api.id, c.paths.map(dirOf))
     await refreshTo()
     // the trash refused some: never fall back by itself, ask again in the permanent wording
-    if (!c.permanent && r.failed.length) setConfirm({ paths: r.failed.map(f => f.path), permanent: true, note: `Il Cestino non ha accettato questi elementi (${r.failed[0].error}).` })
+    if (!c.permanent && r.failed.length) setConfirm({ paths: r.failed.map(f => f.path), permanent: true, note: t('Il Cestino non ha accettato questi elementi ({error}).', { error: r.failed[0].error }) })
     else report(r)
     listRef.current?.focus()
   }
@@ -492,9 +493,9 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       <>
         {view === 'list' && (
           <div className="files-head">
-            {head('name', 'Nome', 'name')}
-            {head('size', 'Dimensione', 'size')}
-            {head('mtime', 'Modificato', 'date')}
+            {head('name', t('Nome'), 'name')}
+            {head('size', t('Dimensione'), 'size')}
+            {head('mtime', t('Modificato'), 'date')}
           </div>
         )}
         {editing && editing.kind !== 'rename' && editing.dir === l.path && (
@@ -526,7 +527,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
               onDragEnd={() => (dragging = null)}
               {...(e.dir ? dropProps(full) : {})}
               onContextMenu={ev => menu(ev, l.path, e)}
-              title={tiles ? e.name : 'doppio clic: apri'}
+              title={tiles ? e.name : t('doppio clic: apri')}
             >
               {tiles ? (
                 <>
@@ -544,15 +545,15 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
                   {e.dir ? <Folder {...ICON} className="dir" /> : <File {...ICON} />}
                   {name}
                   {view === 'list' && <span className="size">{e.dir ? '—' : e.size === undefined ? '' : formatSize(e.size)}</span>}
-                  {view === 'list' && <span className="date">{e.mtime === undefined ? '' : new Date(e.mtime).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                  {view === 'list' && <span className="date">{e.mtime === undefined ? '' : new Date(e.mtime).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' })}</span>}
                   {view === 'columns' && e.dir && <ChevronRight {...ICON} className="chevron" />}
                 </>
               )}
             </div>
           )
         })}
-        {!all.length && <div className="files-empty">{l.entries.length ? 'Nessun elemento da mostrare' : 'Cartella vuota'}</div>}
-        {all.length > MAX_SHOWN && <div className="files-empty">… altri {all.length - MAX_SHOWN} elementi non mostrati</div>}
+        {!all.length && <div className="files-empty">{l.entries.length ? t('Nessun elemento da mostrare') : t('Cartella vuota')}</div>}
+        {all.length > MAX_SHOWN && <div className="files-empty">{t('… altri {n} elementi non mostrati', { n: all.length - MAX_SHOWN })}</div>}
       </>
     )
   }
@@ -592,40 +593,40 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const items = chosen()
     const one = items.length === 1 ? items[0] : null
     const oneDir = one && sel?.path === one ? sel.dir : false
-    const what = one ? nameOf(one) : `${items.length} elementi`
+    const what = one ? nameOf(one) : t('{n} elementi', { n: items.length })
     const onSel: Command[] = !items.length
       ? []
       : [
-          ...(one ? [{ label: `Apri ${what}`, hint: 'Invio', run: () => open(one, oneDir), icon: ExternalLink }] : []),
-          ...(one && oneDir ? [{ label: 'Apri in un pannello a destra', run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
-          ...(one && !oneDir ? [{ label: 'Modifica nell\'editor', run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
-          ...(one ? [{ label: 'Rinomina', hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
-          { label: 'Duplica', run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus },
-          { label: 'Copia', hint: 'Cmd+C', run: () => take(false), icon: Copy },
-          { label: 'Taglia', hint: 'Cmd+X', run: () => take(true), icon: Scissors },
-          { label: 'Copia percorso', run: () => void window.api.clipboardWrite(items.map(p => (host ? `${host}:${p}` : p)).join('\n')), icon: Link },
-          ...(host ? [] : [{ label: 'Tag…', run: () => setTagging(items), icon: TagsIcon }]),
-          { label: host ? 'Elimina definitivamente…' : 'Sposta nel Cestino', hint: 'Cmd+⌫', run: () => askDelete(items), icon: Trash2 }
-        ].map(c => ({ ...c, group: `Selezione: ${what}` }))
+          ...(one ? [{ label: t('Apri {name}', { name: what }), hint: t('Invio'), run: () => open(one, oneDir), icon: ExternalLink }] : []),
+          ...(one && oneDir ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
+          ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
+          ...(one ? [{ label: t('Rinomina'), hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
+          { label: t('Duplica'), run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus },
+          { label: t('Copia'), hint: 'Cmd+C', run: () => take(false), icon: Copy },
+          { label: t('Taglia'), hint: 'Cmd+X', run: () => take(true), icon: Scissors },
+          { label: t('Copia percorso'), run: () => void window.api.clipboardWrite(items.map(p => (host ? `${host}:${p}` : p)).join('\n')), icon: Link },
+          ...(host ? [] : [{ label: t('Tag…'), run: () => setTagging(items), icon: TagsIcon }]),
+          { label: host ? t('Elimina definitivamente…') : t('Sposta nel Cestino'), hint: 'Cmd+⌫', run: () => askDelete(items), icon: Trash2 }
+        ].map(c => ({ ...c, group: t('Selezione: {name}', { name: what }) }))
     const onDir: Command[] = [
       ...(dir
         ? [
-            { label: 'Nuovo file', run: () => void startCreate('newFile', dir), icon: FilePlus },
-            { label: 'Nuova cartella', run: () => void startCreate('newFolder', dir), icon: FolderPlus },
-            { label: 'Apri terminale qui', hint: 'Cmd+Alt+T', run: () => openTerminal(containerApi, { cwd: oneDir && one ? one : dir, host }, api.id), icon: SquareTerminal },
-            ...(clipFor() === 'ok' ? [{ label: 'Incolla', hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
+            { label: t('Nuovo file'), run: () => void startCreate('newFile', dir), icon: FilePlus },
+            { label: t('Nuova cartella'), run: () => void startCreate('newFolder', dir), icon: FolderPlus },
+            { label: t('Apri terminale qui'), hint: 'Cmd+Alt+T', run: () => openTerminal(containerApi, { cwd: oneDir && one ? one : dir, host }, api.id), icon: SquareTerminal },
+            ...(clipFor() === 'ok' ? [{ label: t('Incolla'), hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
           ]
         : []),
-      { label: 'Cerca per nome', hint: 'Cmd+F', run: () => (set({ mode: 'name' }), setTimeout(() => inputRef.current?.focus())), icon: Search },
-      { label: 'Cerca nel contenuto', run: () => (set({ mode: 'content' }), setTimeout(() => inputRef.current?.focus())), icon: TextSearch },
-      ...(host ? [] : [{ label: 'Cerca per tag', run: () => (set({ mode: 'tag' }), setTimeout(() => inputRef.current?.focus())), icon: ScanSearch }]),
-      ...(here && here !== '/' ? [{ label: 'Cartella superiore', hint: '⌫', run: up, icon: ArrowUp }] : []),
-      { label: 'Cartella di base', run: () => (setSel(null), load(host ? null : (getSettings().filesHome ?? null))), icon: House },
-      { label: 'Aggiorna', run: refresh, icon: RotateCw },
-      ...(['list', 'icons', 'columns', 'gallery'] as const).filter(v => v !== view).map(v => ({ label: `Vista: ${VIEW_NAME[v]}`, run: () => (setView(v), setCols([])), icon: VIEW_ICON[v] })),
-      { label: hidden ? 'Nascondi file nascosti' : 'Mostra file nascosti', run: () => setHidden(h => !h), icon: hidden ? EyeOff : Eye },
-      ...(view !== 'gallery' ? [{ label: showPreview ? 'Nascondi anteprima' : 'Mostra anteprima', hint: 'Spazio', run: () => setShowPreview(v => !v), icon: PanelRight }] : [])
-    ].map(c => ({ ...c, group: `Cartella: ${here ? baseName(here) || '/' : '~'}` }))
+      { label: t('Cerca per nome'), hint: 'Cmd+F', run: () => (set({ mode: 'name' }), setTimeout(() => inputRef.current?.focus())), icon: Search },
+      { label: t('Cerca nel contenuto'), run: () => (set({ mode: 'content' }), setTimeout(() => inputRef.current?.focus())), icon: TextSearch },
+      ...(host ? [] : [{ label: t('Cerca per tag'), run: () => (set({ mode: 'tag' }), setTimeout(() => inputRef.current?.focus())), icon: ScanSearch }]),
+      ...(here && here !== '/' ? [{ label: t('Cartella superiore'), hint: '⌫', run: up, icon: ArrowUp }] : []),
+      { label: t('Cartella di base'), run: () => (setSel(null), load(host ? null : (getSettings().filesHome ?? null))), icon: House },
+      { label: t('Aggiorna'), run: refresh, icon: RotateCw },
+      ...(['list', 'icons', 'columns', 'gallery'] as const).filter(v => v !== view).map(v => ({ label: t('Vista: {name}', { name: t(VIEW_NAME[v]) }), run: () => (setView(v), setCols([])), icon: VIEW_ICON[v] })),
+      { label: hidden ? t('Nascondi file nascosti') : t('Mostra file nascosti'), run: () => setHidden(h => !h), icon: hidden ? EyeOff : Eye },
+      ...(view !== 'gallery' ? [{ label: showPreview ? t('Nascondi anteprima') : t('Mostra anteprima'), hint: t('Spazio'), run: () => setShowPreview(v => !v), icon: PanelRight }] : [])
+    ].map(c => ({ ...c, group: t('Cartella: {name}', { name: here ? baseName(here) || '/' : '~' }) }))
     return [...onSel, ...onDir]
   }
   const barRef = useRef(barActions)
@@ -636,10 +637,10 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     // Cmd/Ctrl+F: to the search box from anywhere in the tile
     <div ref={rootRef} className="files-tile" onKeyDown={e => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && (e.preventDefault(), inputRef.current?.focus())}>
       <div className="files-bar">
-        <button title="Cartella superiore (⌫)" disabled={!here || here === '/'} onClick={up}>
+        <button title={t('Cartella superiore (⌫)')} disabled={!here || here === '/'} onClick={up}>
           <ArrowUp {...ICON} />
         </button>
-        <button title="Cartella di base" onClick={() => (setSel(null), load(host ? null : (getSettings().filesHome ?? null)))}>
+        <button title={t('Cartella di base')} onClick={() => (setSel(null), load(host ? null : (getSettings().filesHome ?? null)))}>
           <House {...ICON} />
         </button>
         {/* rtl puts the ellipsis on the left, so the end of a long path stays visible; bdi keeps the text itself intact */}
@@ -649,10 +650,10 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             {here ?? '~'}
           </bdi>
         </span>
-        <button title="Vista" onClick={viewChoice}>
+        <button title={t('Vista')} onClick={viewChoice}>
           <ViewIcon {...ICON} /> <ChevronDown size={12} strokeWidth={2} />
         </button>
-        <button title="Azioni" onClick={actionChoice}>
+        <button title={t('Azioni')} onClick={actionChoice}>
           <Ellipsis {...ICON} /> <ChevronDown size={12} strokeWidth={2} />
         </button>
       </div>
@@ -664,7 +665,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             ref={inputRef}
             spellCheck={false}
             value={q.text}
-            placeholder={q.mode === 'content' ? 'Cerca nel contenuto dei file…' : q.mode === 'tag' ? 'Cerca per tag o colore: Lavoro, rosso…' : 'Cerca per nome: foto, *.pdf, src/**/*.ts…'}
+            placeholder={q.mode === 'content' ? t('Cerca nel contenuto dei file…') : q.mode === 'tag' ? t('Cerca per tag o colore: Lavoro, rosso…') : t('Cerca per nome: foto, *.pdf, src/**/*.ts…')}
             onChange={e => set({ text: e.target.value })}
             onKeyDown={e => {
               if (e.key === 'Escape') set({ text: '' })
@@ -675,20 +676,20 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             }}
           />
           {q.text && (
-            <button className="search-clear" title="Svuota (Esc)" onClick={() => (set({ text: '' }), inputRef.current?.focus())}>
+            <button className="search-clear" title={t('Svuota (Esc)')} onClick={() => (set({ text: '' }), inputRef.current?.focus())}>
               <X size={12} strokeWidth={2} />
             </button>
           )}
         </label>
-        <div className="segmented" role="radiogroup" aria-label="Cerca in">
+        <div className="segmented" role="radiogroup" aria-label={t('Cerca in')}>
           {(host ? (['name', 'content'] as const) : (['name', 'content', 'tag'] as const)).map(m => (
             <button key={m} role="radio" aria-checked={q.mode === m} className={q.mode === m ? 'on' : ''} onClick={() => (set({ mode: m }), inputRef.current?.focus())}>
-              {m === 'name' ? 'Nome' : m === 'content' ? 'Contenuto' : 'Tag'}
+              {m === 'name' ? t('Nome') : m === 'content' ? t('Contenuto') : t('Tag')}
             </button>
           ))}
         </div>
-        <button className={'opt search-opts-btn' + (showOpts ? ' on' : '')} title="Opzioni di ricerca" aria-expanded={showOpts} onClick={() => setShowOpts(v => !v)}>
-          <SlidersHorizontal {...ICON} /> Opzioni
+        <button className={'opt search-opts-btn' + (showOpts ? ' on' : '')} title={t('Opzioni di ricerca')} aria-expanded={showOpts} onClick={() => setShowOpts(v => !v)}>
+          <SlidersHorizontal {...ICON} /> {t('Opzioni')}
           {changedOptions(q) > 0 && <span className="opt-badge">{changedOptions(q)}</span>}
         </button>
         {showOpts && <SearchOptions q={q} set={set} onClose={closeOpts} />}
@@ -696,7 +697,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       {notice && (
         <div className="files-notice">
           <pre>{notice}</pre>
-          <button title="Chiudi" onClick={() => setNotice(null)}>
+          <button title={t('Chiudi')} onClick={() => setNotice(null)}>
             <X {...ICON} />
           </button>
         </div>
@@ -705,7 +706,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       {tagging && (
         <TagDialog
           count={tagging.length}
-          current={[...new Map(tagging.flatMap(p => entryOf(p)?.tags ?? []).map(t => [t.name, t])).values()]}
+          current={[...new Map(tagging.flatMap(p => entryOf(p)?.tags ?? []).map(x => [x.name, x])).values()]}
           known={knownTags(seenTags())}
           onApply={c => void applyTags(tagging, c)}
           onClose={() => (setTagging(null), listRef.current?.focus())}
@@ -715,7 +716,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       {error ? (
         <div className="files-error">
           <pre>{error}</pre>
-          <button onClick={() => load(target)}>Riprova</button>
+          <button onClick={() => load(target)}>{t('Riprova')}</button>
         </div>
       ) : (
         <div className="files-body">
@@ -757,18 +758,18 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
 }
 
 function FilePreview({ path, preview }: { path: string | null; preview: Preview | null }) {
-  if (!path) return <div className="files-preview files-empty">Seleziona un file</div>
+  if (!path) return <div className="files-preview files-empty">{t('Seleziona un file')}</div>
   const head = (
     <div className="files-preview-head" title={path}>
       <bdi>{path.slice(dirOf(path).length + 1)}</bdi>
     </div>
   )
   const body = !preview ? (
-    <div className="files-empty">Caricamento…</div>
+    <div className="files-empty">{t('Caricamento…')}</div>
   ) : preview.kind === 'image' ? (
     <img src={preview.src} />
   ) : preview.kind === 'binary' ? (
-    <div className="files-empty">File binario</div>
+    <div className="files-empty">{t('File binario')}</div>
   ) : preview.kind === 'error' ? (
     <pre className="files-preview-error">{preview.error}</pre>
   ) : /\.(md|markdown)$/i.test(path) ? (
@@ -781,7 +782,7 @@ function FilePreview({ path, preview }: { path: string | null; preview: Preview 
     <div className="files-preview">
       {head}
       {body}
-      {preview?.kind === 'text' && preview.truncated && <div className="files-empty">… anteprima troncata</div>}
+      {preview?.kind === 'text' && preview.truncated && <div className="files-empty">{t('… anteprima troncata')}</div>}
     </div>
   )
 }

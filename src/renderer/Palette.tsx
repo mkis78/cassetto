@@ -3,6 +3,7 @@ import { rank } from '../shared/fuzzy'
 import { listKey } from '../shared/listNav'
 import { File, type LucideIcon } from 'lucide-react'
 import { ICON } from './icons'
+import { t } from '../shared/i18n'
 
 export interface Command {
   label: string
@@ -39,7 +40,7 @@ export default function Palette(p: { mode: 'files' | 'commands' | 'bar'; root: s
     return order.flatMap(g => ranked.filter(r => r.group === g))
   }
   const fileRows = (): Row[] =>
-    rank(q, project?.files ?? [], f => f).map(({ item, match }) => ({ label: item, at: match.at, icon: File, group: 'File', go: () => p.onOpen(`${project!.root.replace(/\/$/, '')}/${item}`) }))
+    rank(q, project?.files ?? [], f => f).map(({ item, match }) => ({ label: item, at: match.at, icon: File, group: t('File'), go: () => p.onOpen(`${project!.root.replace(/\/$/, '')}/${item}`) }))
   const rows: Row[] = bar ? [...commandRows(), ...(q ? fileRows().slice(0, BAR_FILES) : [])] : commands ? commandRows() : fileRows()
 
   const go = (r: Row | undefined) => {
@@ -67,7 +68,7 @@ export default function Palette(p: { mode: 'files' | 'commands' | 'bar'; root: s
           autoFocus
           spellCheck={false}
           value={text}
-          placeholder={bar ? 'Cerca un\'azione o un file…' : p.root ? 'Cerca un file per nome · > per i comandi' : 'Cerca un comando'}
+          placeholder={bar ? t("Cerca un'azione o un file…") : p.root ? t('Cerca un file per nome · > per i comandi') : t('Cerca un comando')}
           onChange={e => setText(e.target.value)}
           onKeyDown={keys}
         />
@@ -82,9 +83,9 @@ export default function Palette(p: { mode: 'files' | 'commands' | 'bar'; root: s
               </div>
             </Fragment>
           ))}
-          {!commands && !project && <div className="palette-empty">Leggo i file del progetto…</div>}
-          {!rows.length && (commands || project) && <div className="palette-empty">Nessun risultato</div>}
-          {!commands && project?.truncated && <div className="palette-empty">Progetto molto grande: cerco tra i primi {project.files.length} file</div>}
+          {!commands && !project && <div className="palette-empty">{t('Leggo i file del progetto…')}</div>}
+          {!rows.length && (commands || project) && <div className="palette-empty">{t('Nessun risultato')}</div>}
+          {!commands && project?.truncated && <div className="palette-empty">{t('Progetto molto grande: cerco tra i primi {n} file', { n: project.files.length })}</div>}
         </div>
       </div>
     </div>

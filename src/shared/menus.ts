@@ -58,7 +58,7 @@ export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: bo
   const split = [sep, { id: 'split:right', label: t('Apri in un pannello a destra') }, { id: 'split:within', label: t('Apri in un nuovo tab') }, { id: 'terminal', label: t('Apri terminale qui') }]
   const tag = c.tags ? [sep, c.tags] : []
   if (c.target === 'file') return [{ id: 'open', label: c.remote ? t('Apri nell\'editor') : t('Apri') }, ...(c.remote ? [] : [{ id: 'edit', label: t('Modifica nell\'editor') }]), { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...edit]
-  if (c.target === 'dir') return [{ id: 'open', label: t('Apri') }, ...split, { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...create, ...edit]
+  if (c.target === 'dir') return [{ id: 'open', label: t('Apri') }, ...split, { id: 'copyPath', label: t('Copia percorso') }, { id: 'favourite', label: t('Aggiungi ai preferiti') }, ...tag, ...create, ...edit]
   return [{ id: 'refresh', label: t('Aggiorna') }, { id: 'terminal', label: t('Apri terminale qui') }, ...create]
 }
 
@@ -110,18 +110,27 @@ export function searchMenu(c: { line: boolean }): MenuItem[] {
   ]
 }
 
+// the "Colore" submenu of a tab or a favourite: ids "color:<name>", "color:" for none
 // dots: each colour's hex in the current theme, read from the CSS by the renderer
-export function tabMenu(c: { maximized: boolean; others: boolean; color?: TabColor; named?: boolean; dots?: Partial<Record<TabColor | 'none', string>> }): MenuItem[] {
+type Dots = Partial<Record<TabColor | 'none', string>>
+const colorMenu = (color?: TabColor, dots?: Dots): MenuItem => ({
+  label: t('Colore'),
+  submenu: [
+    { id: 'color:', label: (color ? '' : '✓ ') + t('Nessuno'), dot: dots?.none, hollow: true },
+    ...TAB_COLORS.map(k => ({ id: `color:${k}`, label: (color === k ? '✓ ' : '') + t(COLOR_NAMES[k]), dot: dots?.[k] }))
+  ]
+})
+
+// a favourite in the sidebar
+export function favouriteMenu(c: { color?: TabColor; dots?: Dots }): MenuItem[] {
+  return [{ id: 'rename', label: t('Rinomina…') }, colorMenu(c.color, c.dots), sep, { id: 'remove', label: t('Rimuovi dai preferiti') }]
+}
+
+export function tabMenu(c: { maximized: boolean; others: boolean; color?: TabColor; named?: boolean; dots?: Dots }): MenuItem[] {
   return [
     { id: 'rename', label: t('Rinomina…') },
     ...(c.named ? [{ id: 'unname', label: t('Usa il nome della cartella') }] : []),
-    {
-      label: t('Colore'),
-      submenu: [
-        { id: 'color:', label: (c.color ? '' : '✓ ') + t('Nessuno'), dot: c.dots?.none, hollow: true },
-        ...TAB_COLORS.map(k => ({ id: `color:${k}`, label: (c.color === k ? '✓ ' : '') + t(COLOR_NAMES[k]), dot: c.dots?.[k] }))
-      ]
-    },
+    colorMenu(c.color, c.dots),
     sep,
     c.maximized ? { id: 'restore', label: t('Ripristina') } : { id: 'maximize', label: t('Massimizza') },
     { id: 'close', label: t('Chiudi tab') },

@@ -58,6 +58,7 @@ export interface Settings {
   language?: LangSetting // the interface's; unset: the system's (see shared/i18n)
   barShortcut?: string // the action bar's, an accelerator (shared/shortcuts); unset: DEFAULT_BAR
   ignoredConflict?: string // the shortcut whose clash with the system the user chose to keep
+  favStyle?: 'list' | 'tiles' // the sidebar's Favourites and Places; unset: list
 }
 
 export interface DirEntry {

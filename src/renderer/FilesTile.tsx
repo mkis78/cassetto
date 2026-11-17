@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, FileCode, Tags as TagsIcon, ScanSearch, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
+import { ArrowUp, ChevronDown, FileCode, Tags as TagsIcon, ScanSearch, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, Star, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
@@ -11,7 +11,7 @@ import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { baseName, CHANGED, changed, runUndo, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
+import { addToFavourites, baseName, CHANGED, changed, runUndo, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -39,7 +39,7 @@ const MAX_SHOWN = 2000
 // copy/cut, shared by every Files tile; the paths belong to the host they were taken from
 let clip: { host: string | null; paths: string[]; cut: boolean } | null = null
 // what a drag carries: the host and the paths; also kept here, since a dragover cannot read the data, only its types
-const DND = 'application/x-cassetto-files'
+export const DND = 'application/x-cassetto-files'
 let dragging: { host: string | null; paths: string[] } | null = null
 type Editing = { dir: string; kind: 'newFile' | 'newFolder' | 'rename'; name: string; from?: string; error?: string }
 
@@ -493,6 +493,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'tags') return setTagging(items)
     if (choice === 'open') return entry && open(full, entry.dir)
     if (choice === 'copyPath') return window.api.clipboardWrite(host ? `${host}:${full}` : full)
+    if (choice === 'favourite') return addToFavourites(host, full)
     if (choice === 'refresh') return refresh()
     if (choice === 'terminal') return openTerminal(containerApi, { cwd: full, host }, api.id)
     if (choice === 'edit') return openEditor(containerApi, { path: full, host }, api.id)
@@ -620,6 +621,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       : [
           ...(one ? [{ label: t('Apri {name}', { name: what }), hint: t('Invio'), run: () => open(one, oneDir), icon: ExternalLink }] : []),
           ...(one && oneDir ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
+          ...(one && oneDir ? [{ label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, one), icon: Star }] : []),
           ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
           ...(one ? [{ label: t('Rinomina'), hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
           { label: t('Duplica'), run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus },
@@ -634,6 +636,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
         ? [
             { label: t('Nuovo file'), run: () => void startCreate('newFile', dir), icon: FilePlus },
             { label: t('Nuova cartella'), run: () => void startCreate('newFolder', dir), icon: FolderPlus },
+            { label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, dir), icon: Star },
             { label: t('Apri terminale qui'), hint: 'Cmd+Alt+T', run: () => openTerminal(containerApi, { cwd: oneDir && one ? one : dir, host }, api.id), icon: SquareTerminal },
             ...(clipFor() === 'ok' ? [{ label: t('Incolla'), hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
           ]

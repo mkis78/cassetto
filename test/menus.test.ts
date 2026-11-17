@@ -1,16 +1,21 @@
 import { expect, test } from 'vitest'
-import { actionsMenu, tagsMenu, terminalMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
+import { actionsMenu, favouriteMenu, tagsMenu, terminalMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
 
 const ids = (items: MenuItem[]): string[] => items.flatMap(i => (i.submenu ? [i.id ?? i.label, ...ids(i.submenu)] : i.id ? [i.id] : []))
 const find = (items: MenuItem[], id: string): MenuItem | undefined => items.flatMap(i => [i, ...(i.submenu ?? [])]).find(i => i.id === id)
 
 test('files menu depends on what was clicked', () => {
   expect(ids(filesMenu({ target: 'file', remote: false }))).toEqual(['open', 'edit', 'copyPath', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
-  expect(ids(filesMenu({ target: 'dir', remote: false }))).toEqual(['open', 'split:right', 'split:within', 'terminal', 'copyPath', 'newFile', 'newFolder', 'paste', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
+  expect(ids(filesMenu({ target: 'dir', remote: false }))).toEqual(['open', 'split:right', 'split:within', 'terminal', 'copyPath', 'favourite', 'newFile', 'newFolder', 'paste', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
   expect(ids(filesMenu({ target: 'background', remote: false }))).toEqual(['refresh', 'terminal', 'newFile', 'newFolder', 'paste'])
   expect(find(filesMenu({ target: 'file', remote: true }), 'delete')?.label).toBe('Elimina definitivamente…') // no trash over ssh
   expect(find(filesMenu({ target: 'file', remote: false, count: 2 }), 'rename')?.enabled).toBe(false)
   expect(find(filesMenu({ target: 'background', remote: false, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
+})
+
+test('favourite menu', () => {
+  expect(ids(favouriteMenu({}))).toEqual(['rename', 'Colore', 'color:', 'color:red', 'color:yellow', 'color:green', 'color:teal', 'color:blue', 'color:purple', 'remove'])
+  expect(find(favouriteMenu({ color: 'red' }), 'color:red')?.label).toBe('✓ Rosso')
 })
 
 test('tab menu', () => {

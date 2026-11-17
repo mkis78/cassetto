@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
-import type { AppState, TileParams } from '../shared/types'
+import type { AppState, Favourite, TileParams } from '../shared/types'
 import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
 import TerminalTile from './TerminalTile'
@@ -12,10 +12,11 @@ import Sidebar from './Sidebar'
 import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, focusTile, openFolder, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
+import { closeTiles, cycleTile, FAVOURITE, focusTile, openFolder, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
+import { addFavourite } from '../shared/favourites'
 import { arrange, PRESETS, type Layout, type Preset } from '../shared/arrange'
 import { popup } from './menuIcons'
 import { ICON } from './icons'
@@ -65,6 +66,12 @@ export default function App() {
   useEffect(() => {
     if (palette?.mode === 'bar') window.api.undoLabel().then(setUndoLabel)
   }, [palette?.mode])
+  // "Aggiungi ai preferiti" in a Files tile
+  useEffect(() => {
+    const f = (e: Event) => setState(s => s && { ...s, sidebar: { ...s.sidebar, favourites: addFavourite(s.sidebar?.favourites ?? [], (e as CustomEvent<Favourite>).detail) } })
+    window.addEventListener(FAVOURITE, f)
+    return () => window.removeEventListener(FAVOURITE, f)
+  }, [])
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     const f = (e: Event) => (setToast((e as CustomEvent).detail), clearTimeout(timer), (timer = setTimeout(() => setToast(null), 3000)))
@@ -265,7 +272,7 @@ export default function App() {
       )}
       <WelcomeContext.Provider value={welcome}>
         <div className="ws-row">
-          <Sidebar state={state.sidebar ?? {}} onChange={sidebar => update(s => ({ ...s, sidebar }))} api={dv.current} activePath={activeFiles} />
+          <Sidebar tiles={state.settings?.favStyle === 'tiles'} state={state.sidebar ?? {}} onChange={sidebar => update(s => ({ ...s, sidebar }))} api={dv.current} activePath={activeFiles} />
           {/* a sidebar item dropped on a panel no Files tab took (another host, a terminal, an editor): a new Files tab */}
           <div className="ws-body" onDragOver={e => e.dataTransfer.types.includes(PLACE_DND) && e.preventDefault()} onDrop={e => {
             const raw = e.dataTransfer.getData(PLACE_DND)

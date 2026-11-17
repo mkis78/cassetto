@@ -47,6 +47,9 @@ export function navigate(api: DockviewApi, where: { host: string | null; path: s
 }
 // what a sidebar item carries when dragged onto a panel: { host, path }
 export const PLACE_DND = 'cassetto/place'
+// a folder for the sidebar's Favourites, from a Files tile; App keeps the list
+export const FAVOURITE = 'cassetto:favourite'
+export const addToFavourites = (host: string | null, path: string) => window.dispatchEvent(new CustomEvent(FAVOURITE, { detail: { host, path } }))
 
 // keyboard focus for a tab: the element it marks with data-autofocus
 export function focusTile(p: IDockviewPanel | undefined): void {

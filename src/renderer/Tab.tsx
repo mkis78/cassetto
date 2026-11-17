@@ -9,7 +9,7 @@ import { popup } from './menuIcons'
 import { t } from '../shared/i18n'
 
 // the palette as the theme paints it now (teal is the accent)
-const themeDots = () => {
+export const themeDots = () => {
   const css = getComputedStyle(document.documentElement)
   const v = (name: string) => css.getPropertyValue(name).trim()
   return { none: v('--fg3'), ...Object.fromEntries(TAB_COLORS.map(c => [c, v(c === 'teal' ? '--accent' : `--${c}`)])) }

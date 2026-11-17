@@ -78,6 +78,14 @@ export default function SettingsDialog({ settings, onChange, onClose }: { settin
             </button>
           ))}
         </div>
+        <label>{t('Barra laterale: stile preferiti')}</label>
+        <div className="row">
+          {(['list', 'tiles'] as const).map(s => (
+            <button key={s} className={(settings.favStyle ?? 'list') === s ? 'primary' : ''} onClick={() => set({ favStyle: s })}>
+              {s === 'list' ? t('Elenco') : t('Tessere')}
+            </button>
+          ))}
+        </div>
         <label>{t('Scorciatoia della barra azioni')}</label>
         <ShortcutField value={settings.barShortcut ?? DEFAULT_BAR} onChange={barShortcut => set({ barShortcut })} />
         <label>{t('Cartella di base (nuovi tab e pulsante Home)')}</label>

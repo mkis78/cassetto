@@ -50,6 +50,7 @@ export interface SidebarState {
   width?: number
   closed?: string[]
   favourites?: Favourite[]
+  recentHosts?: string[] // ssh hosts opened lately, newest first (shared/favourites pushRecent)
 }
 
 export interface Settings {

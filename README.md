@@ -67,7 +67,7 @@ Cassetto works alongside the Finder or your Linux file manager rather than repla
 
 A sidebar with the places you go to most. **Cmd+Alt+S** (Ctrl+Alt+S on Linux) switches it between the full panel and a slim icon rail.
 
-- **Favourites**, **Places**, **Disks** (with an eject button and a meter of the space used) and **Servers**, the hosts of your SSH config.
+- **Favourites**, **Places**, **Disks** (with an eject button and a meter of the space used) and **Servers**: the last five you opened, and **All servers…** for every host of your SSH config (the rail shows a single server icon for the list).
 - **Click** an item to open it in the active panel, **Cmd+click** to open it in a new tab, or drag it onto a panel to open it there.
 - **Drop files on an item** to move them there (hold Option to copy).
 - **Favourites**: add a folder with right-click → **Add to Favourites**, from the action bar, or by dragging it into the sidebar. Drag to reorder; right-click to rename, colour or remove. In Settings, show them as a **List** or as **Tiles**.

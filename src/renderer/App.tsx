@@ -16,7 +16,7 @@ import { closeTiles, cycleTile, FAVOURITE, focusTile, openFolder, openTerminal, 
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
-import { addFavourite } from '../shared/favourites'
+import { addFavourite, pushRecent } from '../shared/favourites'
 import { arrange, PRESETS, type Layout, type Preset } from '../shared/arrange'
 import { popup } from './menuIcons'
 import { ICON } from './icons'
@@ -272,7 +272,7 @@ export default function App() {
       )}
       <WelcomeContext.Provider value={welcome}>
         <div className="ws-row">
-          <Sidebar tiles={state.settings?.favStyle === 'tiles'} state={state.sidebar ?? {}} onChange={sidebar => update(s => ({ ...s, sidebar }))} api={dv.current} activePath={activeFiles} />
+          <Sidebar tiles={state.settings?.favStyle === 'tiles'} state={state.sidebar ?? {}} onChange={sidebar => update(s => ({ ...s, sidebar }))} api={dv.current} activePath={activeFiles} onAllServers={() => setSshDialog(true)} />
           {/* a sidebar item dropped on a panel no Files tab took (another host, a terminal, an editor): a new Files tab */}
           <div className="ws-body" onDragOver={e => e.dataTransfer.types.includes(PLACE_DND) && e.preventDefault()} onDrop={e => {
             const raw = e.dataTransfer.getData(PLACE_DND)
@@ -307,6 +307,7 @@ export default function App() {
           onPick={host => {
             setSshDialog(false)
             if (dv.current) openFolder(dv.current, { path: null, host })
+            update(s => ({ ...s, sidebar: { ...s.sidebar, recentHosts: pushRecent(s.sidebar?.recentHosts, host) } })) // the sidebar lists it from now on
           }}
           onCancel={() => setSshDialog(false)}
         />

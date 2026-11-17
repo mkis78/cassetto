@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
-import { ChevronDown, ChevronRight, Download, Eject, FileText, Film, Folder, HardDrive, Home, Image, Monitor, Music, PanelLeftClose, PanelLeftOpen, Server, type LucideIcon } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Eject, FileText, Film, Folder, HardDrive, Home, Image, Monitor, Music, PanelLeftClose, PanelLeftOpen, Server, ServerCog, type LucideIcon } from 'lucide-react'
 import type { Favourite, Place, SidebarState, Volume } from '../shared/types'
 import type { Disk } from '../shared/status'
 import { favouriteMenu, tabColor, type TabColor } from '../shared/menus'
-import { addFavourite, moveFavourite } from '../shared/favourites'
+import { addFavourite, moveFavourite, pushRecent } from '../shared/favourites'
 import { isInside } from '../shared/fileOps'
 import { dirOf } from './FileSearch'
 import { listKey } from '../shared/listNav'
@@ -27,7 +27,8 @@ const PLACE: Record<Place['id'], { name: string; icon: LucideIcon }> = {
 type Section = 'fav' | 'places' | 'disks' | 'servers'
 const SECTION_NAME: Record<Section, string> = { fav: tx('Preferiti'), places: tx('Posizioni'), disks: tx('Dischi'), servers: tx('Server') }
 // fav: the favourite's index in the list
-type Item = { key: string; host: string | null; path: string | null; name: string; icon: LucideIcon; color?: TabColor; fav?: number; disk?: Disk | null; eject?: string }
+// action: not a place but a command (the full server list)
+type Item = { key: string; host: string | null; path: string | null; name: string; icon: LucideIcon; color?: TabColor; fav?: number; disk?: Disk | null; eject?: string; action?: () => void }
 type Where = { host: string | null; path: string | null }
 
 export const SIDEBAR_WIDTH = { def: 200, min: 150, max: 360 }
@@ -38,7 +39,8 @@ const child = (dir: string, name: string) => (dir === '/' ? '/' : dir + '/') + n
 
 // one per window, left of the panels: a floating panel, or a rail of icons when collapsed;
 // tiles: Favourites and Places as a grid of coloured tiles (expanded only)
-export default function Sidebar({ state, onChange, api, activePath, tiles }: { state: SidebarState; onChange: (s: SidebarState) => void; api: DockviewApi | null; activePath: Where | null; tiles: boolean }) {
+// onAllServers: the full, searchable list of hosts (the Cmd+K dialog)
+export default function Sidebar({ state, onChange, api, activePath, tiles, onAllServers }: { state: SidebarState; onChange: (s: SidebarState) => void; api: DockviewApi | null; activePath: Where | null; tiles: boolean; onAllServers: () => void }) {
   const [places, setPlaces] = useState<Place[]>([])
   const [volumes, setVolumes] = useState<Volume[]>([])
   const [hosts, setHosts] = useState<string[]>([])
@@ -75,13 +77,16 @@ export default function Sidebar({ state, onChange, api, activePath, tiles }: { s
     ['fav', favourites.map((f, i) => ({ key: `f:${f.host ?? ''}:${f.path}`, host: f.host, path: f.path, name: f.name ?? (baseName(f.path) || '/'), icon: Folder, color: f.color ?? 'teal', fav: i }))],
     ['places', places.map(p => ({ key: `p:${p.id}`, host: null, path: p.path, name: t(PLACE[p.id].name), icon: PLACE[p.id].icon }))],
     ['disks', volumes.map(v => ({ key: `d:${v.path}`, host: null, path: v.path, name: v.name, icon: HardDrive, disk: disks[v.path], eject: v.path }))],
-    ['servers', hosts.map(h => ({ key: `s:${h}`, host: h, path: null, name: h, icon: Server }))]
+    // a long ~/.ssh/config would fill the bar: only the last ones opened, the rest one click away
+    ['servers', hosts.length ? [...(state.recentHosts ?? []).filter(h => hosts.includes(h)).map(h => ({ key: `s:${h}`, host: h, path: null, name: h, icon: Server })), { key: 's:*', host: null, path: null, name: t('Tutti i server…'), icon: ServerCog, action: onAllServers }] : []]
   ]
-  const on = (it: Item) => !!activePath && it.host === activePath.host && (it.path === null || it.path === activePath.path)
+  const on = (it: Item) => !it.action && !!activePath && it.host === activePath.host && (it.path === null || it.path === activePath.path)
 
   const open = (it: Item, e: React.MouseEvent) => {
+    if (it.action) return it.action()
     if (!api) return
     navigate(api, it, e.metaKey || e.ctrlKey)
+    if (it.host && it.path === null) onChange({ ...latest.current, recentHosts: pushRecent(latest.current.recentHosts, it.host) })
     // ponytail: listed a second time (the tab lists it too) just to learn whether it is still there; an event from the tab if that ever costs
     if (it.fav !== undefined)
       void window.api.listDir(it.host, it.path).then(r =>
@@ -222,7 +227,7 @@ export default function Sidebar({ state, onChange, api, activePath, tiles }: { s
       <button
         className={cls(it, tile)}
         title={it.host && it.path ? `${it.host}:${it.path}` : (it.path ?? it.name)}
-        draggable
+        draggable={!it.action}
         onDragStart={e => drag(it, e)}
         onClick={e => open(it, e)}
         onContextMenu={it.fav !== undefined ? e => void favMenu(it, e) : undefined}
@@ -242,11 +247,13 @@ export default function Sidebar({ state, onChange, api, activePath, tiles }: { s
           <ToggleIcon {...ICON} />
         </button>
         {sections
+          // servers: one icon for the whole list, not a row of identical ones
+          .map(([s, items]): [Section, Item[]] => [s, s === 'servers' ? items.filter(it => it.action) : items])
           .filter(([, items]) => items.length)
           .map(([s, items]) => (
             <div key={s} className="sb-rail-group">
               {items.map(it => (
-                <button key={it.key} className={cls(it)} title={it.host && it.path ? `${it.host}: ${it.name}` : it.name} draggable onDragStart={e => drag(it, e)} onClick={e => open(it, e)} {...itemDrop(it)}>
+                <button key={it.key} className={cls(it)} title={it.host && it.path ? `${it.host}: ${it.name}` : it.name} draggable={!it.action} onDragStart={e => drag(it, e)} onClick={e => open(it, e)} {...itemDrop(it)}>
                   {it.fav !== undefined ? <span className="sb-square">{it.name.slice(0, 1).toUpperCase()}</span> : <it.icon {...ICON} />}
                 </button>
               ))}

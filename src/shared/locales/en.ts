@@ -429,6 +429,7 @@ export const EN: Record<string, string> = {
   "Aggiungi ai preferiti": "Add to Favourites",
   "Rimuovi dai preferiti": "Remove from Favourites",
   "Trascina qui una cartella": "Drag a folder here",
+  "Tutti i server…": "All servers…",
   "Solo tra file dello stesso host": "Only between files on the same host",
   "Solo le cartelle vanno nei preferiti": "Only folders can be favourites",
   "Barra laterale: stile preferiti": "Sidebar: favourites style",

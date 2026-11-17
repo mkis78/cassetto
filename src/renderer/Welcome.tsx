@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import logo from '../../build/icon.svg'
+import { t } from '../shared/i18n'
 
 export interface WelcomeActions {
   home: () => void
@@ -20,12 +21,12 @@ export default function Welcome() {
       <img className="welcome-logo" src={logo} alt="" />
       <h1>Cassetto</h1>
       <div className="welcome-others">
-        <button onClick={a.home}>Cartella di base</button>
-        <button onClick={a.pick}>Scegli cartella…</button>
-        <button onClick={a.ssh}>Server SSH…</button>
+        <button onClick={a.home}>{t('Cartella di base')}</button>
+        <button onClick={a.pick}>{t('Scegli cartella…')}</button>
+        <button onClick={a.ssh}>{t('Server SSH…')}</button>
       </div>
       <p className="welcome-hint">
-        {mac ? 'Cmd' : 'Ctrl+Shift'}+T nuovo tab · {mac ? 'Cmd' : 'Ctrl+Shift'}+P vai a un file · {mac ? 'Cmd+Shift+P' : 'Ctrl+Shift+P, poi >'} tutti i comandi
+        {t('{tab} nuovo tab · {file} vai a un file · {all} tutti i comandi', { tab: mac ? 'Cmd+T' : 'Ctrl+Shift+T', file: mac ? 'Cmd+P' : 'Ctrl+Shift+P', all: mac ? 'Cmd+Shift+P' : t('Ctrl+Shift+P, poi >') })}
       </p>
     </div>
   )

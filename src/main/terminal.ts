@@ -1,5 +1,6 @@
 import type { IPty, spawn } from 'node-pty'
 import { isValidHost, remoteSh, shQuote } from './ssh'
+import { t } from '../shared/i18n'
 
 export type SpawnFn = typeof spawn
 export interface Launch {
@@ -11,9 +12,10 @@ export interface Launch {
 // a terminal tab: a login shell in `cwd`, here or on `host` (then `cwd` is a folder there)
 export function terminalLaunch(p: { host: string | null; cwd: string }, ctx: { shell: string; home: string; sshOptions: () => string[] }): Launch {
   if (!p.host) return { file: ctx.shell, args: ['-l'], cwd: p.cwd }
-  if (!isValidHost(p.host)) throw new Error(`Host non valido: ${p.host}`)
+  if (!isValidHost(p.host)) throw new Error(t('Host non valido: {host}', { host: p.host }))
   // the remote login shell, started in the folder; a folder that is gone leaves it in the home with a word why
-  const script = `cd -- ${shQuote(p.cwd)} 2>/dev/null || echo "Cartella non trovata: ${p.cwd.replace(/["\\$`]/g, '')}"; exec "\${SHELL:-sh}" -l`
+  const notFound = t('Cartella non trovata: {path}', { path: p.cwd }).replace(/["\\$`]/g, '') // inside the echo's double quotes
+  const script = `cd -- ${shQuote(p.cwd)} 2>/dev/null || echo "${notFound}"; exec "\${SHELL:-sh}" -l`
   return { file: 'ssh', args: [...ctx.sshOptions(), '-t', p.host, '--', remoteSh(script)], cwd: ctx.home }
 }
 

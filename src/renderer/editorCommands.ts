@@ -2,6 +2,7 @@
 import { EditorSelection, type EditorState, type StateCommand as Command } from '@codemirror/state'
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import { joinLines, sortLines, titleCase, trimTrailing } from '../shared/textOps'
+import { t, tx } from '../shared/i18n'
 import { TABLE, toggleLines, toggleTask, toggleWrap, type LineKind } from '../shared/markdownEdit'
 
 // the whole lines a range touches
@@ -103,10 +104,10 @@ export interface Sym {
 }
 
 const KIND: [RegExp, string][] = [
-  [/^Method|MethodDeclaration|MethodDefinition/, 'metodo'],
-  [/Function|Arrow/, 'funzione'],
-  [/Class|Struct|Impl|Trait/, 'classe'],
-  [/Interface|TypeAlias|Type|Enum/, 'tipo']
+  [/^Method|MethodDeclaration|MethodDefinition/, tx('metodo')],
+  [/Function|Arrow/, tx('funzione')],
+  [/Class|Struct|Impl|Trait/, tx('classe')],
+  [/Interface|TypeAlias|Type|Enum/, tx('tipo')]
 ]
 const DECL = /(Function|Class|Method|Interface|TypeAlias|Enum|Struct|Trait|Impl)(Declaration|Definition|Item|Decl|Spec)$/
 const NAME = ['VariableDefinition', 'PropertyDefinition', 'TypeDefinition', 'VariableName', 'BoundIdentifier', 'TypeIdentifier', 'Definition', 'Identifier', 'Name', 'PropertyName']
@@ -128,7 +129,7 @@ export function symbols(state: EditorState): Sym[] {
       if (!DECL.test(t)) return
       let name = null
       for (let c = n.node.firstChild; c && !name; c = c.nextSibling) if (NAME.includes(c.type.name)) name = state.sliceDoc(c.from, c.to)
-      if (name) out.push({ name, kind: KIND.find(([re]) => re.test(t))?.[1] ?? 'simbolo', from: n.from, line: state.doc.lineAt(n.from).number })
+      if (name) out.push({ name, kind: KIND.find(([re]) => re.test(t))?.[1] ?? tx('simbolo'), from: n.from, line: state.doc.lineAt(n.from).number })
     }
   })
   return out
@@ -183,7 +184,7 @@ export const mdLink: Command = ({ state, dispatch }) => {
   dispatch(
     state.update(
       state.changeByRange(r => {
-        const text = state.sliceDoc(r.from, r.to) || 'testo'
+        const text = state.sliceDoc(r.from, r.to) || t('testo')
         const insert = `[${text}](url)`
         const at = r.from + text.length + 3
         return { changes: { from: r.from, to: r.to, insert }, range: EditorSelection.range(at, at + 3) }

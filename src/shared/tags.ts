@@ -1,6 +1,7 @@
 // Finder tags: what macOS keeps in the com.apple.metadata:_kMDItemUserTags extended attribute,
 // a binary property list holding an array of "Name\nColor" strings. Read and written here as Finder does,
 // so tags set in Cassetto show in the Finder and in Spotlight, and the other way round.
+import { tx } from './i18n'
 
 export interface Tag {
   name: string
@@ -9,17 +10,18 @@ export interface Tag {
 
 export const TAG_ATTR = 'com.apple.metadata:_kMDItemUserTags'
 
-// Finder's own seven, with the names an Italian Finder gives them (it colours these by name)
+// Finder's own seven, with the names an Italian Finder gives them (it colours these by name);
+// marked tx: shown and written as t(name), the Finder's name in the language of the interface
 export const FINDER_TAGS: Tag[] = [
-  { name: 'Rosso', color: 6 },
-  { name: 'Arancione', color: 7 },
-  { name: 'Giallo', color: 5 },
-  { name: 'Verde', color: 2 },
-  { name: 'Blu', color: 4 },
-  { name: 'Viola', color: 3 },
-  { name: 'Grigio', color: 1 }
+  { name: tx('Rosso'), color: 6 },
+  { name: tx('Arancione'), color: 7 },
+  { name: tx('Giallo'), color: 5 },
+  { name: tx('Verde'), color: 2 },
+  { name: tx('Blu'), color: 4 },
+  { name: tx('Viola'), color: 3 },
+  { name: tx('Grigio'), color: 1 }
 ]
-export const COLOR_NAMES = ['Nessuno', 'Grigio', 'Verde', 'Viola', 'Blu', 'Giallo', 'Rosso', 'Arancione']
+export const COLOR_NAMES = [tx('Nessuno'), tx('Grigio'), tx('Verde'), tx('Viola'), tx('Blu'), tx('Giallo'), tx('Rosso'), tx('Arancione')]
 
 export const parseTag = (s: string): Tag => {
   const i = s.lastIndexOf('\n')

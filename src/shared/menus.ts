@@ -1,4 +1,5 @@
 // Context menus as data: the renderer builds them, main shows them natively and returns the chosen id.
+import { t, tx } from './i18n'
 
 export interface MenuItem {
   id?: string
@@ -15,7 +16,7 @@ export interface MenuItem {
 
 export const TAB_COLORS = ['red', 'yellow', 'green', 'teal', 'blue', 'purple'] as const
 export type TabColor = (typeof TAB_COLORS)[number]
-export const COLOR_NAMES: Record<TabColor, string> = { red: 'Rosso', yellow: 'Giallo', green: 'Verde', teal: 'Verde acqua', blue: 'Blu', purple: 'Viola' }
+export const COLOR_NAMES: Record<TabColor, string> = { red: tx('Rosso'), yellow: tx('Giallo'), green: tx('Verde'), teal: tx('Verde acqua'), blue: tx('Blu'), purple: tx('Viola') }
 // anything outside the palette (an old or hand-edited state.json) is no colour
 export const tabColor = (v: unknown): TabColor | undefined => (TAB_COLORS.includes(v as TabColor) ? (v as TabColor) : undefined)
 
@@ -27,11 +28,11 @@ const sep: MenuItem = { label: '', separator: true }
 // dots: each colour's hex (index 0, no colour, is a ring)
 export function tagsMenu(c: { known: { name: string; color: number }[]; has: (name: string) => 'all' | 'some' | 'none'; dots: string[] }): MenuItem {
   return {
-    label: 'Tag',
+    label: t('Tag'),
     submenu: [
-      ...c.known.map((t, i) => ({ id: `tag:${i}`, label: t.name + (c.has(t.name) === 'some' ? ' (alcuni)' : ''), checked: c.has(t.name) === 'all', dot: t.color ? c.dots[t.color] : c.dots[1], hollow: !t.color })),
+      ...c.known.map((tag, i) => ({ id: `tag:${i}`, label: t(tag.name) + (c.has(tag.name) === 'some' ? ' ' + t('(alcuni)') : ''), checked: c.has(tag.name) === 'all', dot: tag.color ? c.dots[tag.color] : c.dots[1], hollow: !tag.color })),
       sep,
-      { id: 'tags', label: 'Modifica tag…' }
+      { id: 'tags', label: t('Modifica tag…') }
     ]
   }
 }
@@ -41,90 +42,90 @@ export function tagsMenu(c: { known: { name: string; color: number }[]; has: (na
 export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem }): MenuItem[] {
   const create = [
     sep,
-    { id: 'newFile', label: 'Nuovo file' },
-    { id: 'newFolder', label: 'Nuova cartella' },
-    { id: 'paste', label: c.paste === 'other-host' ? 'Incolla (solo dallo stesso host)' : 'Incolla', enabled: c.paste === 'ok' }
+    { id: 'newFile', label: t('Nuovo file') },
+    { id: 'newFolder', label: t('Nuova cartella') },
+    { id: 'paste', label: c.paste === 'other-host' ? t('Incolla (solo dallo stesso host)') : t('Incolla'), enabled: c.paste === 'ok' }
   ]
   const edit = [
     sep,
-    { id: 'rename', label: 'Rinomina', enabled: (c.count ?? 1) === 1 },
-    { id: 'duplicate', label: 'Duplica' },
-    { id: 'copy', label: 'Copia' },
-    { id: 'cut', label: 'Taglia' },
+    { id: 'rename', label: t('Rinomina'), enabled: (c.count ?? 1) === 1 },
+    { id: 'duplicate', label: t('Duplica') },
+    { id: 'copy', label: t('Copia') },
+    { id: 'cut', label: t('Taglia') },
     sep,
-    { id: 'delete', label: c.remote ? 'Elimina definitivamente…' : 'Sposta nel Cestino' }
+    { id: 'delete', label: c.remote ? t('Elimina definitivamente…') : t('Sposta nel Cestino') }
   ]
-  const split = [sep, { id: 'split:right', label: 'Apri in un pannello a destra' }, { id: 'split:within', label: 'Apri in un nuovo tab' }, { id: 'terminal', label: 'Apri terminale qui' }]
+  const split = [sep, { id: 'split:right', label: t('Apri in un pannello a destra') }, { id: 'split:within', label: t('Apri in un nuovo tab') }, { id: 'terminal', label: t('Apri terminale qui') }]
   const tag = c.tags ? [sep, c.tags] : []
-  if (c.target === 'file') return [{ id: 'open', label: c.remote ? 'Apri nell\'editor' : 'Apri' }, ...(c.remote ? [] : [{ id: 'edit', label: 'Modifica nell\'editor' }]), { id: 'copyPath', label: 'Copia percorso' }, ...tag, ...edit]
-  if (c.target === 'dir') return [{ id: 'open', label: 'Apri' }, ...split, { id: 'copyPath', label: 'Copia percorso' }, ...tag, ...create, ...edit]
-  return [{ id: 'refresh', label: 'Aggiorna' }, { id: 'terminal', label: 'Apri terminale qui' }, ...create]
+  if (c.target === 'file') return [{ id: 'open', label: c.remote ? t('Apri nell\'editor') : t('Apri') }, ...(c.remote ? [] : [{ id: 'edit', label: t('Modifica nell\'editor') }]), { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...edit]
+  if (c.target === 'dir') return [{ id: 'open', label: t('Apri') }, ...split, { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...create, ...edit]
+  return [{ id: 'refresh', label: t('Aggiorna') }, { id: 'terminal', label: t('Apri terminale qui') }, ...create]
 }
 
 // a terminal tab
 export function terminalMenu(c: { hasSelection: boolean; platform: string }): MenuItem[] {
   return [
-    { id: 'copy', label: 'Copia', accelerator: shortcut('C', c.platform), enabled: c.hasSelection },
-    { id: 'paste', label: 'Incolla', accelerator: shortcut('V', c.platform) },
-    { id: 'selectAll', label: 'Seleziona tutto' },
-    { id: 'find', label: 'Cerca…', accelerator: shortcut('F', c.platform) },
-    { id: 'clear', label: 'Pulisci' },
+    { id: 'copy', label: t('Copia'), accelerator: shortcut('C', c.platform), enabled: c.hasSelection },
+    { id: 'paste', label: t('Incolla'), accelerator: shortcut('V', c.platform) },
+    { id: 'selectAll', label: t('Seleziona tutto') },
+    { id: 'find', label: t('Cerca…'), accelerator: shortcut('F', c.platform) },
+    { id: 'clear', label: t('Pulisci') },
     sep,
-    { id: 'folder', label: 'Apri la cartella in un tab' },
+    { id: 'folder', label: t('Apri la cartella in un tab') },
     sep,
-    { id: 'close', label: 'Chiudi tab', accelerator: shortcut('W', c.platform) }
+    { id: 'close', label: t('Chiudi tab'), accelerator: shortcut('W', c.platform) }
   ]
 }
 
 // the files tile's "Vista" button: how the folder is drawn, what shows
 export function viewMenu(c: { view: 'list' | 'icons' | 'columns' | 'gallery'; hidden: boolean; preview: boolean }): MenuItem[] {
-  const views = [['list', 'Elenco'], ['icons', 'Icone'], ['columns', 'Colonne'], ['gallery', 'Galleria']] as const
+  const views = [['list', t('Elenco')], ['icons', t('Icone')], ['columns', t('Colonne')], ['gallery', t('Galleria')]] as const
   return [
     ...views.map(([id, label]) => ({ id: `view:${id}`, label, checked: c.view === id })),
     sep,
-    { id: 'hidden', label: 'Mostra file nascosti', checked: c.hidden },
-    { id: 'preview', label: 'Anteprima', accelerator: 'Space', checked: c.preview, enabled: c.view !== 'gallery' } // the gallery has its own
+    { id: 'hidden', label: t('Mostra file nascosti'), checked: c.hidden },
+    { id: 'preview', label: t('Anteprima'), accelerator: 'Space', checked: c.preview, enabled: c.view !== 'gallery' } // the gallery has its own
   ]
 }
 
 // the files tile's "Azioni" button: on the folder shown
 export function actionsMenu(c: { ready: boolean; paste: 'ok' | 'other-host' | null }): MenuItem[] {
   return [
-    { id: 'newFile', label: 'Nuovo file', enabled: c.ready },
-    { id: 'newFolder', label: 'Nuova cartella', enabled: c.ready },
-    { id: 'terminal', label: 'Apri terminale qui', enabled: c.ready },
-    { id: 'paste', label: c.paste === 'other-host' ? 'Incolla (solo dallo stesso host)' : 'Incolla', enabled: c.ready && c.paste === 'ok' },
+    { id: 'newFile', label: t('Nuovo file'), enabled: c.ready },
+    { id: 'newFolder', label: t('Nuova cartella'), enabled: c.ready },
+    { id: 'terminal', label: t('Apri terminale qui'), enabled: c.ready },
+    { id: 'paste', label: c.paste === 'other-host' ? t('Incolla (solo dallo stesso host)') : t('Incolla'), enabled: c.ready && c.paste === 'ok' },
     sep,
-    { id: 'refresh', label: 'Aggiorna' }
+    { id: 'refresh', label: t('Aggiorna') }
   ]
 }
 
 // a search hit: `line` when it comes from a content search
 export function searchMenu(c: { line: boolean }): MenuItem[] {
   return [
-    { id: 'open', label: 'Apri' },
-    { id: 'copyPath', label: c.line ? 'Copia percorso:riga' : 'Copia percorso' },
+    { id: 'open', label: t('Apri') },
+    { id: 'copyPath', label: c.line ? t('Copia percorso:riga') : t('Copia percorso') },
     sep,
-    { id: 'folder', label: 'Apri cartella' }
+    { id: 'folder', label: t('Apri cartella') }
   ]
 }
 
 // dots: each colour's hex in the current theme, read from the CSS by the renderer
 export function tabMenu(c: { maximized: boolean; others: boolean; color?: TabColor; named?: boolean; dots?: Partial<Record<TabColor | 'none', string>> }): MenuItem[] {
   return [
-    { id: 'rename', label: 'Rinomina…' },
-    ...(c.named ? [{ id: 'unname', label: 'Usa il nome della cartella' }] : []),
+    { id: 'rename', label: t('Rinomina…') },
+    ...(c.named ? [{ id: 'unname', label: t('Usa il nome della cartella') }] : []),
     {
-      label: 'Colore',
+      label: t('Colore'),
       submenu: [
-        { id: 'color:', label: (c.color ? '' : '✓ ') + 'Nessuno', dot: c.dots?.none, hollow: true },
-        ...TAB_COLORS.map(k => ({ id: `color:${k}`, label: (c.color === k ? '✓ ' : '') + COLOR_NAMES[k], dot: c.dots?.[k] }))
+        { id: 'color:', label: (c.color ? '' : '✓ ') + t('Nessuno'), dot: c.dots?.none, hollow: true },
+        ...TAB_COLORS.map(k => ({ id: `color:${k}`, label: (c.color === k ? '✓ ' : '') + t(COLOR_NAMES[k]), dot: c.dots?.[k] }))
       ]
     },
     sep,
-    c.maximized ? { id: 'restore', label: 'Ripristina' } : { id: 'maximize', label: 'Massimizza' },
-    { id: 'close', label: 'Chiudi tab' },
-    { id: 'closeOthers', label: 'Chiudi gli altri tab', enabled: c.others }
+    c.maximized ? { id: 'restore', label: t('Ripristina') } : { id: 'maximize', label: t('Massimizza') },
+    { id: 'close', label: t('Chiudi tab') },
+    { id: 'closeOthers', label: t('Chiudi gli altri tab'), enabled: c.others }
   ]
 }
 
@@ -133,13 +134,13 @@ export function layoutsMenu(names: string[], arrangements: { id: string; label: 
   return [
     ...arrangements.map(a => ({ id: `arrange:${a.id}`, label: a.label })),
     ...(arrangements.length ? [sep] : []),
-    { id: 'save', label: 'Salva layout corrente…' },
+    { id: 'save', label: t('Salva layout corrente…') },
     ...(names.length
       ? [
           sep,
           ...names.map(n => ({ id: `layout:${n}`, label: n })),
           sep,
-          { label: 'Elimina', submenu: names.map(n => ({ id: `delete:${n}`, label: n })) }
+          { label: t('Elimina'), submenu: names.map(n => ({ id: `delete:${n}`, label: n })) }
         ]
       : [])
   ]

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listKey } from '../shared/listNav'
+import { t } from '../shared/i18n'
 
 interface Props {
   onPick: (host: string) => void
@@ -18,10 +19,10 @@ export default function SshDialog({ onPick, onCancel }: Props) {
   return (
     <div className="overlay" onMouseDown={e => e.target === e.currentTarget && onCancel()}>
       <div className="dialog" onKeyDown={e => e.key === 'Escape' && onCancel()}>
-        <h3>Connetti a server SSH</h3>
+        <h3>{t('Connetti a server SSH')}</h3>
         <input
           autoFocus
-          placeholder="Filtra host… (Invio: apri)"
+          placeholder={t('Filtra host… (Invio: apri)')}
           value={filter}
           onChange={e => (setFilter(e.target.value), setCur(0))}
           onKeyDown={e => {
@@ -31,17 +32,17 @@ export default function SshDialog({ onPick, onCancel }: Props) {
           }}
         />
         <div className="host-list">
-          {hosts === null && <div className="path">Caricamento…</div>}
-          {hosts?.length === 0 && <div className="path">Nessun host in ~/.ssh/config</div>}
+          {hosts === null && <div className="path">{t('Caricamento…')}</div>}
+          {hosts?.length === 0 && <div className="path">{t('Nessun host in ~/.ssh/config')}</div>}
           {shown.map((h, i) => (
             <div key={h} className={'host' + (i === cur ? ' active' : '')} ref={el => void (i === cur && el?.scrollIntoView({ block: 'nearest' }))}>
               <span>{h}</span>
-              <button onClick={() => onPick(h)}>Apri</button>
+              <button onClick={() => onPick(h)}>{t('Apri')}</button>
             </div>
           ))}
         </div>
         <div className="actions">
-          <button onClick={onCancel}>Chiudi</button>
+          <button onClick={onCancel}>{t('Chiudi')}</button>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 // Languages. The Italian text is the key: t('Nuovo file') is that text in Italian, its translation otherwise
 // (or the Italian again when a translation is missing). {name} in a text is filled from `vars`.
+// A key may end in |context to tell apart texts Italian writes the same ("file" and "file|plurale"): the suffix never shows.
 // Never call t() at module level: the language is set once the settings are read, after the imports.
 import { EN } from './locales/en'
 
@@ -17,7 +18,7 @@ export const resolveLang = (setting: LangSetting | undefined, systemLocale: stri
   setting && setting !== 'system' ? setting : systemLocale.toLowerCase().startsWith('it') ? 'it' : 'en'
 
 export function t(text: string, vars?: Record<string, string | number>): string {
-  const s = DICTS[lang]?.[text] ?? text
+  const s = DICTS[lang]?.[text] ?? text.replace(/\|[\w]+$/, '')
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s
 }
 

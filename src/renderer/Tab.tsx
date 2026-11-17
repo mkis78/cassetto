@@ -6,6 +6,7 @@ import { TAB_COLORS, tabColor, tabMenu, type TabColor } from '../shared/menus'
 import { ICON } from './icons'
 import { closeTiles, focusTile, isDirty, onDirty, openFolder, whereOf } from './tiles'
 import { popup } from './menuIcons'
+import { t } from '../shared/i18n'
 
 // the palette as the theme paints it now (teal is the accent)
 const themeDots = () => {
@@ -82,11 +83,11 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
         <span title={name ? title : undefined}>{name ?? title ?? ''}</span>
       )}
       {unsaved && (
-        <span className="tab-unsaved" title="Modifiche non salvate">
+        <span className="tab-unsaved" title={t('Modifiche non salvate')}>
           ●
         </span>
       )}
-      <button className="dv-default-tab-action tile-close" title="Chiudi tab" onPointerDown={e => e.stopPropagation()} onClick={() => closeTiles([containerApi.getPanel(api.id)!])}>
+      <button className="dv-default-tab-action tile-close" title={t('Chiudi tab')} onPointerDown={e => e.stopPropagation()} onClick={() => closeTiles([containerApi.getPanel(api.id)!])}>
         <X size={13} strokeWidth={2} />
       </button>
     </div>
@@ -96,7 +97,7 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
 // "+" after the tabs of each group: a new tab there, on the folder of the tab in front
 export function NewTabButton({ containerApi, activePanel }: IDockviewHeaderActionsProps) {
   return (
-    <button className="tab-add" title="Nuovo tab (Cmd+T)" onClick={() => openFolder(containerApi, whereOf(activePanel), activePanel?.id)}>
+    <button className="tab-add" title={t('Nuovo tab (Cmd+T)')} onClick={() => openFolder(containerApi, whereOf(activePanel), activePanel?.id)}>
       <Plus {...ICON} />
     </button>
   )

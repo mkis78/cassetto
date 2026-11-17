@@ -48,3 +48,10 @@ test('every text has its English, and the English has the same {vars}', () => {
   expect(missing).toEqual([])
   expect(wrong).toEqual([])
 })
+
+test('a |context suffix tells keys apart and never shows', () => {
+  expect(t('{n} file|plurale', { n: 2 })).toBe('2 file')
+  setLang('en')
+  expect(t('file|plurale')).toBe('files')
+  expect(t('file')).toBe('file')
+})

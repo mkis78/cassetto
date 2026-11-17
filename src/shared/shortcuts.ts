@@ -1,5 +1,6 @@
 // The action bar's shortcut: written as Electron accelerators ("Ctrl+Space", "Alt+Shift+K"), modifiers in a fixed order,
 // so a key press and the setting compare as strings. On macOS it is checked against the system's own shortcuts.
+import { t, tx } from './i18n'
 
 export const DEFAULT_BAR = 'Ctrl+Space'
 
@@ -31,7 +32,7 @@ export function fromEvent(e: KeyEvent): string | null {
 }
 
 // for people: "Ctrl+Spazio", "Opzione+Shift+K"
-export const shortcutLabel = (s: string) => s.replace('Space', 'Spazio').replace('Alt', 'Opzione')
+export const shortcutLabel = (s: string) => s.replace('Space', t('Spazio')).replace('Alt', t('Opzione'))
 
 function parse(s: string): { flags: number; code: number } | null {
   const parts = s.split('+')
@@ -42,15 +43,15 @@ function parse(s: string): { flags: number; code: number } | null {
 
 // what macOS calls the system shortcuts likely to clash; any other is "a system shortcut"
 const NAMES: Record<string, string> = {
-  '60': 'Seleziona la sorgente di input precedente',
-  '61': 'Seleziona la sorgente di input successiva',
-  '64': 'Mostra la ricerca Spotlight',
-  '65': 'Mostra la finestra di ricerca del Finder',
-  '28': "Salva un'istantanea dello schermo come file",
-  '29': "Copia un'istantanea dello schermo negli appunti",
-  '30': "Salva un'istantanea dell'area selezionata come file",
-  '31': "Copia un'istantanea dell'area selezionata negli appunti",
-  '184': 'Opzioni istantanea e registrazione'
+  '60': tx('Seleziona la sorgente di input precedente'),
+  '61': tx('Seleziona la sorgente di input successiva'),
+  '64': tx('Mostra la ricerca Spotlight'),
+  '65': tx('Mostra la finestra di ricerca del Finder'),
+  '28': tx("Salva un'istantanea dello schermo come file"),
+  '29': tx("Copia un'istantanea dello schermo negli appunti"),
+  '30': tx("Salva un'istantanea dell'area selezionata come file"),
+  '31': tx("Copia un'istantanea dell'area selezionata negli appunti"),
+  '184': tx('Opzioni istantanea e registrazione')
 }
 // on unless the preferences say otherwise: a fresh Mac has no entry for them
 const DEFAULTS: Record<string, number[]> = { '60': [32, 49, 262144], '61': [32, 49, 786432], '64': [32, 49, 1048576], '65': [32, 49, 1572864] }
@@ -66,7 +67,7 @@ export function systemConflict(shortcut: string, hotkeys: SymbolicHotkeys, rayca
     const entry = hotkeys[id]
     const on = entry ? !!entry.enabled : true
     const p = entry?.value?.parameters ?? DEFAULTS[id]
-    if (on && p && p[1] === k.code && (p[2] & MOD_MASK) === k.flags) return NAMES[id] ?? 'una scorciatoia di sistema'
+    if (on && p && p[1] === k.code && (p[2] & MOD_MASK) === k.flags) return t(NAMES[id] ?? tx('una scorciatoia di sistema'))
   }
   const r = /^((?:\w+-)*)(\d+)$/.exec(raycast ?? '')
   if (r) {

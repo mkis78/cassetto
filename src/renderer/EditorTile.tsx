@@ -17,6 +17,7 @@ import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark'
 import type { EditorParams } from '../shared/types'
 import { onSettings, resolvedTheme } from './settings'
 import { setDirty, setTileActions } from './tiles'
+import { t } from '../shared/i18n'
 
 // the editor's look from the app's colours, so it follows the light and dark themes by itself
 const look = EditorView.theme({
@@ -73,6 +74,11 @@ const markdownKeys = (preview: () => void) =>
     ])
   )
 export const isMarkdown = (name: string) => /\.(md|markdown|mdx|mdown)$/i.test(name)
+// a symbol's kind, as editorCommands names it (in Italian, the key), in the language of the interface
+const kindLabel = (kind: string) => {
+  const h = /^titolo (\d)$/.exec(kind)
+  return h ? t('titolo {n}', { n: h[1] }) : t(kind)
+}
 const openBar = () => window.dispatchEvent(new CustomEvent('cassetto:palette', { detail: 'bar' }))
 
 // a text file in its own tab: CodeMirror, Cmd+S saves, a dot on the tab while unsaved
@@ -85,7 +91,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirtyState] = useState(false)
   const [status, setStatus] = useState<Status>({ line: 1, col: 1, cursors: 1, selected: 0 })
-  const [indent, setIndent] = useState('Spazi: 2')
+  const [indent, setIndent] = useState(() => t('Spazi: {n}', { n: 2 }))
   // Alt+Z and the whitespace dots stay with the tab
   const wrapC = useRef(new Compartment()).current
   const spaceC = useRef(new Compartment()).current
@@ -116,13 +122,13 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
     const text = v.state.doc.toString()
     // someone else (git, another app) changed the file since it was opened: ask before writing over it
     const disk = await window.api.readFile(host, path)
-    if (disk.ok && disk.text !== saved.current && disk.text !== text && !confirm(`${name} è cambiato sul disco da quando l'hai aperto. Sovrascriverlo con la tua versione?`)) return
+    if (disk.ok && disk.text !== saved.current && disk.text !== text && !confirm(t("{name} è cambiato sul disco da quando l'hai aperto. Sovrascriverlo con la tua versione?", { name }))) return
     const r = await window.api.writeFile(host, path, text)
-    if (!r.ok) return setNotice(`Non salvato: ${r.error}`)
+    if (!r.ok) return setNotice(t('Non salvato: {error}', { error: r.error }))
     saved.current = text
     markDirty(v.state.doc.toString() !== text)
-    setNotice('Salvato')
-    setTimeout(() => setNotice(n => (n === 'Salvato' ? null : n)), 1500)
+    setNotice(t('Salvato'))
+    setTimeout(() => setNotice(n => (n === t('Salvato') ? null : n)), 1500)
   }
   const saveRef = useRef(save)
   saveRef.current = save
@@ -133,11 +139,11 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
     const language = new Compartment()
     window.api.readFile(host, path).then(r => {
       if (!live) return
-      if (!r.ok) return setError(r.binary ? 'File binario: non si può modificare come testo.' : r.error)
+      if (!r.ok) return setError(r.binary ? t('File binario: non si può modificare come testo.') : r.error)
       saved.current = r.text
       // the file's own indentation: tabs or how many spaces
       const ind = detectIndent(r.text) ?? { tabs: false, size: 2 }
-      setIndent(ind.tabs ? 'Tab' : `Spazi: ${ind.size}`)
+      setIndent(ind.tabs ? t('Tab') : t('Spazi: {n}', { n: ind.size }))
       view.current = new EditorView({
         parent: ref.current!,
         state: EditorState.create({
@@ -195,49 +201,49 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
   const editorActions = (): PaletteCommand[] => {
     const v = view.current
     if (!v) return []
-    const group = `Editor · ${name}`
+    const group = t('Editor · {name}', { name })
     const cmds: PaletteCommand[] = [
-      { label: 'Salva', hint: 'Cmd+S', run: () => void save(), icon: Save },
-      { label: 'Cerca e sostituisci', hint: 'Cmd+F', run: run(openSearchPanel), icon: Search },
-      { label: 'Vai alla riga…', hint: 'Ctrl+G', run: run(gotoLine), icon: Hash },
-      { label: 'Seleziona tutte le occorrenze', hint: k('Cmd+Ctrl+G', 'Alt+F3'), run: run(selectSelectionMatches), icon: TextCursorInput },
-      { label: 'Dividi la selezione in righe', hint: 'Cmd+Shift+L', run: run(splitSelectionByLine), icon: SquareSplitVertical },
-      { label: 'Ordina righe', hint: k('F5', 'F9'), run: run(sortSelectedLines), icon: ArrowDownUp },
-      { label: 'Unisci righe', hint: 'Cmd+J', run: run(joinSelectedLines), icon: WrapText },
-      { label: 'Maiuscolo', hint: 'Cmd+K Cmd+U', run: run(upperCase), icon: CaseUpper },
-      { label: 'Minuscolo', hint: 'Cmd+K Cmd+L', run: run(lowerCase), icon: CaseLower },
-      { label: 'Iniziali maiuscole', run: run(titleCaseWords), icon: CaseSensitive },
-      { label: 'Commenta / decommenta', hint: 'Cmd+/', run: run(toggleComment), icon: MessageSquareCode },
-      { label: 'Rimuovi spazi a fine riga', run: run(trimTrailingSpaces), icon: Eraser },
-      { label: 'Comprimi tutto', run: run(foldAll), icon: FoldVertical },
-      { label: 'Espandi tutto', run: run(unfoldAll), icon: UnfoldVertical },
-      { label: wrap ? 'Disattiva a capo automatico' : 'A capo automatico', hint: 'Alt+Z', run: toggleWrap, icon: WrapText },
-      { label: whitespace ? 'Nascondi spazi' : 'Mostra spazi', run: toggleSpace, icon: Pilcrow }
+      { label: t('Salva'), hint: 'Cmd+S', run: () => void save(), icon: Save },
+      { label: t('Cerca e sostituisci'), hint: 'Cmd+F', run: run(openSearchPanel), icon: Search },
+      { label: t('Vai alla riga…'), hint: 'Ctrl+G', run: run(gotoLine), icon: Hash },
+      { label: t('Seleziona tutte le occorrenze'), hint: k('Cmd+Ctrl+G', 'Alt+F3'), run: run(selectSelectionMatches), icon: TextCursorInput },
+      { label: t('Dividi la selezione in righe'), hint: 'Cmd+Shift+L', run: run(splitSelectionByLine), icon: SquareSplitVertical },
+      { label: t('Ordina righe'), hint: k('F5', 'F9'), run: run(sortSelectedLines), icon: ArrowDownUp },
+      { label: t('Unisci righe'), hint: 'Cmd+J', run: run(joinSelectedLines), icon: WrapText },
+      { label: t('Maiuscolo'), hint: 'Cmd+K Cmd+U', run: run(upperCase), icon: CaseUpper },
+      { label: t('Minuscolo'), hint: 'Cmd+K Cmd+L', run: run(lowerCase), icon: CaseLower },
+      { label: t('Iniziali maiuscole'), run: run(titleCaseWords), icon: CaseSensitive },
+      { label: t('Commenta / decommenta'), hint: 'Cmd+/', run: run(toggleComment), icon: MessageSquareCode },
+      { label: t('Rimuovi spazi a fine riga'), run: run(trimTrailingSpaces), icon: Eraser },
+      { label: t('Comprimi tutto'), run: run(foldAll), icon: FoldVertical },
+      { label: t('Espandi tutto'), run: run(unfoldAll), icon: UnfoldVertical },
+      { label: wrap ? t('Disattiva a capo automatico') : t('A capo automatico'), hint: 'Alt+Z', run: toggleWrap, icon: WrapText },
+      { label: whitespace ? t('Nascondi spazi') : t('Mostra spazi'), run: toggleSpace, icon: Pilcrow }
     ].map(c => ({ ...c, group }))
     const mdCmds: PaletteCommand[] = !md
       ? []
       : [
-          { label: preview ? 'Nascondi anteprima' : 'Mostra anteprima', hint: 'Cmd+Shift+V', run: togglePreview, icon: Columns2 },
-          { label: 'Grassetto', hint: 'Cmd+B', run: run(mdWrap('**')), icon: Bold },
-          { label: 'Corsivo', hint: 'Cmd+I', run: run(mdWrap('*')), icon: Italic },
-          { label: 'Codice', hint: 'Cmd+E', run: run(mdWrap('`')), icon: Code },
-          { label: 'Link', hint: 'Cmd+Alt+K', run: run(mdLink), icon: LinkIcon },
-          { label: 'Titolo 1', hint: 'Cmd+Alt+1', run: run(mdLines('h1')), icon: Heading1 },
-          { label: 'Titolo 2', hint: 'Cmd+Alt+2', run: run(mdLines('h2')), icon: Heading2 },
-          { label: 'Titolo 3', hint: 'Cmd+Alt+3', run: run(mdLines('h3')), icon: Heading3 },
-          { label: 'Elenco puntato', run: run(mdLines('ul')), icon: List },
-          { label: 'Elenco numerato', run: run(mdLines('ol')), icon: ListOrdered },
-          { label: 'Checklist', run: run(mdLines('task')), icon: ListChecks },
-          { label: 'Spunta / togli spunta', run: run(mdTask), icon: SquareCheck },
-          { label: 'Citazione', run: run(mdLines('quote')), icon: Quote },
-          { label: 'Blocco di codice', run: run(mdCodeBlock), icon: SquareCode },
-          { label: 'Tabella', run: run(mdTable), icon: Table }
-        ].map(c => ({ ...c, group: `Markdown · ${name}` }))
+          { label: preview ? t('Nascondi anteprima') : t('Mostra anteprima'), hint: 'Cmd+Shift+V', run: togglePreview, icon: Columns2 },
+          { label: t('Grassetto'), hint: 'Cmd+B', run: run(mdWrap('**')), icon: Bold },
+          { label: t('Corsivo'), hint: 'Cmd+I', run: run(mdWrap('*')), icon: Italic },
+          { label: t('Codice'), hint: 'Cmd+E', run: run(mdWrap('`')), icon: Code },
+          { label: t('Link'), hint: 'Cmd+Alt+K', run: run(mdLink), icon: LinkIcon },
+          { label: t('Titolo 1'), hint: 'Cmd+Alt+1', run: run(mdLines('h1')), icon: Heading1 },
+          { label: t('Titolo 2'), hint: 'Cmd+Alt+2', run: run(mdLines('h2')), icon: Heading2 },
+          { label: t('Titolo 3'), hint: 'Cmd+Alt+3', run: run(mdLines('h3')), icon: Heading3 },
+          { label: t('Elenco puntato'), run: run(mdLines('ul')), icon: List },
+          { label: t('Elenco numerato'), run: run(mdLines('ol')), icon: ListOrdered },
+          { label: t('Checklist'), run: run(mdLines('task')), icon: ListChecks },
+          { label: t('Spunta / togli spunta'), run: run(mdTask), icon: SquareCheck },
+          { label: t('Citazione'), run: run(mdLines('quote')), icon: Quote },
+          { label: t('Blocco di codice'), run: run(mdCodeBlock), icon: SquareCode },
+          { label: t('Tabella'), run: run(mdTable), icon: Table }
+        ].map(c => ({ ...c, group: t('Markdown · {name}', { name }) }))
     // ponytail: the whole tree on each opening of the palette; cache by doc version if big files feel slow
     const syms = symbols(v.state).map(s => ({
       label: s.name,
-      hint: `${s.kind} · riga ${s.line}`,
-      group: `Simboli · ${name}`,
+      hint: t('{kind} · riga {line}', { kind: kindLabel(s.kind), line: s.line }),
+      group: t('Simboli · {name}', { name }),
       run: () => (v.dispatch({ selection: EditorSelection.cursor(s.from), effects: EditorView.scrollIntoView(s.from, { y: 'center' }) }), v.focus())
     }))
     return [...mdCmds, ...cmds, ...syms]
@@ -257,7 +263,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
       if (r.ok && r.text !== saved.current && view.current === v && v.state.doc.toString() === saved.current) {
         saved.current = r.text
         v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: r.text } })
-        setNotice('Ricaricato dal disco')
+        setNotice(t('Ricaricato dal disco'))
       }
     })
     return () => d.dispose()
@@ -279,23 +285,23 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
       <div className="status-bar">
         <div className="status-left" title={host ? `${host}:${path}` : path}>
           <b>{name}</b>
-          <span>{dirty ? 'Modificato' : 'Salvato su disco'}</span>
+          <span>{dirty ? t('Modificato') : t('Salvato su disco')}</span>
           {notice && <span className="editor-notice">{notice}</span>}
         </div>
         {!error && (
           <div className="status-left editor-right">
-            {status.cursors > 1 && <span>{status.cursors} cursori</span>}
-            {status.selected > 0 && <span>{status.selected} selezionati</span>}
-            <span>Riga {status.line}, col {status.col}</span>
+            {status.cursors > 1 && <span>{t('{n} cursori', { n: status.cursors })}</span>}
+            {status.selected > 0 && <span>{t('{n} selezionati', { n: status.selected })}</span>}
+            <span>{t('Riga {line}, col {col}', { line: status.line, col: status.col })}</span>
             <span>{indent}</span>
-            <span>{lang ?? 'Testo'}</span>
+            <span>{lang ?? t('Testo')}</span>
             {md && (
               <button className="status-link" onClick={togglePreview}>
-                {preview ? 'Nascondi anteprima' : 'Anteprima'}
+                {preview ? t('Nascondi anteprima') : t('Anteprima')}
               </button>
             )}
             <button className="status-link" disabled={!dirty} onClick={() => void save()}>
-              Salva (Cmd+S)
+              {t('Salva')} (Cmd+S)
             </button>
           </div>
         )}

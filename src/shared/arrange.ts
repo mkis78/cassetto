@@ -1,15 +1,16 @@
 // Quick arrangements, like Windows' snap layouts: the open tabs rearranged into a grid of panels.
 // Works on dockview's toJSON()/fromJSON() shape, so it is plain data in and out.
+import { tx } from './i18n'
 
 // a cell, or a split (the root must be one); a split's direction alternates with depth, starting from the root's
 type Node = 'cell' | Node[]
 export const PRESETS = {
-  one: { label: 'Un pannello', vertical: false, tree: ['cell'] }, // the root is always a split, even of one
-  two: { label: 'Due affiancati', vertical: false, tree: ['cell', 'cell'] },
-  stacked: { label: 'Due sovrapposti', vertical: true, tree: ['cell', 'cell'] },
-  three: { label: 'Tre affiancati', vertical: false, tree: ['cell', 'cell', 'cell'] },
-  mainSide: { label: 'Uno grande e due a destra', vertical: false, tree: ['cell', ['cell', 'cell']] },
-  grid: { label: 'Griglia 2×2', vertical: false, tree: [['cell', 'cell'], ['cell', 'cell']] }
+  one: { label: tx('Un pannello'), vertical: false, tree: ['cell'] }, // the root is always a split, even of one
+  two: { label: tx('Due affiancati'), vertical: false, tree: ['cell', 'cell'] },
+  stacked: { label: tx('Due sovrapposti'), vertical: true, tree: ['cell', 'cell'] },
+  three: { label: tx('Tre affiancati'), vertical: false, tree: ['cell', 'cell', 'cell'] },
+  mainSide: { label: tx('Uno grande e due a destra'), vertical: false, tree: ['cell', ['cell', 'cell']] },
+  grid: { label: tx('Griglia 2×2'), vertical: false, tree: [['cell', 'cell'], ['cell', 'cell']] }
 } satisfies Record<string, { label: string; vertical: boolean; tree: Node }>
 export type Preset = keyof typeof PRESETS
 

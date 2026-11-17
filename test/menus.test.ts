@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { actionsMenu, terminalMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
+import { actionsMenu, tagsMenu, terminalMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
 
 const ids = (items: MenuItem[]): string[] => items.flatMap(i => (i.submenu ? [i.id ?? i.label, ...ids(i.submenu)] : i.id ? [i.id] : []))
 const find = (items: MenuItem[], id: string): MenuItem | undefined => items.flatMap(i => [i, ...(i.submenu ?? [])]).find(i => i.id === id)
@@ -78,4 +78,14 @@ test('terminal menu: copy only with a selection, the folder it started in, close
   expect(ids(terminalMenu({ hasSelection: false, platform: 'darwin' }))).toEqual(['copy', 'paste', 'selectAll', 'find', 'clear', 'folder', 'close'])
   expect(find(terminalMenu({ hasSelection: false, platform: 'darwin' }), 'copy')?.enabled).toBe(false)
   expect(find(terminalMenu({ hasSelection: true, platform: 'linux' }), 'copy')?.accelerator).toBe('Ctrl+Shift+C') // Ctrl+C stays an interrupt
+})
+
+test('tag submenu: ticked when every item has the tag, marked when only some do; only for local files', () => {
+  const known = [{ name: 'Rosso', color: 6 }, { name: 'Lavoro', color: 0 }]
+  const m = tagsMenu({ known, has: n => (n === 'Rosso' ? 'all' : 'some'), dots: ['', '#888', '', '', '', '', '#f00', ''] })
+  expect(ids(m.submenu!)).toEqual(['tag:0', 'tag:1', 'tags'])
+  expect(m.submenu![0]).toMatchObject({ checked: true, dot: '#f00', hollow: false })
+  expect(m.submenu![1]).toMatchObject({ label: 'Lavoro (alcuni)', checked: false, hollow: true })
+  expect(ids(filesMenu({ target: 'file', remote: false, tags: m }))).toContain('tags')
+  expect(ids(filesMenu({ target: 'file', remote: true }))).not.toContain('tags')
 })

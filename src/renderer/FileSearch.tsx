@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { SearchHit, SearchQuery, SearchResult } from '../shared/types'
 import { Ellipsis, File } from 'lucide-react'
 import { ICON } from './icons'
+import { TagDots } from './Tags'
 import { highlight } from '../shared/highlight'
 import { searchMenu } from '../shared/menus'
 import { listKey } from '../shared/listNav'
@@ -107,7 +108,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
   const marked = (text: string, query: SearchQuery) =>
     highlight(text, query).map((p, i) => (p.match ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))
   // a file name lights up only for a plain word: a glob (*.ts) matches it whole
-  const nameQuery = /[*?]/.test(shown.text) ? null : { ...shown, regex: false, word: false }
+  const nameQuery = /[*?]/.test(shown.text) || shown.mode === 'tag' ? null : { ...shown, regex: false, word: false }
   // name and folder of a hit, the name first: what is looked for stands out, the folder says where
   const nameDir = (path: string) => {
     const cut = path.lastIndexOf('/')
@@ -164,9 +165,10 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
             </div>
           ))
         : result?.hits.map(h => (
-            <div key={h.path} {...row(h, 'search-name-hit')} title={h.path}>
+            <div key={h.path} {...row(h, 'search-name-hit')} title={h.tags ? `${h.path}\n${h.tags.map(t => t.name).join(', ')}` : h.path}>
               <File {...ICON} />
               {nameDir(h.path)}
+              <TagDots tags={h.tags} />
               {more(h)}
             </div>
           ))}

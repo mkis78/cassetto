@@ -541,3 +541,22 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .editor-tile .status-left.editor-right { flex: none; }
 .editor-notice { color: var(--accent); }
 .tab-unsaved { color: var(--fg-strong); font-size: 10px; }
+
+/* Finder tags: dots after a name, chips, the tag dialog */
+.tag-dots { display: inline-flex; flex: none; margin-left: 6px; }
+.tag-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--bg); flex: none; }
+.tag-dots .tag-dot + .tag-dot { margin-left: -4px; }
+.tag-dot.none { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg3); }
+.file.selected .tag-dot { box-shadow: 0 0 0 1.5px var(--focus); }
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 9px; background: var(--raised); color: var(--fg); font-size: 11px; white-space: nowrap; }
+.tag-chip button { display: inline-flex; padding: 0; margin: 0; background: none; border: 0; color: var(--fg3); cursor: pointer; }
+.tag-chip button:hover { color: var(--red); }
+.status-tags { display: inline-flex; gap: 4px; }
+.tag-dialog .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.tag-dialog .row input { flex: 1; }
+.tag-colors { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.tag-dot.big { width: 16px; height: 16px; padding: 0; border: 0; cursor: pointer; }
+.tag-dot.big.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+.tag-dot.big.none.on { box-shadow: inset 0 0 0 1.5px var(--fg3), 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+.tag-suggest { background: none; border: 0; padding: 0; cursor: pointer; }
+.tag-suggest:hover .tag-chip { background: var(--line2); }

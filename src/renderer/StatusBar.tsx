@@ -4,6 +4,7 @@ import type { DirEntry, Listing } from '../shared/types'
 import { formatSize } from '../shared/format'
 import { diskSummary, folderSummary, kindOf, selectionSummary, type Disk } from '../shared/status'
 import { ICON } from './icons'
+import { TagChip } from './Tags'
 
 // folders already weighed, by host and path, for this session
 // ponytail: never refreshed by itself; "Ricalcola" when the folder changed
@@ -58,6 +59,13 @@ export default function StatusBar({ host, col, shown, hidden, picked }: { host: 
             <button className="status-link" onClick={() => weigh(path)}>Calcola dimensione</button>
           ))}
         {e.mtime !== undefined && <span>modificato {when(e.mtime)}</span>}
+        {!!e.tags?.length && (
+          <span className="status-tags">
+            {e.tags.map(t => (
+              <TagChip key={t.name} tag={t} />
+            ))}
+          </span>
+        )}
       </>
     )
   }

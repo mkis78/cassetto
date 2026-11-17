@@ -13,7 +13,8 @@
 - **Nuovo file vuoto** e nuova cartella, dalla barra o dal menu contestuale.
 - Rinomina (F2), duplica, copia/taglia/incolla (Cmd+C/X/V), trascina per spostare (Alt per copiare), Cestino, conflitti di nome gestiti.
 - **Anteprima** (spazio) di testo, markdown e immagini.
-- **Ricerca** per nome (`*.ts`, `src/**/*.tsx`) o contenuto sotto la cartella aperta.
+- **Tag** del Finder: pallini colorati accanto ai nomi, sottomenu Tag (i sette colori e i tag personalizzati), Modifica tag… per nome e colore; condivisi con il Finder e Spotlight.
+- **Ricerca** per nome (`*.ts`, `src/**/*.tsx`), contenuto o tag (anche per colore) sotto la cartella aperta.
 - **Vai a file** (Cmd+P) e **comandi** (Cmd+Shift+P).
 - **Server SSH** (Cmd+K): sfoglia, copia, sposta ed elimina file remoti con gli host di `~/.ssh/config`.
 - **Editor** (CodeMirror 6): «Modifica nell'editor» dal menu di un file; evidenziazione per decine di linguaggi, Cmd+F, Cmd+S, più cursori. I file remoti si aprono qui.

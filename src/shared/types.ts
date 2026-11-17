@@ -1,3 +1,4 @@
+import type { Tag } from './tags'
 import type { TabColor } from './menus'
 
 // name, color: what the user gave the tab; without a name it shows the folder's
@@ -10,7 +11,7 @@ export type TileParams = FilesParams | TerminalParams | EditorParams
 
 export interface SearchQuery {
   text: string
-  mode: 'content' | 'name'
+  mode: 'content' | 'name' | 'tag'
   regex: boolean
   word: boolean
   subfolders?: boolean // look below the folder too; unset counts as yes
@@ -22,6 +23,7 @@ export interface SearchQuery {
 
 export interface SearchHit {
   path: string // relative to the searched folder
+  tags?: Tag[] // tag search: the tags the file carries
   line?: number // content search only
   text?: string
 }
@@ -49,6 +51,7 @@ export interface DirEntry {
   name: string
   dir: boolean
   size?: number // bytes; local listings only
+  tags?: Tag[] // Finder tags; local listings on macOS only
   mtime?: number // ms since epoch; local listings only
 }
 

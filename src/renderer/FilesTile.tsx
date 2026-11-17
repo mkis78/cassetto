@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
-import { ArrowUp, ChevronDown, FileCode, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
+import { ArrowUp, ChevronDown, FileCode, Tags as TagsIcon, ScanSearch, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
 import { renderMarkdown } from '../shared/markdown'
 import FileSearch, { dirOf } from './FileSearch'
-import { actionsMenu, filesMenu, viewMenu } from '../shared/menus'
+import { actionsMenu, filesMenu, tagsMenu, viewMenu } from '../shared/menus'
+import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
+import type { Tag } from '../shared/tags'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
 import { baseName, openEditor, openFolder, openTerminal, setTileActions } from './tiles'
@@ -293,6 +295,21 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if ((await transfer(c.cut ? 'move' : 'copy', c.paths, destDir)) && c.cut) clip = null // a cut is pasted once
   }
 
+  // Finder tags (local only): the entries behind paths, the tags known here, a change applied and shown
+  const entryOf = (path: string) => columns.find(c => c.path === dirOf(path))?.entries.find(x => x.name === nameOf(path))
+  const [tagging, setTagging] = useState<string[] | null>(null) // the paths the tag dialog works on
+  const seenTags = () => columns.flatMap(c => c.entries.flatMap(e => e.tags ?? []))
+  const tagState = (paths: string[]) => (name: string) => {
+    const n = paths.filter(p => entryOf(p)?.tags?.some(t => t.name === name)).length
+    return n === paths.length ? 'all' : n ? 'some' : 'none'
+  }
+  const applyTags = async (paths: string[], change: { add?: Tag[]; remove?: string[] }) => {
+    report(await window.api.editTags(paths, change))
+    changed(api.id, paths.map(dirOf))
+    await refreshTo()
+  }
+  const toggleTag = (paths: string[], tag: Tag) => applyTags(paths, tagState(paths)(tag.name) === 'all' ? { remove: [tag.name] } : { add: [tag] })
+
   const askDelete = (paths: string[]) => void (paths.length && setConfirm({ paths, permanent: !!host }))
   const doDelete = async () => {
     const c = confirm!
@@ -438,8 +455,10 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     // a right-click outside the selection selects just that entry, like Finder
     if (entry && !picked.has(full)) select(Math.max(0, columns.findIndex(c => c.path === dir)), dir, entry)
     const items = entry ? chosen(full) : []
+    const known = knownTags(seenTags())
+    const tags = entry && !host ? tagsMenu({ known, has: tagState(items), dots: TAG_HEX.map((h, i) => h || (i ? '' : '#8e8e93')) }) : undefined
     const choice = await popup(
-      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor() })
+      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags })
     )
     if (!choice) return
     if (choice === 'newFile' || choice === 'newFolder') return startCreate(choice, full)
@@ -448,6 +467,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'duplicate') return transfer('copy', items, dir, true)
     if (choice === 'copy' || choice === 'cut') return void (clip = { host, paths: items, cut: choice === 'cut' })
     if (choice === 'delete') return askDelete(items)
+    if (choice?.startsWith('tag:')) return toggleTag(items, known[Number(choice.slice(4))])
+    if (choice === 'tags') return setTagging(items)
     if (choice === 'open') return entry && open(full, entry.dir)
     if (choice === 'copyPath') return window.api.clipboardWrite(host ? `${host}:${full}` : full)
     if (choice === 'refresh') return refresh()
@@ -486,7 +507,14 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           const full = child(l.path, e.name)
           const opened = view === 'columns' && columns[i + 1]?.path === full && full !== sel?.path // the folder shown in the next column
           const renaming = editing?.kind === 'rename' && editing.from === full
-          const name = renaming ? editBox(editing) : <span className="name">{e.name}</span>
+          const name = renaming ? (
+            editBox(editing)
+          ) : (
+            <>
+              <span className="name">{e.name}</span>
+              <TagDots tags={e.tags} />
+            </>
+          )
           return (
             <div
               key={e.name}
@@ -576,6 +604,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           { label: 'Copia', hint: 'Cmd+C', run: () => take(false), icon: Copy },
           { label: 'Taglia', hint: 'Cmd+X', run: () => take(true), icon: Scissors },
           { label: 'Copia percorso', run: () => void window.api.clipboardWrite(items.map(p => (host ? `${host}:${p}` : p)).join('\n')), icon: Link },
+          ...(host ? [] : [{ label: 'Tag…', run: () => setTagging(items), icon: TagsIcon }]),
           { label: host ? 'Elimina definitivamente…' : 'Sposta nel Cestino', hint: 'Cmd+⌫', run: () => askDelete(items), icon: Trash2 }
         ].map(c => ({ ...c, group: `Selezione: ${what}` }))
     const onDir: Command[] = [
@@ -589,6 +618,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
         : []),
       { label: 'Cerca per nome', hint: 'Cmd+F', run: () => (set({ mode: 'name' }), setTimeout(() => inputRef.current?.focus())), icon: Search },
       { label: 'Cerca nel contenuto', run: () => (set({ mode: 'content' }), setTimeout(() => inputRef.current?.focus())), icon: TextSearch },
+      ...(host ? [] : [{ label: 'Cerca per tag', run: () => (set({ mode: 'tag' }), setTimeout(() => inputRef.current?.focus())), icon: ScanSearch }]),
       ...(here && here !== '/' ? [{ label: 'Cartella superiore', hint: '⌫', run: up, icon: ArrowUp }] : []),
       { label: 'Cartella di base', run: () => (setSel(null), load(host ? null : (getSettings().filesHome ?? null))), icon: House },
       { label: 'Aggiorna', run: refresh, icon: RotateCw },
@@ -634,7 +664,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             ref={inputRef}
             spellCheck={false}
             value={q.text}
-            placeholder={q.mode === 'content' ? 'Cerca nel contenuto dei file…' : 'Cerca per nome: foto, *.pdf, src/**/*.ts…'}
+            placeholder={q.mode === 'content' ? 'Cerca nel contenuto dei file…' : q.mode === 'tag' ? 'Cerca per tag o colore: Lavoro, rosso…' : 'Cerca per nome: foto, *.pdf, src/**/*.ts…'}
             onChange={e => set({ text: e.target.value })}
             onKeyDown={e => {
               if (e.key === 'Escape') set({ text: '' })
@@ -651,9 +681,9 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           )}
         </label>
         <div className="segmented" role="radiogroup" aria-label="Cerca in">
-          {(['name', 'content'] as const).map(m => (
+          {(host ? (['name', 'content'] as const) : (['name', 'content', 'tag'] as const)).map(m => (
             <button key={m} role="radio" aria-checked={q.mode === m} className={q.mode === m ? 'on' : ''} onClick={() => (set({ mode: m }), inputRef.current?.focus())}>
-              {m === 'name' ? 'Nome' : 'Contenuto'}
+              {m === 'name' ? 'Nome' : m === 'content' ? 'Contenuto' : 'Tag'}
             </button>
           ))}
         </div>
@@ -672,6 +702,15 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
         </div>
       )}
       {confirm && <ConfirmDelete {...confirm} onConfirm={doDelete} onCancel={() => (setConfirm(null), listRef.current?.focus())} />}
+      {tagging && (
+        <TagDialog
+          count={tagging.length}
+          current={[...new Map(tagging.flatMap(p => entryOf(p)?.tags ?? []).map(t => [t.name, t])).values()]}
+          known={knownTags(seenTags())}
+          onApply={c => void applyTags(tagging, c)}
+          onClose={() => (setTagging(null), listRef.current?.focus())}
+        />
+      )}
       {conflict && <ConflictDialog names={conflict.names} remote={!!host} onDone={conflict.done} />}
       {error ? (
         <div className="files-error">

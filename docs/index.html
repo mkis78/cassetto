@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cassetto · a file manager for macOS</title>
+<meta name="description" content="A file manager for macOS that does what the Finder won't: tabs and split panels, a Raycast-style action bar, Finder tags, fast search, a code editor and a terminal in one window.">
+<meta property="og:title" content="Cassetto">
+<meta property="og:description" content="A file manager for macOS that does what the Finder won't.">
+<meta property="og:image" content="https://mkis78.github.io/cassetto/screenshots/overview.png">
+<link rel="icon" href="icon.png">
+<style>
+  /* palette from src/renderer/styles.css */
+  :root {
+    color-scheme: dark;
+    --bg: #14161b; --panel: #1d2027; --raised: #262a33; --line: #2a2e37;
+    --fg: #cfd3dc; --fg2: #aab0bc; --fg-strong: #fff; --muted: #8b93a3;
+    --accent: #7daea3; --on-accent: #0f1714; --primary: #3d5a54; --claude: #d97757;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f5; --panel: #fff; --raised: #eef0f2; --line: #e2e4e8;
+      --fg: #2b2f36; --fg2: #4b525d; --fg-strong: #111; --muted: #6b7280;
+      --accent: #3d7a6e; --on-accent: #fff; --primary: #3d5a54;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  nav { display: flex; align-items: center; gap: 24px; padding: 18px 0; }
+  nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--fg-strong); text-decoration: none; margin-right: auto; }
+  nav .brand img { width: 28px; height: 28px; }
+  nav a:not(.brand) { color: var(--fg2); text-decoration: none; font-size: 15px; }
+  nav a:not(.brand):hover { color: var(--fg-strong); }
+
+  .hero { text-align: center; padding: 56px 0 40px; }
+  .hero img.icon { width: 112px; height: 112px; }
+  h1 { font-size: clamp(36px, 6vw, 56px); line-height: 1.1; letter-spacing: -0.02em; color: var(--fg-strong); margin: 16px 0 12px; }
+  .lead { font-size: clamp(18px, 2.4vw, 21px); color: var(--fg2); max-width: 680px; margin: 0 auto 28px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 10px; font-weight: 600; text-decoration: none; font-size: 16px; }
+  .btn.main { background: var(--accent); color: var(--on-accent); }
+  .btn.main:hover { filter: brightness(1.08); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--fg); background: var(--panel); }
+  .btn.ghost:hover { border-color: var(--accent); }
+  .meta { margin-top: 14px; font-size: 14px; color: var(--muted); }
+
+  .shot { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+  .hero-shot { margin: 8px 0 72px; }
+
+  section { padding: 48px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(26px, 3.6vw, 34px); color: var(--fg-strong); letter-spacing: -0.01em; margin: 0 0 12px; }
+  h3 { font-size: 18px; color: var(--fg-strong); margin: 0 0 6px; }
+  .why p { max-width: 720px; color: var(--fg2); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .card p { margin: 0; color: var(--fg2); font-size: 15px; }
+
+  .split { display: grid; grid-template-columns: 1fr 1.4fr; gap: 40px; align-items: center; }
+  .split.rev { grid-template-columns: 1.4fr 1fr; }
+  .split.rev > :first-child { order: 2; }
+  .split p { color: var(--fg2); }
+  @media (max-width: 800px) {
+    .split, .split.rev { grid-template-columns: 1fr; gap: 20px; }
+    .split.rev > :first-child { order: 0; }
+    nav a:not(.brand):not(.gh) { display: none; }
+  }
+
+  kbd { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--raised); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--fg); }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  ol { padding-left: 22px; color: var(--fg2); }
+  ol li { margin-bottom: 6px; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; }
+  footer a { color: var(--muted); }
+  footer .claude { color: var(--claude); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#"><img src="icon.png" alt="">Cassetto</a>
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="#privacy">Privacy</a>
+    <a class="gh" href="https://github.com/mkis78/cassetto">GitHub</a>
+  </nav>
+
+  <header class="hero">
+    <img class="icon" src="icon.png" alt="Cassetto icon">
+    <h1>The file manager the Finder&nbsp;isn’t.</h1>
+    <p class="lead">Tabs and side-by-side panels, empty files in one click, a Raycast-style action bar, Finder tags, fast search, a code editor and a terminal, all in one window.</p>
+    <div class="cta">
+      <a class="btn main" id="download" href="https://github.com/mkis78/cassetto/releases/latest">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
+        Download for Mac
+      </a>
+      <a class="btn ghost" href="https://github.com/mkis78/cassetto">View on GitHub</a>
+    </div>
+    <p class="meta"><span id="version">Latest release</span> · Apple Silicon · free and open source (MIT)</p>
+  </header>
+
+  <img class="shot hero-shot" src="screenshots/overview.png" alt="Cassetto: a folder, a Markdown file with its preview and a photo gallery side by side">
+
+  <section class="why">
+    <h2>Why Cassetto</h2>
+    <p><em>Cassetto</em> (pronounced <em>kahs-SET-toh</em>) is Italian for <strong>drawer</strong>: the place where you put things away so you can find them again, each where it belongs. That is what the app is for: your files tidy and at hand, without hunting through windows to get to them.</p>
+  </section>
+
+  <section id="features">
+    <h2>Everything in one window</h2>
+    <div class="grid">
+      <div class="card"><h3>Tabs and panels</h3><p>Rename and colour tabs, drag one onto another to split the window, or pick a ready-made arrangement. Save layouts and bring them back later.</p></div>
+      <div class="card"><h3>Four views</h3><p>List, icons, columns and gallery with thumbnails. Create an empty file or folder right where you are. Preview with the space bar.</p></div>
+      <div class="card"><h3>Finder tags</h3><p>The Finder’s own tags, stored the way the Finder stores them: they show in the Finder and in Spotlight and follow the file wherever it goes.</p></div>
+      <div class="card"><h3>Code editor</h3><p>CodeMirror 6 with syntax highlighting, Sublime Text’s keys and a live Markdown preview beside the text.</p></div>
+      <div class="card"><h3>Terminal</h3><p><kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> opens your shell in a tab, in the folder you are looking at. On an SSH server, it opens on that server.</p></div>
+      <div class="card"><h3>SSH servers</h3><p><kbd>Cmd</kbd>+<kbd>K</kbd> lists the hosts in your <code>~/.ssh/config</code>. Remote folders work like local ones, with the same keys.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="split">
+      <div>
+        <h2>An action bar for everything</h2>
+        <p><kbd>Ctrl</kbd>+<kbd>Space</kbd> opens a bar of everything you can do right now: actions on the selection and the folder, the editor’s commands, arrangements, saved layouts. Type a few letters to find one, or a file name to open it.</p>
+      </div>
+      <img class="shot" src="screenshots/action-bar.png" alt="The action bar on a selected file">
+    </div>
+  </section>
+
+  <section>
+    <div class="split rev">
+      <div>
+        <h2>Search that keeps up</h2>
+        <p>Search by name (<code>*.pdf</code>, <code>src/**/*.ts</code>), by content or by tag. Results stream in as they are found, with options for case, whole word, regular expressions, includes and excludes. Inside a Git repository, ignored files are skipped.</p>
+      </div>
+      <img class="shot" src="screenshots/search.png" alt="Content search with its options">
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p>Download the <code>.dmg</code> (Apple Silicon) and drag <strong>Cassetto</strong> into <strong>Applications</strong>. The app is not yet signed with an Apple Developer ID, so the first time macOS refuses to open it. To allow it:</p>
+    <ol>
+      <li>Open Cassetto once and dismiss the warning with <strong>Done</strong>.</li>
+      <li>Go to <strong>System Settings → Privacy &amp; Security</strong>, scroll down to <em>“Cassetto” was blocked…</em> and click <strong>Open Anyway</strong>.</li>
+    </ol>
+    <p>Or remove the quarantine flag from the Terminal:</p>
+    <pre>xattr -dr com.apple.quarantine /Applications/Cassetto.app</pre>
+    <p>After that it opens normally, and it updates itself. A Linux <code>.AppImage</code> is on the <a href="https://github.com/mkis78/cassetto/releases/latest">releases page</a> too.</p>
+  </section>
+
+  <section id="privacy">
+    <h2>Private by design</h2>
+    <p>Cassetto runs on your Mac and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. Updates are verified against the SHA-256 GitHub publishes. The interface runs sandboxed with no browser permissions, and the packaged app locks down Electron so no other program can borrow it to run code of its own.</p>
+  </section>
+
+  <footer>
+    <span>Cassetto · MIT License · English and Italian</span>
+    <span><a href="https://github.com/mkis78/cassetto">GitHub</a> · <a href="https://ko-fi.com/V2J029S4NZ">Buy me a coffee</a> · Made with <a class="claude" href="https://claude.com/claude-code">Claude</a></span>
+  </footer>
+</div>
+<script>
+  // point the button straight at the latest .dmg; the releases page stays as fallback
+  fetch('https://api.github.com/repos/mkis78/cassetto/releases/latest')
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(rel => {
+      const dmg = rel.assets.find(a => a.name.endsWith('.dmg'));
+      if (dmg) document.getElementById('download').href = dmg.browser_download_url;
+      document.getElementById('version').textContent = rel.tag_name;
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>

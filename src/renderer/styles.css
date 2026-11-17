@@ -515,7 +515,9 @@ svg.lucide { flex: none; vertical-align: -2px; }
 /* status bar at the foot of a files tile */
 .status-bar { display: flex; align-items: center; gap: 12px; min-height: 24px; padding: 0 10px; border-top: 1px solid var(--line); background: var(--bar); color: var(--muted); font: 11px system-ui, -apple-system, sans-serif; white-space: nowrap; }
 .status-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; overflow: hidden; text-overflow: ellipsis; }
-.status-left b { color: var(--fg-strong); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.status-left b { flex: none; max-width: 40%; color: var(--fg-strong); font-weight: 600; overflow: hidden; text-overflow: ellipsis; } /* the name at its own width (up to 40%): the rest gives way first */
+.status-left > :not(b) { flex: none; }
+.status-left > .status-when, .status-left > .status-tags { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* the date and the tags give way first */
 .status-left > * + *::before { content: '·'; margin-right: 10px; color: var(--dim); text-decoration: none; display: inline-block; }
 .status-link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
 .status-link:hover { text-decoration: underline; }

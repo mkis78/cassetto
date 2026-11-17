@@ -59,7 +59,7 @@ export default function StatusBar({ host, col, shown, hidden, picked }: { host: 
           ) : (
             <button className="status-link" onClick={() => weigh(path)}>{t('Calcola dimensione')}</button>
           ))}
-        {e.mtime !== undefined && <span>{t('modificato {when}', { when: when(e.mtime) })}</span>}
+        {e.mtime !== undefined && <span className="status-when">{t('modificato {when}', { when: when(e.mtime) })}</span>}
         {!!e.tags?.length && (
           <span className="status-tags">
             {e.tags.map(x => (

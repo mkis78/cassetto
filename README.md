@@ -4,59 +4,152 @@
 
 <h1 align="center">Cassetto</h1>
 
-<p align="center"><b>Un file manager per macOS, alternativo a Finder.</b></p>
+<p align="center">
+  <b>A file manager for macOS that does what the Finder won't.</b><br>
+  Tabs and side-by-side panels, empty files in one click, a Raycast-style action bar,<br>
+  Finder tags, fast search, a code editor and a terminal, all in one window.
+</p>
 
-## Cosa fa già
+<p align="center">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon-1d2027?logo=apple&logoColor=white">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-45-1d2027?logo=electron&logoColor=7daea3">
+  <img alt="Languages" src="https://img.shields.io/badge/UI-English%20%C2%B7%20Italiano-1d2027">
+</p>
 
-- **Tab e pannelli**: Cmd+T nuovo tab, trascina un tab sul bordo di un altro per affiancarli (doppio pannello), Cmd+] / Cmd+[ per passare dall'uno all'altro. Layout e cartelle tornano al riavvio.
-- **Quattro viste**: elenco (ordinabile per nome, dimensione, data), icone, colonne, galleria con miniature.
-- **Nuovo file vuoto** e nuova cartella, dalla barra o dal menu contestuale.
-- Rinomina (F2), duplica, copia/taglia/incolla (Cmd+C/X/V), trascina per spostare (Alt per copiare), Cestino, conflitti di nome gestiti.
-- **Anteprima** (spazio) di testo, markdown e immagini.
-- **Tag** del Finder: pallini colorati accanto ai nomi, sottomenu Tag (i sette colori e i tag personalizzati), Modifica tag… per nome e colore; condivisi con il Finder e Spotlight.
-- **Ricerca** per nome (`*.ts`, `src/**/*.tsx`), contenuto o tag (anche per colore) sotto la cartella aperta.
-- **Vai a file** (Cmd+P) e **comandi** (Cmd+Shift+P).
-- **Server SSH** (Cmd+K): sfoglia, copia, sposta ed elimina file remoti con gli host di `~/.ssh/config`.
-- **Editor** (CodeMirror 6): «Modifica nell'editor» dal menu di un file; evidenziazione per decine di linguaggi, Cmd+F, Cmd+S, più cursori. I file remoti si aprono qui.
-- **Terminale** (Cmd+Alt+T, o «Apri terminale qui» dal menu): una shell in un tab, nella cartella scelta; su un server SSH si apre lì.
+<p align="center">
+  <a href="#why-cassetto">Why</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#keyboard">Keyboard</a> ·
+  <a href="#development">Development</a>
+</p>
 
-## Lingue
+![Cassetto: a folder, a Markdown file with its preview and a photo gallery side by side](docs/screenshots/overview.png)
 
-Italiano e inglese: la lingua segue quella del Mac e si cambia in Impostazioni (si applica al riavvio). Nel codice ogni testo visibile passa da `t('…')` di `src/shared/i18n.ts`, con l'italiano come chiave e le variabili tra graffe (`t('{n} elementi', { n })`); le traduzioni stanno in `src/shared/locales/`. Per aggiungere una lingua basta un nuovo dizionario; `test/i18n.test.ts` fallisce se un testo resta senza traduzione.
+## Why Cassetto
 
-## Sviluppo
+The Finder is fine for looking at files and awkward for working with them. You cannot create an empty file. Two folders side by side means two windows to arrange by hand. Moving files between them is a drag across the screen. The search looks everywhere, or nowhere useful. And as soon as you want to change a line in a config file or run a command in a folder, you are off to another app.
+
+Cassetto keeps all of that in one window. You open folders in tabs, split them into panels and drag between them, and you create files and folders where you are. From the same place you search names, contents or tags, edit text and code, and open a terminal in any folder, on your Mac or on a server over SSH. Everything is a few keys away, through an action bar in the style of Raycast.
+
+### The name
+
+*Cassetto* (pronounced *kahs-SET-toh*) is Italian for **drawer**: the place where you put things away so you can find them again, each where it belongs. That is what the app is for: your files tidy and at hand, without hunting through windows to get to them.
+
+## Features
+
+### Tabs and panels
+
+- **Tabs**: Cmd+T or the **+** after the tabs opens a new one. Double-click a tab to rename it; right-click to give it a colour.
+- **Panels**: drag a tab onto the edge of another to split the window, or pick a ready-made arrangement from **Layout** in the top bar: one panel, two side by side or stacked, three columns, one large and two on the right, a 2×2 grid. Your tabs fill the cells in order.
+- **Saved layouts**: save the open tabs (folders, views, panel sizes) under a name and bring them back later from the same **Layout** menu.
+- Everything you leave open comes back when you reopen the app.
+
+### Files and folders
+
+- **Four views**: list (sortable by name, size, date), icons, columns and gallery, with thumbnails.
+- **Create** an empty file or a folder right where you are, from the **⋯** menu, the right-click menu or the action bar.
+- **Move and copy by dragging**, within a panel or from one panel to another (hold Option to copy). Cut, copy and paste with Cmd+X/C/V; duplicate; rename with F2. Name clashes ask what to do: replace, skip or keep both.
+- **Trash** for local files, with a clear warning when something can only be deleted for good.
+- **Preview** text, Markdown and images with the space bar.
+- **Status bar** at the foot of each panel: what the folder holds and how much it weighs, the selected file's kind, size and date, the total of a folder on request, and the free space on the disk.
+
+### Action bar
+
+![The action bar on a selected file](docs/screenshots/action-bar.png)
+
+**Ctrl+Space** opens a bar of everything you can do right now: actions on the selection, on the folder, the editor's commands, arrangements, saved layouts. Type a few letters to find one, or a file name to open it. If macOS already uses Ctrl+Space (for switching input source), Cassetto tells you and lets you record another shortcut in Settings.
+
+### Search
+
+![Content search with its options](docs/screenshots/search.png)
+
+- Search the open folder by **name** (`invoice`, `*.pdf`, `src/**/*.ts`), by **content**, or by **tag**.
+- Results stream in as they are found, with what you typed highlighted.
+- **Options**: case (automatic, match, ignore), subfolders on or off, whole word, regular expression, only some files (`*.md, docs/*.txt`), exclusions (`node_modules, *.log`) and how many results at most. Excluded folders are not even read.
+- Inside a Git repository, ignored files are skipped.
+
+### Finder tags
+
+Colour and name your files with the **Finder's own tags**: they are stored in the file the way the Finder stores them, so they show in the Finder and in Spotlight, and they follow the file wherever it goes. Right-click → **Tags** offers the seven colours and your own tags; **Edit Tags…** adds new ones by name and colour. Search by tag name or by colour ("red").
+
+### Editor
+
+Open any text file in a tab: an editor built on [CodeMirror 6](https://codemirror.net/), light and quick, with syntax highlighting for dozens of languages, find and replace, and Sublime Text's keys: Cmd+D next occurrence, Cmd+Ctrl+G all occurrences, Cmd+Shift+L one cursor per line, Cmd+Ctrl+↑↓ move lines, Cmd+Shift+D duplicate, Cmd+J join, F5 sort, Cmd+R go to a function or heading. Markdown files get a live preview beside the text and formatting keys (Cmd+B, Cmd+I, Cmd+E…). A dot on the tab marks unsaved changes; Cassetto asks before losing them and before overwriting a file changed on disk.
+
+### Terminal
+
+**Open Terminal Here** (Cmd+Alt+T) opens your own shell in a tab, in the folder you are looking at. In a panel on an SSH server, the terminal opens on that server, in the same folder.
+
+### SSH servers
+
+Cmd+K lists the hosts of your `~/.ssh/config`. A server's folders open in a tab like local ones: browse, preview, search, edit, copy, move and delete, with the same keys.
+
+### And also
+
+- **English and Italian**, following your Mac's language or chosen in Settings.
+- **Dark, light or system theme**, in Settings (Cmd+,).
+- **Updates**: the installed app checks GitHub for new releases, shows **↑ vX.Y.Z** in the top bar, and on a click downloads the new version, checks its SHA-256 against the one GitHub publishes, replaces itself and restarts.
+
+## Install
+
+Download the latest `.dmg` or `.zip` from [Releases](https://github.com/mkis78/cassetto/releases) (Apple Silicon). The app is not yet signed with an Apple Developer ID: the first time, right-click it and choose **Open**.
+
+## Keyboard
+
+| Where | Keys |
+|---|---|
+| Anywhere | Ctrl+Space action bar · Cmd+P go to a file · Cmd+Shift+P commands · Cmd+T new tab · Cmd+W close tab · Cmd+] / Cmd+[ next / previous tab · Cmd+Alt+T terminal here · Cmd+K SSH server · Cmd+, settings |
+| Files | ↑↓ (←→ in icons, gallery and columns) select · Return or Cmd+↓ open · Backspace or Cmd+↑ enclosing folder · Space preview · F2 rename · Cmd+C/X/V copy, cut, paste · Cmd+Backspace move to Trash · Cmd+A select all · Cmd+F search · a letter jumps to the next name |
+| Editor | Cmd+S save · Cmd+F find · Cmd+D next occurrence · Cmd+Ctrl+G all occurrences · Cmd+Shift+L split into lines · Cmd+Ctrl+↑↓ move line · Cmd+Shift+D duplicate line · Cmd+Shift+K delete line · Cmd+J join lines · F5 sort lines · Cmd+/ comment · Cmd+K Cmd+U/L upper / lower case · Ctrl+G go to line · Cmd+R go to symbol · Alt+Z word wrap |
+| Markdown | Cmd+Shift+V preview · Cmd+B bold · Cmd+I italic · Cmd+E code · Cmd+Alt+K link · Cmd+Alt+1/2/3 headings |
+| Terminal | Cmd+F search the output · Cmd+C/V copy, paste |
+
+## Privacy and security
+
+Cassetto runs on your Mac and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. The interface is served from its own `app://` scheme and cannot read files on its own; it runs sandboxed, with no browser permissions (camera, microphone, location…). The packaged app turns off Electron's `RunAsNode`, `NODE_OPTIONS` and `--inspect`, and checks the integrity of its own code at start, so no other program can borrow it, or the permissions you give it, to run code of its own.
+
+## Development
 
 Node.js LTS.
 
 ```sh
-npm install
-npm run dev      # hot reload; main e preload si ricompilano e l'app si riavvia
+npm install      # also rebuilds node-pty for Electron
+npm run dev      # hot reload; main and preload rebuild and the app restarts
 npm test         # vitest
-npm run dist     # dist/Cassetto-<version>-arm64.dmg
+npm run dist     # dist/Cassetto-<version>-arm64.dmg and dist/mac-arm64/Cassetto.app
 ```
 
-### Aggiornamenti e rilasci
+### Releasing
 
-L'app installata controlla all'avvio, ogni 6 ore e da *Cassetto → Controlla aggiornamenti…* l'ultima release di GitHub. Se è più recente compare **↑ vX.Y.Z** nella barra in alto: un clic scarica lo zip, ne verifica lo SHA-256 con quello pubblicato da GitHub, sostituisce l'app e la riavvia. Serve che il repository sia pubblico.
-
-Per pubblicare una versione, dal ramo `main` pulito:
+From a clean `main`:
 
 ```sh
-npm run release:patch   # 0.1.0 → 0.1.1 (correzioni)
-npm run release:minor   # 0.1.0 → 0.2.0 (novità)
+npm run release:patch   # 0.1.0 → 0.1.1, fixes
+npm run release:minor   # 0.1.0 → 0.2.0, features
 npm run release:major   # 0.1.0 → 1.0.0
 ```
 
-Il comando esegue i test, alza la versione in `package.json`, crea il commit e il tag `vX.Y.Z` e li invia: `.github/workflows/release.yml` compila `.dmg` e `.zip` per macOS e `.AppImage` per Linux e li allega alla release.
+The command runs the tests, bumps the version in `package.json`, commits, tags `vX.Y.Z` and pushes. `.github/workflows/release.yml` then builds the macOS `.dmg` and `.zip` and the Linux `.AppImage` and attaches them to the release, where installed apps find them.
+
+### Languages
+
+Every visible text goes through `t('…')` from `src/shared/i18n.ts`, with the Italian as the key and variables in braces: `t('{n} elementi', { n })`. Translations live in `src/shared/locales/`. Adding a language takes one more dictionary; `test/i18n.test.ts` fails if any text is left without its translation.
+
+### Project layout
 
 ```
-src/main/      processo principale: elenco, anteprima, operazioni sui file, ricerca, ssh, stato
-src/preload/   ponte IPC
-src/renderer/  React: tab dockview, FilesTile, ricerca, palette, dialoghi
-src/shared/    logica pura: tipi, menu, ordinamento, navigazione liste, formati
+src/main/      Electron main process: listing, preview, file operations, search, Finder tags, ssh,
+               terminals (node-pty), updates, the app:// scheme, menus, state
+src/preload/   IPC bridge between main and the interface
+src/renderer/  React interface: tabs and panels (dockview), files, search, editor (CodeMirror),
+               terminal (xterm.js), action bar, dialogs
+src/shared/    Pure logic shared by both: types, menus, search options, tags format, status texts,
+               arrangements, languages
 test/          Vitest
+docs/          Screenshots
 ```
 
 ## Credits
 
-Ideato da Marco Pennisi e costruito con [Claude](https://claude.com/claude-code). Basato su [Electron](https://www.electronjs.org/), [React](https://react.dev/), [dockview](https://dockview.dev/), [Lucide](https://lucide.dev/).
+Designed by Marco Pennisi. Built on [Electron](https://www.electronjs.org/), [React](https://react.dev/), [dockview](https://dockview.dev/), [CodeMirror](https://codemirror.net/), [xterm.js](https://xtermjs.org/) and [node-pty](https://github.com/microsoft/node-pty), [marked](https://marked.js.org/) and [Lucide](https://lucide.dev/) icons.

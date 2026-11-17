@@ -11,7 +11,7 @@ import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { baseName, openEditor, openFolder, openTerminal, setTileActions } from './tiles'
+import { baseName, CHANGED, changed, runUndo, openEditor, openFolder, openTerminal, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -41,9 +41,6 @@ let clip: { host: string | null; paths: string[]; cut: boolean } | null = null
 // what a drag carries: the host and the paths; also kept here, since a dragover cannot read the data, only its types
 const DND = 'application/x-cassetto-files'
 let dragging: { host: string | null; paths: string[] } | null = null
-// a tile changed these folders: the other tiles showing one of them list it again
-const CHANGED = 'cassetto:changed'
-const changed = (from: string, dirs: string[]) => window.dispatchEvent(new CustomEvent(CHANGED, { detail: { from, dirs } }))
 type Editing = { dir: string; kind: 'newFile' | 'newFolder' | 'rename'; name: string; from?: string; error?: string }
 
 const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1)
@@ -427,6 +424,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const cmd = e.metaKey || e.ctrlKey
     if (key === 'F2' && sel) return void (e.preventDefault(), startRename(sel.path))
     if ((cmd && key === 'Backspace') || key === 'Delete') return void (e.preventDefault(), askDelete(chosen()))
+    if (cmd && !e.shiftKey && key.toLowerCase() === 'z') return void (e.preventDefault(), runUndo())
     if (cmd && key.toLowerCase() === 'a') return void (e.preventDefault(), selectAll())
     if (cmd && !e.shiftKey && ['c', 'x', 'v'].includes(key.toLowerCase())) {
       e.preventDefault()

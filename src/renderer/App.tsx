@@ -8,10 +8,10 @@ import { destroyTerminal } from './terminals'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
-import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, X } from 'lucide-react'
+import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, focusTile, openFolder, openTerminal, tileActions, tileFolder, whereOf } from './tiles'
+import { closeTiles, cycleTile, focusTile, openFolder, openTerminal, runUndo, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
@@ -34,6 +34,8 @@ export default function App() {
   const [sshDialog, setSshDialog] = useState(false)
   const [palette, setPalette] = useState<{ mode: 'files' | 'commands' | 'bar' } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [undoLabel, setUndoLabel] = useState<string | null>(null) // asked for when the bar opens; paletteActions is synchronous
+  const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null)
   // a newer release, offered in the top bar; while it installs, a banner says how far it is
   const [newVersion, setNewVersion] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(null)
@@ -59,6 +61,15 @@ export default function App() {
   useEffect(() => void window.api.loadState().then(s => (setLang(resolveLang(s.settings?.language, navigator.language)), setState(s))), [])
   useEffect(() => applySettings(state?.settings), [state?.settings])
   // at start and after each change: warn when macOS (or Raycast) keeps the bar's shortcut for itself
+  useEffect(() => {
+    if (palette?.mode === 'bar') window.api.undoLabel().then(setUndoLabel)
+  }, [palette?.mode])
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const f = (e: Event) => (setToast((e as CustomEvent).detail), clearTimeout(timer), (timer = setTimeout(() => setToast(null), 3000)))
+    window.addEventListener('cassetto:toast', f)
+    return () => (window.removeEventListener('cassetto:toast', f), clearTimeout(timer))
+  }, [])
   const bar = state?.settings?.barShortcut ?? DEFAULT_BAR
   useEffect(() => {
     if (!state) return
@@ -201,6 +212,7 @@ export default function App() {
     const p = active()
     const group = t('Generali')
     const general: Command[] = [
+      ...(undoLabel ? [{ label: t('Annulla: {label}', { label: undoLabel }), hint: 'Cmd+Z', run: runUndo, icon: Undo2 }] : []),
       { label: t('Nuovo tab'), hint: 'Cmd+T', run: newTab, icon: PanelTopOpen },
       { label: t('Apri cartella…'), run: pick, icon: FolderOpen },
       { label: t('Nuovo terminale qui'), hint: 'Cmd+Alt+T', run: newTerminal, icon: SquareTerminal },
@@ -257,6 +269,7 @@ export default function App() {
           onClose={() => (setPalette(null), focusTile(active()))}
         />
       )}
+      {toast && <div className={'toast' + (toast.error ? ' error' : '')} role={toast.error ? 'alert' : 'status'}>{toast.text}</div>}
       {settingsOpen && <SettingsDialog settings={{ ...DEFAULT_SETTINGS, ...state.settings }} onChange={settings => update(s => ({ ...s, settings }))} onClose={() => setSettingsOpen(false)} />}
       {saving && (
         <SaveLayoutDialog

@@ -1,5 +1,7 @@
 // English for every text the app shows, keyed by its Italian (see shared/i18n). test/i18n.test.ts checks none is missing.
 export const EN: Record<string, string> = {
+  "Annullato: {label}": "Undone: {label}",
+  "Annulla: {label}": "Undo: {label}",
   "Copiato, ma l'originale non è stato spostato nel Cestino: {error}": "Copied, but the original was not moved to the Trash: {error}",
   "Sul server non c'è un Cestino": "The server has no Trash",
   "{error} (esito incerto: aggiorna per vedere cosa è cambiato)": "{error} (outcome uncertain: refresh to see what changed)",

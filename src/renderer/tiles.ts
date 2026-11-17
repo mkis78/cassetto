@@ -8,6 +8,19 @@ const actions = new Map<string, () => Command[]>()
 export const setTileActions = (id: string, f: () => Command[]) => (actions.set(id, f), () => void actions.delete(id))
 export const tileActions = (id: string) => actions.get(id)
 
+// a tile changed these folders: the other tiles showing one of them list it again
+export const CHANGED = 'cassetto:changed'
+export const changed = (from: string, dirs: string[]) => window.dispatchEvent(new CustomEvent(CHANGED, { detail: { from, dirs } }))
+
+// undo the last file operation; App shows the outcome as a toast
+export async function runUndo(): Promise<void> {
+  const r = await window.api.undo()
+  if (!r) return
+  changed('undo', r.dirs)
+  const text = r.failed.length ? r.failed.map(f => `${f.path}: ${f.error}`).join('\n') : t('Annullato: {label}', { label: r.label })
+  window.dispatchEvent(new CustomEvent('cassetto:toast', { detail: { text, error: r.failed.length > 0 } }))
+}
+
 export const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p
 
 // a folder view: a new tab next to the active one ('within'), or a panel beside it

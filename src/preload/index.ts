@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppState, FileOp, ListResult, OpResult, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, WriteResult } from '../shared/types'
+import type { AppState, FileOp, ListResult, OpResult, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, WriteResult } from '../shared/types'
 import type { MenuItem } from '../shared/menus'
 import type { Disk } from '../shared/status'
 import type { Tag } from '../shared/tags'
@@ -54,6 +54,8 @@ const api = {
   onUpdateStatus: listen<[UpdateStatus]>('update:status'),
   onUpdateFound: listen<[string]>('update:found'),
   editTags: (paths: string[], change: { add?: Tag[]; remove?: string[] }): Promise<OpResult> => ipcRenderer.invoke('tags:edit', paths, change),
+  undo: (): Promise<UndoResult> => ipcRenderer.invoke('files:undo'),
+  undoLabel: (): Promise<string | null> => ipcRenderer.invoke('files:undoLabel'),
   fileOp: (host: string | null, op: FileOp): Promise<OpResult> => ipcRenderer.invoke('files:op', host, op),
   shortcutConflict: (shortcut: string): Promise<string | null> => ipcRenderer.invoke('shortcut:conflict', shortcut),
   openPath: (p: string): Promise<string> => ipcRenderer.invoke('openPath', p),

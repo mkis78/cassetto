@@ -433,4 +433,8 @@ export const EN: Record<string, string> = {
   "Solo le cartelle vanno nei preferiti": "Only folders can be favourites",
   "Barra laterale: stile preferiti": "Sidebar: favourites style",
   "Tessere": "Tiles",
+  "Apri con": "Open With",
+  "Apri con {name}": "Open with {name}",
+  "Altra app…": "Other app…",
+  "Applicazioni": "Applications",
 }

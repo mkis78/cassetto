@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppState, FileOp, ListResult, OpResult, Place, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, Volume, WriteResult } from '../shared/types'
+import type { AppInfo, AppState, FileOp, ListResult, OpResult, Place, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, Volume, WriteResult } from '../shared/types'
 import type { MenuItem } from '../shared/menus'
 import type { Disk } from '../shared/status'
 import type { Tag } from '../shared/tags'
@@ -60,7 +60,10 @@ const api = {
   undoLabel: (): Promise<string | null> => ipcRenderer.invoke('files:undoLabel'),
   fileOp: (host: string | null, op: FileOp): Promise<OpResult> => ipcRenderer.invoke('files:op', host, op),
   shortcutConflict: (shortcut: string): Promise<string | null> => ipcRenderer.invoke('shortcut:conflict', shortcut),
-  openPath: (p: string): Promise<string> => ipcRenderer.invoke('openPath', p),
+  appsFor: (paths: string[]): Promise<AppInfo[]> => ipcRenderer.invoke('openWith:apps', paths),
+  openWith: (appId: string, paths: string[]): Promise<string | null> => ipcRenderer.invoke('openWith:open', appId, paths),
+  pickApp: (paths: string[]): Promise<string | null> => ipcRenderer.invoke('openWith:pick', paths),
+  openPath:(p: string): Promise<string> => ipcRenderer.invoke('openPath', p),
   homeDir: (): string => ipcRenderer.sendSync('homeDir'),
   onOpenSettings: listen<[]>('settings:open'),
   onOpenSsh: listen<[]>('ssh:open'),

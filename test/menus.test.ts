@@ -13,6 +13,13 @@ test('files menu depends on what was clicked', () => {
   expect(find(filesMenu({ target: 'background', remote: false, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
 })
 
+test('open with submenu, local files only', () => {
+  const sub = filesMenu({ target: 'file', remote: false, openWith: [{ id: 'a', name: 'A' }] }).find(i => i.label === 'Apri con')
+  expect(ids(sub ? [sub] : [])).toEqual(['Apri con', 'openWith:0', 'openWith:other'])
+  expect(ids(filesMenu({ target: 'file', remote: false, openWith: [] }))).toContain('openWith:other')
+  expect(ids(filesMenu({ target: 'file', remote: true, openWith: [{ id: 'a', name: 'A' }] }))).not.toContain('Apri con')
+})
+
 test('favourite menu', () => {
   expect(ids(favouriteMenu({}))).toEqual(['rename', 'Colore', 'color:', 'color:red', 'color:yellow', 'color:green', 'color:teal', 'color:blue', 'color:purple', 'remove'])
   expect(find(favouriteMenu({ color: 'red' }), 'color:red')?.label).toBe('✓ Rosso')

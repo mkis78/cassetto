@@ -9,6 +9,7 @@ import type { AppState, FileOp, Place, SearchHit, SearchQuery, Trashed, UndoResu
 import { runOpLocal, runOpRemote } from './fileOps'
 import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
+import { appsFor, openWith } from './platform/openWith'
 import { ejectVolume, listVolumes } from './platform/volumes'
 import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
@@ -64,6 +65,13 @@ handle('pickFolder', async (defaultPath?: string) => {
   const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory'], ...(typeof defaultPath === 'string' && { defaultPath }) })
   return r.canceled ? null : r.filePaths[0]
 })
+handle('openWith:apps', (paths: string[]) => appsFor(paths))
+handle('openWith:open', (appId: string, paths: string[]) => openWith(appId, paths))
+handle('openWith:pick', async (paths: string[]) => {
+  const mac = process.platform === 'darwin'
+  const r = await dialog.showOpenDialog(win!, { defaultPath: mac ? '/Applications' : '/usr/share/applications', properties: ['openFile'], filters: [{ name: t('Applicazioni'), extensions: [mac ? 'app' : 'desktop'] }] })
+  return r.canceled ? null : openWith(r.filePaths[0], paths)
+})
 handle('state:load', () => loadState(stateFile()))
 handle('ssh:hosts', () => listSshHosts())
 // a filled circle for a menu item, 12pt at 2x, edges antialiased by distance from the centre
@@ -82,12 +90,12 @@ function dotIcon(hex: string, hollow = false): Electron.NativeImage | undefined 
 }
 
 // a menu icon drawn by the renderer: a PNG at 2x, nothing else; a template, so macOS colours it
-function menuImage(dataUrl: string): Electron.NativeImage | undefined {
+function menuImage(dataUrl: string, template = true): Electron.NativeImage | undefined {
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl)
   if (!m) return undefined
   const img = nativeImage.createFromBuffer(Buffer.from(m[1], 'base64'), { scaleFactor: 2 })
   if (img.isEmpty()) return undefined
-  img.setTemplateImage(true)
+  img.setTemplateImage(template) // app icons keep their colours
   return img
 }
 
@@ -102,7 +110,7 @@ handle(
         list.map(i =>
           i.separator
             ? { type: 'separator' }
-            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : i.image ? menuImage(i.image) : undefined, ...(i.checked !== undefined && { type: 'checkbox' as const, checked: i.checked }), click: i.id ? () => pick(i.id!) : undefined }
+            : { label: i.label, enabled: i.enabled ?? true, accelerator: i.accelerator, registerAccelerator: false, submenu: i.submenu && build(i.submenu), icon: i.dot ? dotIcon(i.dot, i.hollow) : i.image ? menuImage(i.image, !i.id?.startsWith('openWith:')) : undefined, ...(i.checked !== undefined && { type: 'checkbox' as const, checked: i.checked }), click: i.id ? () => pick(i.id!) : undefined }
         )
       Menu.buildFromTemplate(build(items)).popup({ window: win!, ...(at && { x: at.x, y: at.y }), callback: () => setTimeout(() => pick(null), 50) })
     })

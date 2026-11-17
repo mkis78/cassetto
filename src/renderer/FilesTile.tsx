@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
-import type { DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
+import type { AppInfo, DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
 import { ArrowUp, ChevronDown, FileCode, Tags as TagsIcon, ScanSearch, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, Star, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
 import { formatSize, imageType } from '../shared/format'
 import { ICON } from './icons'
@@ -73,6 +73,15 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   // the selection follows `sel` unless `sel` is already part of it
   useEffect(() => setPicked(p => (!sel ? new Set() : p.has(sel.path) ? p : new Set([sel.path]))), [sel])
   useEffect(() => void api.updateParameters({ sort }), [sort])
+  // the apps for the selection, for the action bar (local files only; the main process caches per type)
+  const [barApps, setBarApps] = useState<{ key: string; apps: AppInfo[] }>({ key: '', apps: [] })
+  const pickedKey = host || sel?.dir ? '' : [...picked].join('\n')
+  useEffect(() => {
+    if (!pickedKey) return setBarApps({ key: '', apps: [] })
+    let live = true
+    window.api.appsFor(pickedKey.split('\n')).then(apps => live && setBarApps({ key: pickedKey, apps }))
+    return () => void (live = false)
+  }, [pickedKey])
 
   // reopen with the same view after a restart (dockview merges these into the saved params)
   useEffect(() => void api.updateParameters({ hidden, preview: showPreview, query: q, view }), [hidden, showPreview, q, view])
@@ -479,10 +488,13 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const items = entry ? chosen(full) : []
     const known = knownTags(seenTags())
     const tags = entry && !host ? tagsMenu({ known, has: tagState(items), dots: TAG_HEX.map((h, i) => h || (i ? '' : '#8e8e93')) }) : undefined
+    const apps = entry && !entry.dir && !host ? await window.api.appsFor(items) : undefined
     const choice = await popup(
-      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags })
+      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags, openWith: apps })
     )
     if (!choice) return
+    if (choice === 'openWith:other') return void window.api.pickApp(items).then(err => err && setNotice(err))
+    if (choice.startsWith('openWith:')) return void window.api.openWith(apps![Number(choice.slice(9))].id, items).then(err => err && setNotice(err))
     if (choice === 'newFile' || choice === 'newFolder') return startCreate(choice, full)
     if (choice === 'paste') return paste(full)
     if (choice === 'rename') return startRename(full)
@@ -620,6 +632,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       ? []
       : [
           ...(one ? [{ label: t('Apri {name}', { name: what }), hint: t('Invio'), run: () => open(one, oneDir), icon: ExternalLink }] : []),
+          ...(barApps.key && barApps.key === items.join('\n') ? barApps.apps.map(a => ({ label: t('Apri con {name}', { name: a.name }), run: () => void window.api.openWith(a.id, items).then(err => err && setNotice(err)), icon: ExternalLink })) : []),
           ...(one && oneDir ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
           ...(one && oneDir ? [{ label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, one), icon: Star }] : []),
           ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),

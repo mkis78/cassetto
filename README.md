@@ -5,13 +5,18 @@
 <h1 align="center">Cassetto</h1>
 
 <p align="center">
-  <b>A file manager for macOS that does what the Finder won't.</b><br>
+  <b>A file manager for macOS and Linux, for days spent working with files.</b><br>
   Tabs and side-by-side panels, empty files in one click, a Raycast-style action bar,<br>
-  Finder tags, fast search, a code editor and a terminal, all in one window.
+  fast search, a code editor and a terminal, all in one window.
+</p>
+
+<p align="center">
+  <a href="https://mkis78.github.io/cassetto/"><b>mkis78.github.io/cassetto</b></a>
 </p>
 
 <p align="center">
   <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon-1d2027?logo=apple&logoColor=white">
+  <img alt="Linux" src="https://img.shields.io/badge/Linux-AppImage%20x64-1d2027?logo=linux&logoColor=white">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-45-1d2027?logo=electron&logoColor=7daea3">
   <img alt="Languages" src="https://img.shields.io/badge/UI-English%20%C2%B7%20Italiano-1d2027">
   <a href="https://claude.com/claude-code"><img alt="Made with Claude" src="https://img.shields.io/badge/Made%20with-Claude-1d2027?logo=claude&logoColor=D97757"></a>
@@ -29,9 +34,11 @@
 
 ## Why Cassetto
 
-The Finder is fine for looking at files and awkward for working with them. You cannot create an empty file. Two folders side by side means two windows to arrange by hand. Moving files between them is a drag across the screen. The search looks everywhere, or nowhere useful. And as soon as you want to change a line in a config file or run a command in a folder, you are off to another app.
+The file manager that comes with your system is great for browsing. Cassetto is meant for the days when you work with files for hours: moving them between folders, creating new ones, searching inside them, changing a line in a config file, running a command where they live. It brings those steps together in one window, so you don't have to switch between apps.
 
-Cassetto keeps all of that in one window. You open folders in tabs, split them into panels and drag between them, and you create files and folders where you are. From the same place you search names, contents or tags, edit text and code, and open a terminal in any folder, on your Mac or on a server over SSH. Everything is a few keys away, through an action bar in the style of Raycast.
+You open folders in tabs, split them into panels and drag between them, and you create files and folders where you are. From the same place you search names, contents or tags, edit text and code, and open a terminal in any folder, on your computer or on a server over SSH. Everything is a few keys away, through an action bar in the style of Raycast.
+
+Cassetto works alongside the Finder or your Linux file manager rather than replacing them: same files, same Trash and, on macOS, the same tags.
 
 ### The name
 
@@ -70,7 +77,7 @@ Cassetto keeps all of that in one window. You open folders in tabs, split them i
 - **Options**: case (automatic, match, ignore), subfolders on or off, whole word, regular expression, only some files (`*.md, docs/*.txt`), exclusions (`node_modules, *.log`) and how many results at most. Excluded folders are not even read.
 - Inside a Git repository, ignored files are skipped.
 
-### Finder tags
+### Finder tags (macOS)
 
 Colour and name your files with the **Finder's own tags**: they are stored in the file the way the Finder stores them, so they show in the Finder and in Spotlight, and they follow the file wherever it goes. Right-click → **Tags** offers the seven colours and your own tags; **Edit Tags…** adds new ones by name and colour. Search by tag name or by colour ("red").
 
@@ -88,13 +95,16 @@ Cmd+K lists the hosts of your `~/.ssh/config`. A server's folders open in a tab 
 
 ### And also
 
-- **English and Italian**, following your Mac's language or chosen in Settings.
+- **macOS and Linux**: the same app on both, with Linux-style shortcuts on Linux (see [Keyboard](#keyboard)).
+- **English and Italian**, following your system's language or chosen in Settings.
 - **Dark, light or system theme**, in Settings (Cmd+,).
 - **Updates**: the installed app checks GitHub for new releases, shows **↑ vX.Y.Z** in the top bar, and on a click downloads the new version, checks its SHA-256 against the one GitHub publishes, replaces itself and restarts.
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/mkis78/cassetto/releases) (Apple Silicon) and drag **Cassetto** into **Applications**.
+### macOS
+
+Download the latest `.dmg` from [Releases](https://github.com/mkis78/cassetto/releases/latest) (Apple Silicon) and drag **Cassetto** into **Applications**.
 
 The app is not yet signed with an Apple Developer ID, so the first time macOS refuses to open it. To allow it:
 
@@ -109,7 +119,21 @@ xattr -dr com.apple.quarantine /Applications/Cassetto.app
 
 After that it opens normally, and it updates itself.
 
+### Linux
+
+Download the latest `.AppImage` (x64) from [Releases](https://github.com/mkis78/cassetto/releases/latest), make it executable and run it:
+
+```sh
+chmod +x Cassetto-*.AppImage
+./Cassetto-*.AppImage
+```
+
+It updates itself like on macOS. Finder tags are a macOS feature, so they are not available on Linux; everything else works the same.
+
 ## Keyboard
+
+The keys below are for macOS. On Linux, Ctrl takes the place of Cmd; the window-wide ones (new and close tab, next and previous tab, go to a file, SSH server) and the terminal's copy and paste take Ctrl+Shift, so plain Ctrl stays free for the editor and the shell. The app's menus show the exact keys.
+
 
 | Where | Keys |
 |---|---|
@@ -121,7 +145,7 @@ After that it opens normally, and it updates itself.
 
 ## Privacy and security
 
-Cassetto runs on your Mac and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. The interface is served from its own `app://` scheme and cannot read files on its own; it runs sandboxed, with no browser permissions (camera, microphone, location…). The packaged app turns off Electron's `RunAsNode`, `NODE_OPTIONS` and `--inspect`, and checks the integrity of its own code at start, so no other program can borrow it, or the permissions you give it, to run code of its own.
+Cassetto runs on your computer and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. The interface is served from its own `app://` scheme and cannot read files on its own; it runs sandboxed, with no browser permissions (camera, microphone, location…). The packaged app turns off Electron's `RunAsNode`, `NODE_OPTIONS` and `--inspect`, and checks the integrity of its own code at start, so no other program can borrow it, or the permissions you give it, to run code of its own.
 
 ## Development
 
@@ -161,12 +185,12 @@ src/renderer/  React interface: tabs and panels (dockview), files, search, edito
 src/shared/    Pure logic shared by both: types, menus, search options, tags format, status texts,
                arrangements, languages
 test/          Vitest
-docs/          Screenshots
+docs/          Website (GitHub Pages) and screenshots
 ```
 
 ## Support Cassetto
 
-Cassetto is built at night, fuelled entirely by coffee. Every cup you buy is another sleepless night spent adding the things the Finder forgot. My sleep schedule is already ruined: you might as well make it worth it.
+Cassetto is built at night, fuelled entirely by coffee. Every cup you buy is another sleepless night spent on the next feature. My sleep schedule is already ruined: you might as well make it worth it.
 
 [![Buy me a coffee on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V2J029S4NZ)
 

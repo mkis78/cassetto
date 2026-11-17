@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cassetto · a file manager for macOS</title>
-<meta name="description" content="A file manager for macOS that does what the Finder won't: tabs and split panels, a Raycast-style action bar, Finder tags, fast search, a code editor and a terminal in one window.">
+<title>Cassetto · a file manager for macOS and Linux</title>
+<meta name="description" content="A file manager for macOS and Linux with tabs and split panels, a Raycast-style action bar, fast search, a code editor and a terminal in one window.">
 <meta property="og:title" content="Cassetto">
-<meta property="og:description" content="A file manager for macOS that does what the Finder won't.">
+<meta property="og:description" content="A file manager for macOS and Linux, for days spent working with files.">
 <meta property="og:image" content="https://mkis78.github.io/cassetto/screenshots/overview.png">
 <link rel="icon" href="icon.png">
 <style>
@@ -76,6 +76,7 @@
   kbd { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--raised); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--fg); }
   pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
   ol { padding-left: 22px; color: var(--fg2); }
+  #install h3 { margin-top: 28px; }
   ol li { margin-bottom: 6px; }
 
   footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; }
@@ -95,22 +96,23 @@
 
   <header class="hero">
     <img class="icon" src="icon.png" alt="Cassetto icon">
-    <h1>The file manager the Finder&nbsp;isn’t.</h1>
-    <p class="lead">Tabs and side-by-side panels, empty files in one click, a Raycast-style action bar, Finder tags, fast search, a code editor and a terminal, all in one window.</p>
+    <h1>Your files, your tools, one&nbsp;window.</h1>
+    <p class="lead">A file manager for macOS and Linux, for days spent working with files: tabs and side-by-side panels, a Raycast-style action bar, fast search, a code editor and a terminal, all in one place.</p>
     <div class="cta">
       <a class="btn main" id="download" href="https://github.com/mkis78/cassetto/releases/latest">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
-        Download for Mac
+        Download for macOS
       </a>
-      <a class="btn ghost" href="https://github.com/mkis78/cassetto">View on GitHub</a>
+      <a class="btn ghost" id="download-linux" href="https://github.com/mkis78/cassetto/releases/latest">Download for Linux</a>
     </div>
-    <p class="meta"><span id="version">Latest release</span> · Apple Silicon · free and open source (MIT)</p>
+    <p class="meta"><span id="version">Latest release</span> · macOS on Apple Silicon · Linux AppImage x64 · free and open source (MIT)</p>
   </header>
 
   <img class="shot hero-shot" src="screenshots/overview.png" alt="Cassetto: a folder, a Markdown file with its preview and a photo gallery side by side">
 
   <section class="why">
     <h2>Why Cassetto</h2>
+    <p>The file manager that comes with your system is great for browsing. Cassetto is meant for the days when you work with files for hours: moving them between folders, creating new ones, searching inside them, changing a line in a config file, running a command where they live. It brings those steps together in one window, and works alongside the Finder or your Linux file manager rather than replacing them.</p>
     <p><em>Cassetto</em> (pronounced <em>kahs-SET-toh</em>) is Italian for <strong>drawer</strong>: the place where you put things away so you can find them again, each where it belongs. That is what the app is for: your files tidy and at hand, without hunting through windows to get to them.</p>
   </section>
 
@@ -119,7 +121,7 @@
     <div class="grid">
       <div class="card"><h3>Tabs and panels</h3><p>Rename and colour tabs, drag one onto another to split the window, or pick a ready-made arrangement. Save layouts and bring them back later.</p></div>
       <div class="card"><h3>Four views</h3><p>List, icons, columns and gallery with thumbnails. Create an empty file or folder right where you are. Preview with the space bar.</p></div>
-      <div class="card"><h3>Finder tags</h3><p>The Finder’s own tags, stored the way the Finder stores them: they show in the Finder and in Spotlight and follow the file wherever it goes.</p></div>
+      <div class="card"><h3>Finder tags</h3><p>On macOS, the Finder’s own tags, stored the way the Finder stores them: they show in the Finder and in Spotlight and follow the file wherever it goes.</p></div>
       <div class="card"><h3>Code editor</h3><p>CodeMirror 6 with syntax highlighting, Sublime Text’s keys and a live Markdown preview beside the text.</p></div>
       <div class="card"><h3>Terminal</h3><p><kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> opens your shell in a tab, in the folder you are looking at. On an SSH server, it opens on that server.</p></div>
       <div class="card"><h3>SSH servers</h3><p><kbd>Cmd</kbd>+<kbd>K</kbd> lists the hosts in your <code>~/.ssh/config</code>. Remote folders work like local ones, with the same keys.</p></div>
@@ -148,6 +150,7 @@
 
   <section id="install">
     <h2>Install</h2>
+    <h3>macOS</h3>
     <p>Download the <code>.dmg</code> (Apple Silicon) and drag <strong>Cassetto</strong> into <strong>Applications</strong>. The app is not yet signed with an Apple Developer ID, so the first time macOS refuses to open it. To allow it:</p>
     <ol>
       <li>Open Cassetto once and dismiss the warning with <strong>Done</strong>.</li>
@@ -155,26 +158,33 @@
     </ol>
     <p>Or remove the quarantine flag from the Terminal:</p>
     <pre>xattr -dr com.apple.quarantine /Applications/Cassetto.app</pre>
-    <p>After that it opens normally, and it updates itself. A Linux <code>.AppImage</code> is on the <a href="https://github.com/mkis78/cassetto/releases/latest">releases page</a> too.</p>
+    <p>After that it opens normally, and it updates itself.</p>
+    <h3>Linux</h3>
+    <p>Download the <code>.AppImage</code> (x64), make it executable and run it:</p>
+    <pre>chmod +x Cassetto-*.AppImage
+./Cassetto-*.AppImage</pre>
+    <p>It updates itself like on macOS. Everything works the same except Finder tags, which are a macOS feature. Shortcuts follow Linux habits: Ctrl in place of Cmd, and Ctrl+Shift for the window-wide ones.</p>
   </section>
 
   <section id="privacy">
     <h2>Private by design</h2>
-    <p>Cassetto runs on your Mac and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. Updates are verified against the SHA-256 GitHub publishes. The interface runs sandboxed with no browser permissions, and the packaged app locks down Electron so no other program can borrow it to run code of its own.</p>
+    <p>Cassetto runs on your computer and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. Updates are verified against the SHA-256 GitHub publishes. The interface runs sandboxed with no browser permissions, and the packaged app locks down Electron so no other program can borrow it to run code of its own.</p>
   </section>
 
   <footer>
-    <span>Cassetto · MIT License · English and Italian</span>
+    <span>Cassetto · macOS and Linux · MIT License · English and Italian</span>
     <span><a href="https://github.com/mkis78/cassetto">GitHub</a> · <a href="https://ko-fi.com/V2J029S4NZ">Buy me a coffee</a> · Made with <a class="claude" href="https://claude.com/claude-code">Claude</a></span>
   </footer>
 </div>
 <script>
-  // point the button straight at the latest .dmg; the releases page stays as fallback
+  // point the buttons straight at the latest .dmg and .AppImage; the releases page stays as fallback
   fetch('https://api.github.com/repos/mkis78/cassetto/releases/latest')
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(rel => {
       const dmg = rel.assets.find(a => a.name.endsWith('.dmg'));
+      const appImage = rel.assets.find(a => a.name.endsWith('.AppImage'));
       if (dmg) document.getElementById('download').href = dmg.browser_download_url;
+      if (appImage) document.getElementById('download-linux').href = appImage.browser_download_url;
       document.getElementById('version').textContent = rel.tag_name;
     })
     .catch(() => {});

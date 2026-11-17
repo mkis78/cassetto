@@ -2,9 +2,17 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from '../src/main/fileOps'
 import type { FileOp, OpResult } from '../src/shared/types'
+
+// another volume, simulated: rename and link fail with EXDEV while `exdev` is on
+let exdev = false
+vi.mock('node:fs/promises', async orig => {
+  const fs = await orig<typeof import('node:fs/promises')>()
+  const cross = <A extends unknown[]>(f: (...a: A) => Promise<void>) => (...a: A) => (exdev ? Promise.reject(Object.assign(new Error('EXDEV'), { code: 'EXDEV' })) : f(...a))
+  return { ...fs, rename: cross(fs.rename), link: cross(fs.link) }
+})
 
 const dir = () => mkdtempSync(join(tmpdir(), 'tops-'))
 // the remote script, run by the local sh: the same commands a host would run
@@ -162,4 +170,36 @@ test('an item the trash refuses is failed, not trashed', async () => {
   const r = await runOpLocal({ op: 'trash', paths: ['/x/a', '/x/b'] }, fakeBin(['/x/a']))
   expect(r.failed).toEqual([{ path: '/x/a', error: 'no' }])
   expect(r.trashed).toEqual([{ path: '/x/b', trashed: '/bin/x/b' }])
+})
+
+test('a cross-volume move sends the originals to the Trash in one call', async () => {
+  const d = dir()
+  const names = ['a', 'b', 'c']
+  for (const n of names) writeFileSync(join(d, n), n)
+  mkdirSync(join(d, 'to'))
+  const calls: string[][] = []
+  exdev = true
+  const r = await runOpLocal({ op: 'move', items: names.map(n => ({ src: join(d, n), dest: join(d, 'to', n), replace: false })) }, async ps => {
+    calls.push(ps)
+    return ps.map(path => (path.endsWith('b') ? { path, error: 'no' } : { path, trashed: `/bin${path}` }))
+  }).finally(() => (exdev = false))
+  expect(calls).toEqual([names.map(n => join(d, n))])
+  expect(r.failed).toEqual([{ path: join(d, 'b'), error: "Copiato, ma l'originale non è stato spostato nel Cestino: no" }])
+  expect(r.trashed.map(x => x.path)).toEqual([join(d, 'a'), join(d, 'c')])
+  for (const n of names) expect(readFileSync(join(d, 'to', n), 'utf8')).toBe(n)
+})
+
+test('replaced destinations go to the Trash in one call, before their items are placed', async () => {
+  const d = dir()
+  const names = ['a', 'b', 'c']
+  mkdirSync(join(d, 'to'))
+  for (const n of names) writeFileSync(join(d, n), n), writeFileSync(join(d, 'to', n), 'old')
+  const calls: string[][] = []
+  const r = await runOpLocal({ op: 'copy', items: names.map(n => ({ src: join(d, n), dest: join(d, 'to', n), replace: true })) }, async ps => {
+    calls.push(ps)
+    return ps.map(path => (path.endsWith('b') ? { path, error: 'no' } : (renameSync(path, path + '.old'), { path, trashed: path + '.old' })))
+  })
+  expect(calls).toEqual([names.map(n => join(d, 'to', n))])
+  expect(r.failed).toEqual([{ path: join(d, 'b'), error: 'no' }])
+  expect(names.map(n => readFileSync(join(d, 'to', n), 'utf8'))).toEqual(['a', 'old', 'c'])
 })

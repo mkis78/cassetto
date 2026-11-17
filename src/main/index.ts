@@ -7,7 +7,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
 import { runOpLocal, runOpRemote } from './fileOps'
-import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
+import { allFailed, inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
 import { appsFor, openWith } from './platform/openWith'
 import { ejectVolume, listVolumes } from './platform/volumes'
@@ -178,7 +178,10 @@ handle('files:op', async (host: string | null, op: FileOp) => {
 })
 handle('files:undo', async (): Promise<UndoResult> => {
   const r = undos.pop()
-  return r ? runUndo(r, { local: op => runOpLocal(op, trashItems), remote: runOpRemote, script: remoteScript }) : null
+  if (!r) return null
+  const res = await runUndo(r, { local: op => runOpLocal(op, trashItems), remote: runOpRemote, script: remoteScript })
+  if (allFailed(r, res.failed)) undos.push(r) // nothing was undone (host down?): Cmd+Z can try again
+  return res
 })
 handle('files:undoLabel', () => undos.peek()?.label ?? null)
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself

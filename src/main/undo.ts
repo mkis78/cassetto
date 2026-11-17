@@ -5,11 +5,14 @@ import { shQuote } from './ssh'
 import { t } from '../shared/i18n'
 
 // fromTrash: the source is an item in the Trash, so a missing one is reported as such
-export type Step = { kind: 'move'; from: string; to: string; fromTrash?: boolean } | { kind: 'trash'; path: string } | { kind: 'rmdir'; path: string } | { kind: 'removeIfSame'; path: string; stamp: string }
+// trash: sent to the Trash only once the move has succeeded (the copy left by a cross-volume move)
+export type Step = { kind: 'move'; from: string; to: string; fromTrash?: boolean; trash?: string } | { kind: 'trash'; path: string } | { kind: 'rmdir'; path: string } | { kind: 'removeIfSame'; path: string; stamp: string }
 export type UndoRecord = { host: string | null; label: string; steps: Step[] }
 
-// what a remote copy looks like, to tell later whether anyone touched it
-export const stampScript = (path: string): string => `find -- ${shQuote(path)} -exec sh -c 'stat -c "%n %s %Y" -- "$@" 2>/dev/null || stat -f "%N %z %m" -- "$@"' _ {} + | sort`
+// what a remote copy looks like, to tell later whether anyone touched it: a checksum, so it stays small
+// enough for a command line however many files it covers; nothing at all for a missing path
+export const stampScript = (path: string): string =>
+  `{ [ -e ${shQuote(path)} ] || [ -L ${shQuote(path)} ]; } && find -- ${shQuote(path)} -exec sh -c 'stat -c "%n %s %Y" -- "$@" 2>/dev/null || stat -f "%N %z %m" -- "$@"' _ {} + | sort | cksum`
 
 // Check and removal in one remote script, so nothing can arrive in between. Prints removed, changed, missing, or the error.
 // `stamp` has no trailing newline (a command substitution drops it); an empty stamp means the path is not there.
@@ -50,7 +53,7 @@ export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, 
         // a move across volumes copied dest and trashed src: the original comes back from the Trash
         const gone = op.op === 'move' ? trashed.find(x => x.path === i.src) : undefined
         const undo: Step[] =
-          op.op === 'copy' ? created(i.dest) : gone ? [{ kind: 'trash', path: i.dest }, { kind: 'move', from: gone.trashed ?? '', to: i.src, fromTrash: true }] : [{ kind: 'move', from: i.dest, to: i.src }]
+          op.op === 'copy' ? created(i.dest) : gone ? [{ kind: 'move', from: gone.trashed ?? '', to: i.src, fromTrash: true, trash: i.dest }] : [{ kind: 'move', from: i.dest, to: i.src }]
         return [...back, ...undo]
       })
       const name = items[0] ? basename(items[0].src) : ''
@@ -82,18 +85,40 @@ export interface UndoDeps {
   script: (host: string, script: string) => Promise<string> // a remote script's trimmed output; an ssh failure is thrown
 }
 
+// every step failed (say the host is down): nothing changed, so the record can be tried again
+export const allFailed = (r: UndoRecord, failed: { path: string; error: string }[]): boolean => {
+  const paths = new Set(failed.map(f => f.path))
+  return r.steps.every(s => paths.has(s.kind === 'move' ? s.to : s.path))
+}
+
 // Never overwrites: a step whose name is taken or whose source is gone is reported, the others go on.
+// Order: originals back from the Trash, then one batch to the Trash (the copies they replace, created things), then the rest
+// (a replaced item comes back to a name the batch has just freed).
 export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullable<UndoResult>> {
   const failed: { path: string; error: string }[] = []
   const touched: string[] = []
   const fail = (path: string, error: string) => failed.push({ path, error })
+  const steps = [...r.steps].reverse()
+  const move = async (s: Extract<Step, { kind: 'move' }>): Promise<boolean> => {
+    touched.push(s.from, s.to)
+    if (s.fromTrash && (!s.from || !(await exists(s.from)))) {
+      fail(s.to, t('Non trovato nel Cestino'))
+      return false
+    }
+    const op: FileOp = { op: 'rename', from: s.from, to: s.to }
+    const res = r.host ? await deps.remote(r.host, op) : await deps.local(op)
+    failed.push(...res.failed.map(f => ({ path: s.to, error: f.error })))
+    return !res.failed.length
+  }
   const trashes = r.steps.flatMap(s => (s.kind === 'trash' ? [s.path] : []))
+  // the copy goes only once its original is back: an original that cannot come back leaves its copy where it is
+  for (const s of steps) if (s.kind === 'move' && s.trash && (await move(s))) trashes.push(s.trash)
   if (trashes.length) {
     touched.push(...trashes)
     failed.push(...(await deps.local({ op: 'trash', paths: trashes })).failed)
   }
-  for (const s of [...r.steps].reverse()) {
-    if (s.kind === 'trash') continue
+  for (const s of steps) {
+    if (s.kind === 'trash' || (s.kind === 'move' && s.trash)) continue
     if (s.kind === 'rmdir' || s.kind === 'removeIfSame') {
       touched.push(s.path)
       try {
@@ -104,16 +129,7 @@ export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullabl
       } catch (e) {
         fail(s.path, (e as Error).message)
       }
-    } else {
-      touched.push(s.from, s.to)
-      if (s.fromTrash && (!s.from || !(await exists(s.from)))) {
-        fail(s.to, t('Non trovato nel Cestino'))
-        continue
-      }
-      const op: FileOp = { op: 'rename', from: s.from, to: s.to }
-      const res = r.host ? await deps.remote(r.host, op) : await deps.local(op)
-      failed.push(...res.failed.map(f => ({ path: s.to, error: f.error })))
-    }
+    } else await move(s)
   }
   return { label: r.label, failed, dirs: [...new Set(touched.filter(Boolean).map(p => dirname(p)))] }
 }

@@ -59,15 +59,11 @@ export async function runOpLocal(op: FileOp, trashAll: (paths: string[]) => Prom
     trashed.push(...r.filter(x => !x.error))
     return r
   }
-  const trashOne = async (p: string) => {
-    const [r] = await trash([p])
-    if (r?.error) throw new Error(r.error)
-  }
-  const res = await localOp(op, trash, trashOne)
+  const res = await localOp(op, trash)
   return { ...res, trashed }
 }
 
-function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]>, trashOne: (p: string) => Promise<void>): Promise<OpResult> {
+async function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]>): Promise<OpResult> {
   switch (op.op) {
     case 'mkdir':
       return each([[op.path, () => fresh(op.path).then(() => mkdir(op.path))]])
@@ -76,25 +72,33 @@ function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]>, tra
     case 'rename':
       return each([[op.from, async () => ((await same(op.from, op.to)) ? rename(op.from, op.to) : place(op.from, op.to))]])
     case 'copy':
-    case 'move':
-      return each(
-        op.items.map(({ src, dest, replace }) => [
+    case 'move': {
+      // one Trash call per batch, not per item (on macOS each call is an osascript)
+      // replaced destinations first, all together: an item is placed only after its old destination has gone
+      const old = (await Promise.all(op.items.map(async i => (i.replace && (await exists(i.dest)) ? i.dest : '')))).filter(Boolean)
+      const refused = new Map((old.length ? await trash(old) : []).flatMap(x => (x.error ? [[x.path, x.error] as const] : [])))
+      const crossed: string[] = [] // moved to another volume by copying: the originals go to the Trash at the end
+      const res = await each(
+        op.items.map(({ src, dest }) => [
           src,
           async () => {
-            if (replace && (await exists(dest))) await trashOne(dest)
+            const no = refused.get(dest)
+            if (no !== undefined) throw new Error(no)
             if (op.op === 'copy') return fresh(dest).then(() => copy(src, dest))
             try {
               await place(src, dest)
             } catch (e) {
               if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
-              await copy(src, dest) // another volume: copy, then the original goes to the trash
-              await trashOne(src).catch(e2 => {
-                throw new Error(t("Copiato, ma l'originale non è stato spostato nel Cestino: {error}", { error: (e2 as Error).message }))
-              })
+              await copy(src, dest)
+              crossed.push(src)
             }
           }
         ])
       )
+      for (const x of crossed.length ? await trash(crossed) : [])
+        if (x.error) res.failed.push({ path: x.path, error: t("Copiato, ma l'originale non è stato spostato nel Cestino: {error}", { error: x.error }) })
+      return res
+    }
     case 'trash':
       return trash(op.paths).then(r => ({ failed: r.filter(x => x.error).map(x => ({ path: x.path, error: x.error! })) }))
     case 'delete':

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { runOpLocal } from '../src/main/fileOps'
-import { inverseOf, runUndo, removeIfSameScript, stampScript, UndoStack, type UndoDeps, type UndoRecord } from '../src/main/undo'
+import { allFailed, inverseOf, runUndo, removeIfSameScript, stampScript, UndoStack, type UndoDeps, type UndoRecord } from '../src/main/undo'
 import type { FileOp, Trashed } from '../src/shared/types'
 
 const dir = () => mkdtempSync(join(tmpdir(), 'tundo-'))
@@ -59,7 +59,7 @@ describe('inverseOf', () => {
   })
   test('a cross-volume move (original trashed) is undone from the Trash', () => {
     const op: FileOp = { op: 'move', items: [{ src: '/s/a', dest: '/d/a', replace: false }] }
-    expect(inv(null, op, [], [{ path: '/s/a', trashed: '/bin/a' }])!.steps).toEqual([{ kind: 'trash', path: '/d/a' }, { kind: 'move', from: '/bin/a', to: '/s/a', fromTrash: true }])
+    expect(inv(null, op, [], [{ path: '/s/a', trashed: '/bin/a' }])!.steps).toEqual([{ kind: 'move', from: '/bin/a', to: '/s/a', fromTrash: true, trash: '/d/a' }])
   })
   test('trash moves each item back, even one without a Trash path', () => {
     const r = inv(null, { op: 'trash', paths: ['/d/a', '/d/b'] }, [], [{ path: '/d/a', trashed: '/bin/a' }])!
@@ -69,6 +69,12 @@ describe('inverseOf', () => {
 })
 
 test('stampScript quotes the path', () => expect(stampScript("/d/it's")).toContain(`find -- '/d/it'\\''s' -exec`))
+test('a stamp is a fixed-size checksum, empty for a missing path', () => {
+  const d = dir()
+  for (let i = 0; i < 50; i++) writeFileSync(join(d, `file-${i}`), String(i))
+  expect(execFileSync('/bin/sh', ['-c', stampScript(d)]).toString().trim()).toMatch(/^\d+ \d+$/)
+  expect(execFileSync('/bin/sh', ['-c', `${stampScript(join(d, 'none'))}; true`]).toString()).toBe('')
+})
 
 describe('runUndo', () => {
   const undoOf = async (op: FileOp) => {
@@ -155,6 +161,31 @@ describe('runUndo', () => {
     expect(readFileSync(s, 'utf8')).toBe('src')
     expect(existsSync(t)).toBe(false)
   })
+  test('a cross-volume move whose original cannot come back keeps the copy', async () => {
+    const d = dir()
+    const [s, t, u, v] = [join(d, 's'), join(d, 't'), join(d, 'u'), join(d, 'v')]
+    writeFileSync(t, 'src')
+    const move = (src: string, dest: string): FileOp => ({ op: 'move', items: [{ src, dest, replace: false }] })
+    // Trash path unknown
+    const unknown = inverseOf(null, move(s, t), new Set(), [{ path: s }], new Map())!
+    expect((await runUndo(unknown, deps)).failed).toEqual([{ path: s, error: 'Non trovato nel Cestino' }])
+    expect(readFileSync(t, 'utf8')).toBe('src')
+    // the original's name is taken again
+    writeFileSync(u, 'orig')
+    const trashed = await fakeTrash([u])
+    writeFileSync(u, 'new')
+    writeFileSync(v, 'orig')
+    const taken = inverseOf(null, move(u, v), new Set(), trashed, new Map())!
+    expect((await runUndo(taken, deps)).failed).toEqual([{ path: u, error: 'Esiste già' }])
+    expect(readFileSync(v, 'utf8')).toBe('orig')
+    expect(existsSync(trashed[0].trashed!)).toBe(true)
+  })
+})
+
+test('allFailed: every step reported failed, so the record can be retried', () => {
+  const rec: UndoRecord = { host: 'h', label: 'x', steps: [{ kind: 'move', from: '/d/b', to: '/d/a' }, { kind: 'rmdir', path: '/d/n' }] }
+  expect(allFailed(rec, [{ path: '/d/a', error: 'ssh' }, { path: '/d/n', error: 'ssh' }])).toBe(true)
+  expect(allFailed(rec, [{ path: '/d/a', error: 'ssh' }])).toBe(false)
 })
 
 test('UndoStack keeps the last 50', () => {

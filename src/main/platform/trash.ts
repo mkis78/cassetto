@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process'
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { lstat, readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Trashed } from '../../shared/types'
 
 // NSFileManager reports the exact path in the Trash (renamed duplicates included); needs no Full Disk Access.
-// Paths come in as argv, never in the script text.
+// Paths come in as argv, never in the script text. One line per item: a file URL (a newline in a name is %0A)
+// or ! and the error with its line breaks flattened, so a name can never shift the lines after it.
 const SCRIPT = `use framework "Foundation"
 on run argv
 set fm to current application's NSFileManager's defaultManager()
@@ -13,9 +15,9 @@ set out to {}
 repeat with p in argv
 set {ok, outURL, err} to fm's trashItemAtURL:(current application's NSURL's fileURLWithPath:(contents of p)) resultingItemURL:(reference) |error|:(reference)
 if ok then
-set end of out to (outURL's |path|()) as text
+set end of out to (outURL's absoluteString()) as text
 else
-set end of out to "!" & ((err's localizedDescription()) as text)
+set end of out to "!" & ((err's localizedDescription()'s stringByReplacingOccurrencesOfString:linefeed withString:" ") as text)
 end if
 end repeat
 set AppleScript's text item delimiters to linefeed
@@ -33,15 +35,20 @@ export function parseTrashInfo(text: string): { path: string; date: string } | n
   }
 }
 
-// the item in the Trash that came from `original`: the newest deletion wins
-export async function findTrashed(original: string, trashDirs: string[]): Promise<string | null> {
+// the item in the Trash that came from `original`: the newest deletion wins.
+// Each Trash comes with its mount top: in $topdir/.Trash-$uid, Path= is relative to it.
+// ponytail: only info files named after the original (a renamed duplicate keeps the name, "x.2.txt"); a name the Trash shortened is missed
+export async function findTrashed(original: string, trashDirs: [dir: string, top: string][]): Promise<string | null> {
+  const stem = basename(original, extname(original))
   let best: { file: string; date: string } | null = null
-  for (const dir of trashDirs) {
+  for (const [dir, top] of trashDirs) {
     const names = await readdir(join(dir, 'info')).catch(() => [] as string[])
     for (const n of names) {
-      if (!n.endsWith('.trashinfo')) continue
+      if (!n.endsWith('.trashinfo') || !n.startsWith(stem)) continue
       const info = parseTrashInfo(await readFile(join(dir, 'info', n), 'utf8').catch(() => ''))
-      if (info?.path === original && (!best || info.date > best.date)) best = { file: join(dir, 'files', n.slice(0, -'.trashinfo'.length)), date: info.date }
+      if (!info || (isAbsolute(info.path) ? info.path : join(top, info.path)) !== original || (best && info.date <= best.date)) continue
+      const file = join(dir, 'files', n.slice(0, -'.trashinfo'.length))
+      if (await lstat(file).then(() => true, () => false)) best = { file, date: info.date } // an info left behind by a restore has no file
     }
   }
   return best?.file ?? null
@@ -70,7 +77,7 @@ async function trashLinux(paths: string[]): Promise<Trashed[]> {
       continue
     }
     const top = await mountTop(path).catch(() => null)
-    const dirs = [join(homedir(), '.local/share/Trash'), ...(top ? [join(top, `.Trash-${uid}`), join(top, '.Trash', String(uid))] : [])]
+    const dirs: [string, string][] = [[join(homedir(), '.local/share/Trash'), '/'], ...(top ? ([[join(top, `.Trash-${uid}`), top], [join(top, '.Trash', String(uid)), top]] as [string, string][]) : [])]
     out.push({ path, trashed: (await findTrashed(path, dirs).catch(() => null)) ?? undefined })
   }
   return out
@@ -80,7 +87,8 @@ const trashDarwin = (paths: string[]) =>
   new Promise<Trashed[]>(resolve =>
     execFile('osascript', ['-e', SCRIPT, ...paths], (err, stdout) => {
       const lines = stdout.replace(/\n$/, '').split('\n')
-      resolve(paths.map((path, i) => (lines[i]?.startsWith('!') ? { path, error: lines[i].slice(1) } : lines[i] ? { path, trashed: lines[i] } : { path, error: err?.message ?? 'trash failed' })))
+      // a folder's URL ends in /
+      resolve(paths.map((path, i) => (lines[i]?.startsWith('!') ? { path, error: lines[i].slice(1) } : lines[i] ? { path, trashed: fileURLToPath(lines[i]).replace(/(.)\/$/, '$1') } : { path, error: err?.message ?? 'trash failed' })))
     })
   )
 

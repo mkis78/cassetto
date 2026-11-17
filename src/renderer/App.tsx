@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
 import type { AppState } from '../shared/types'
+import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
 import TerminalTile from './TerminalTile'
 import { destroyTerminal } from './terminals'
@@ -32,6 +33,21 @@ export default function App() {
   const [sshDialog, setSshDialog] = useState(false)
   const [palette, setPalette] = useState<{ mode: 'files' | 'commands' | 'bar' } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // a newer release, offered in the top bar; while it installs, a banner says how far it is
+  const [newVersion, setNewVersion] = useState<string | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(null)
+  useEffect(() => {
+    const check = () => void window.api.checkUpdate().then(r => setNewVersion(r?.version ?? null))
+    check()
+    const t = setInterval(check, 6 * 3600_000)
+    const offs = [window.api.onUpdateStatus(setUpdateStatus), window.api.onUpdateFound(setNewVersion)]
+    return () => (clearInterval(t), offs.forEach(off => off()))
+  }, [])
+  const install = () => {
+    if (!confirm(`Aggiornare Cassetto alla versione ${newVersion}? L'app si chiude e si riapre: i terminali aperti vengono chiusi.`)) return
+    setUpdateStatus({ label: 'Avvio…', progress: null }) // at once, before main reports the first step
+    void window.api.installUpdate()
+  }
   const [saving, setSaving] = useState(false) // the dialog that names the layout to save
   const [lastLayout, setLastLayout] = useState('') // the one opened or saved last: the name the save dialog offers
   const [conflict, setConflict] = useState<{ shortcut: string; with: string } | null>(null) // the bar's shortcut is taken by the system
@@ -210,7 +226,13 @@ export default function App() {
           <LayoutDashboard {...ICON} /> {lastLayout || 'Layout'} <ChevronDown size={12} strokeWidth={2} />
         </button>
         <span className="version">{__VERSION__}</span>
+        {newVersion && !updateStatus && (
+          <button className="update" title="Scarica la nuova versione e riavvia" onClick={install}>
+            ↑ v{newVersion}
+          </button>
+        )}
       </div>
+      {updateStatus && <UpdateBanner status={updateStatus} />}
       {conflict && state.settings?.ignoredConflict !== conflict.shortcut && !settingsOpen && (
         <div className="app-notice" role="alert">
           <span>
@@ -277,6 +299,23 @@ function SaveLayoutDialog({ initial, taken, onSave, onCancel }: { initial: strin
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// an update in progress, across the window under the top bar: what it does, how far (when it can be measured)
+function UpdateBanner({ status }: { status: NonNullable<UpdateStatus> }) {
+  const pct = status.progress === null ? null : Math.round(status.progress * 100)
+  return (
+    <div className="update-banner" role="status">
+      <span className="spinner" />
+      <b>Aggiornamento di Cassetto</b>
+      <span className="label">{status.label}</span>
+      <div className={'bar' + (pct === null ? ' indeterminate' : '')}>
+        <div style={pct === null ? undefined : { width: `${pct}%` }} />
+      </div>
+      <span className="pct">{pct === null ? '' : `${pct}%`}</span>
+      <span className="hint">Al termine l'app si riavvia</span>
     </div>
   )
 }

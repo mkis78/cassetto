@@ -31,6 +31,20 @@ npm test         # vitest
 npm run dist     # dist/Cassetto-<version>-arm64.dmg
 ```
 
+### Aggiornamenti e rilasci
+
+L'app installata controlla all'avvio, ogni 6 ore e da *Cassetto → Controlla aggiornamenti…* l'ultima release di GitHub. Se è più recente compare **↑ vX.Y.Z** nella barra in alto: un clic scarica lo zip, ne verifica lo SHA-256 con quello pubblicato da GitHub, sostituisce l'app e la riavvia. Serve che il repository sia pubblico.
+
+Per pubblicare una versione, dal ramo `main` pulito:
+
+```sh
+npm run release:patch   # 0.1.0 → 0.1.1 (correzioni)
+npm run release:minor   # 0.1.0 → 0.2.0 (novità)
+npm run release:major   # 0.1.0 → 1.0.0
+```
+
+Il comando esegue i test, alza la versione in `package.json`, crea il commit e il tag `vX.Y.Z` e li invia: `.github/workflows/release.yml` compila `.dmg` e `.zip` per macOS e `.AppImage` per Linux e li allega alla release.
+
 ```
 src/main/      processo principale: elenco, anteprima, operazioni sui file, ricerca, ssh, stato
 src/preload/   ponte IPC

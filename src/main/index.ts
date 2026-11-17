@@ -12,6 +12,7 @@ import { spawn as spawnPty } from 'node-pty'
 import { existsSync } from 'node:fs'
 import { PtyManager, terminalLaunch } from './terminal'
 import { editTags, folderTags, runTagSearch } from './tags'
+import { canSelfUpdate, checkRelease, installRelease, type Release } from './release'
 import type { Tag } from '../shared/tags'
 import { listLocal, previewLocal, readLocal, writeLocal } from './files'
 import { listFiles, runSearch, runSearchRemote } from './search'
@@ -135,6 +136,22 @@ handle('files:preview', (host: string | null, path: string) => (host ? previewRe
 handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
 handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: 'testo non valido' } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
 handle('files:op', (host: string | null, op: FileOp) => (host ? runOpRemote(host, op) : runOpLocal(op, p => electronShell.trashItem(p))))
+// updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
+let release: Release | null = null
+const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })
+handle('update:check', async () => {
+  if (!selfUpdate()) return null
+  release = await checkRelease(app.getVersion())
+  return release && { version: release.version }
+})
+handle('update:install', () => release && installRelease(release, s => win?.webContents.send('update:status', s)))
+// from the menu: the same check, and an answer even when there is nothing new
+async function checkNow(): Promise<void> {
+  if (!selfUpdate()) return void dialog.showMessageBox(win!, { message: "Gli aggiornamenti funzionano nell'app installata", detail: 'Avviata con npm run dev si aggiorna con git pull.' })
+  release = await checkRelease(app.getVersion())
+  if (release) win?.webContents.send('update:found', release.version)
+  else dialog.showMessageBox(win!, { message: 'Cassetto è aggiornato', detail: `Versione ${app.getVersion()}` })
+}
 handle('openPath', (p: string) => electronShell.openPath(p))
 handle('app:quit', () => app.quit())
 
@@ -233,8 +250,8 @@ function setMenu(): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       p === 'darwin'
-        ? { role: 'appMenu', submenu: [{ role: 'about' }, settings, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }
-        : { label: 'Cassetto', submenu: [settings, { type: 'separator' }, { role: 'quit' }] },
+        ? { role: 'appMenu', submenu: [{ role: 'about' }, { label: 'Controlla aggiornamenti…', click: () => void checkNow() }, settings, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }
+        : { label: 'Cassetto', submenu: [{ label: 'Controlla aggiornamenti…', click: () => void checkNow() }, settings, { type: 'separator' }, { role: 'quit' }] },
       { role: 'editMenu' },
       {
         label: 'Archivio',

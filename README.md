@@ -93,7 +93,20 @@ Cmd+K lists the hosts of your `~/.ssh/config`. A server's folders open in a tab 
 
 ## Install
 
-Download the latest `.dmg` or `.zip` from [Releases](https://github.com/mkis78/cassetto/releases) (Apple Silicon). The app is not yet signed with an Apple Developer ID: the first time, right-click it and choose **Open**.
+Download the latest `.dmg` from [Releases](https://github.com/mkis78/cassetto/releases) (Apple Silicon) and drag **Cassetto** into **Applications**.
+
+The app is not yet signed with an Apple Developer ID, so the first time macOS refuses to open it. To allow it:
+
+1. Open Cassetto once and dismiss the warning with **Done**.
+2. Go to **System Settings → Privacy & Security**, scroll down to *"Cassetto" was blocked…* and click **Open Anyway**, then confirm with your password or Touch ID.
+
+Or, from the Terminal, remove the quarantine flag macOS puts on downloaded apps:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Cassetto.app
+```
+
+After that it opens normally, and it updates itself.
 
 ## Keyboard
 

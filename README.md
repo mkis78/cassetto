@@ -174,6 +174,6 @@ Cassetto is built at night, fuelled entirely by coffee. Every cup you buy is ano
 
 Designed by Marco Pennisi. Built on [Electron](https://www.electronjs.org/), [React](https://react.dev/), [dockview](https://dockview.dev/), [CodeMirror](https://codemirror.net/), [xterm.js](https://xtermjs.org/) and [node-pty](https://github.com/microsoft/node-pty), [marked](https://marked.js.org/) and [Lucide](https://lucide.dev/) icons.
 
-## Licenza
+## License
 
-Rilasciato con licenza [MIT](LICENSE).
+Released under the [MIT License](LICENSE).

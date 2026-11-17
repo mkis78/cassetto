@@ -1,4 +1,6 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, session, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
+import { pathToFileURL } from 'node:url'
+import { APP_ORIGIN, appFile } from './appProtocol'
 import { execFile } from 'node:child_process'
 import { readFile, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -20,6 +22,8 @@ import { DEFAULT_BAR, systemConflict, type SymbolicHotkeys } from '../shared/sho
 if (process.env.CASSETTO_USERDATA) app.setPath('userData', process.env.CASSETTO_USERDATA)
 const stateFile = () => join(app.getPath('userData'), 'state.json')
 let win: BrowserWindow | null = null
+// standard and secure: what module scripts, fetch and the editor's lazy chunk need, as on https
+protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 const ptys = new PtyManager(spawnPty)
 const shell = process.env.SHELL ?? (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
 let barShortcut = DEFAULT_BAR // shown in the menu; the renderer listens for the key itself
@@ -33,7 +37,7 @@ function createWindow(): void {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   })
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else win.loadFile(join(__dirname, '../renderer/index.html'))
+  else win.loadURL(`${APP_ORIGIN}/index.html`)
   // the window only ever shows the app: a dropped file or a link must not replace it (the preload API would stay exposed)
   win.webContents.on('will-navigate', e => e.preventDefault())
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -244,6 +248,14 @@ function setMenu(): void {
 }
 
 app.whenReady().then(() => {
+  const root = join(__dirname, '../renderer')
+  protocol.handle('app', req => {
+    const file = appFile(root, req.url)
+    return file ? net.fetch(pathToFileURL(file).toString()) : new Response('Non trovato', { status: 404 })
+  })
+  // the page never needs camera, microphone, location, notifications…: Electron would grant them all by default
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(permission === 'fullscreen'))
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'fullscreen')
   barShortcut = loadState(stateFile()).settings?.barShortcut ?? DEFAULT_BAR
   if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '../../build/icon.png')) // the packaged app gets it from the bundle
   setMenu()

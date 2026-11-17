@@ -19,7 +19,7 @@ test('the system language decides unless the user chose', () => {
   expect(resolveLang('it', 'en-US')).toBe('it')
 })
 
-// every t('…') in the sources: plain string literals as first argument
+// every t('…') and tx('…') in the sources: plain string literals as first argument
 function keys(): Map<string, string> {
   const out = new Map<string, string>()
   const walk = (d: string) =>
@@ -28,7 +28,7 @@ function keys(): Map<string, string> {
       if (statSync(p).isDirectory()) return walk(p)
       if (!/\.tsx?$/.test(f) || p.includes('locales') || f === 'i18n.ts') return
       const src = readFileSync(p, 'utf8')
-      for (const m of src.matchAll(/\bt\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+      for (const m of src.matchAll(/\btx?\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
         if (m[1] === '`' && m[2].includes('${')) throw new Error(`${p}: t() with a template literal: use {vars} instead: ${m[2]}`)
         out.set(m[2].replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\'), p)
       }

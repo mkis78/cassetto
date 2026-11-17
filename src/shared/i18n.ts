@@ -21,5 +21,8 @@ export function t(text: string, vars?: Record<string, string | number>): string 
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s
 }
 
+// marks a text kept in a constant, to be shown later through t(variable): the completeness test finds it this way
+export const tx = (text: string): string => text
+
 // for dates and numbers in the language of the interface
 export const locale = () => (lang === 'it' ? 'it-IT' : 'en-US')

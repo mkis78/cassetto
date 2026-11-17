@@ -14,6 +14,7 @@
   <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon-1d2027?logo=apple&logoColor=white">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-45-1d2027?logo=electron&logoColor=7daea3">
   <img alt="Languages" src="https://img.shields.io/badge/UI-English%20%C2%B7%20Italiano-1d2027">
+  <a href="https://claude.com/claude-code"><img alt="Made with Claude" src="https://img.shields.io/badge/Made%20with-Claude-1d2027?logo=claude&logoColor=D97757"></a>
 </p>
 
 <p align="center">

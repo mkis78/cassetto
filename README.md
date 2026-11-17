@@ -150,6 +150,12 @@ test/          Vitest
 docs/          Screenshots
 ```
 
+## Support Cassetto
+
+Cassetto is built at night, fuelled entirely by coffee. Every cup you buy is another sleepless night spent adding the things the Finder forgot. My sleep schedule is already ruined: you might as well make it worth it.
+
+[![Buy me a coffee on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V2J029S4NZ)
+
 ## Credits
 
 Designed by Marco Pennisi. Built on [Electron](https://www.electronjs.org/), [React](https://react.dev/), [dockview](https://dockview.dev/), [CodeMirror](https://codemirror.net/), [xterm.js](https://xtermjs.org/) and [node-pty](https://github.com/microsoft/node-pty), [marked](https://marked.js.org/) and [Lucide](https://lucide.dev/) icons.

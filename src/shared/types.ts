@@ -84,3 +84,6 @@ export interface SavedLayout {
   name: string
   layout: unknown // dockview toJSON()
 }
+
+export type Place = { id: 'home' | 'desktop' | 'documents' | 'downloads' | 'pictures' | 'music' | 'videos'; path: string }
+export type Volume = { name: string; path: string }

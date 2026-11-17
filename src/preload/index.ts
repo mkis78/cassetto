@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppState, FileOp, ListResult, OpResult, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, WriteResult } from '../shared/types'
+import type { AppState, FileOp, ListResult, OpResult, Place, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, Volume, WriteResult } from '../shared/types'
 import type { MenuItem } from '../shared/menus'
 import type { Disk } from '../shared/status'
 import type { Tag } from '../shared/tags'
@@ -43,6 +43,8 @@ const api = {
   listFiles: (cwd: string): Promise<{ root: string; files: string[]; truncated: boolean }> => ipcRenderer.invoke('files:all', cwd),
   preview: (host: string | null, path: string): Promise<Preview> => ipcRenderer.invoke('files:preview', host, path),
   imageBytes: (host: string | null, path: string): Promise<Uint8Array<ArrayBuffer> | null> => ipcRenderer.invoke('files:image', host, path),
+  places: (): Promise<{ places: Place[]; volumes: Volume[] }> => ipcRenderer.invoke('sidebar:places'),
+  eject: (path: string): Promise<string | null> => ipcRenderer.invoke('volumes:eject', path),
   disk: (host: string | null, path: string): Promise<Disk | null> => ipcRenderer.invoke('files:disk', host, path),
   folderSize: (host: string | null, path: string): Promise<number | null> => ipcRenderer.invoke('files:du', host, path),
   readFile: (host: string | null, path: string): Promise<ReadResult> => ipcRenderer.invoke('files:read', host, path),

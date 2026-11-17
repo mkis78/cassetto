@@ -5,10 +5,11 @@ import { execFile } from 'node:child_process'
 import { readFile, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AppState, FileOp, SearchHit, SearchQuery, Trashed, UndoResult } from '../shared/types'
+import type { AppState, FileOp, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
 import { runOpLocal, runOpRemote } from './fileOps'
 import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
+import { ejectVolume, listVolumes } from './platform/volumes'
 import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
 import { existsSync } from 'node:fs'
@@ -192,6 +193,16 @@ handle('openPath', (p: string) => electronShell.openPath(p))
 handle('app:quit', () => app.quit())
 // a new language takes effect on the next start: menus, dialogs and every tab are built in it from scratch
 handle('app:relaunch', () => (app.relaunch(), app.quit()))
+
+handle('sidebar:places', async (): Promise<{ places: Place[]; volumes: Volume[] }> => {
+  const ids: Place['id'][] = ['home', 'desktop', 'documents', 'downloads', 'pictures', 'music', 'videos']
+  const places = ids.flatMap((id) => {
+    const path = app.getPath(id)
+    return existsSync(path) ? [{ id, path }] : []
+  })
+  return { places, volumes: await listVolumes() }
+})
+handle('volumes:eject', (path: string) => ejectVolume(path))
 
 // free and total space of the disk holding `path`; null when it cannot be read
 handle('files:disk', async (host: string | null, path: string): Promise<Disk | null> => {

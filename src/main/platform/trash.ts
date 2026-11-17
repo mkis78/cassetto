@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { lstat, readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, extname, isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Trashed } from '../../shared/types'
 
@@ -37,9 +37,11 @@ export function parseTrashInfo(text: string): { path: string; date: string } | n
 
 // the item in the Trash that came from `original`: the newest deletion wins.
 // Each Trash comes with its mount top: in $topdir/.Trash-$uid, Path= is relative to it.
-// ponytail: only info files named after the original (a renamed duplicate keeps the name, "x.2.txt"); a name the Trash shortened is missed
+// Only info files named after the original: gio puts a duplicate's .N before the first dot ("foo.2.tar.gz", ".2.bashrc"),
+// so the filter is the name up to that dot (empty for a dotfile: no filter).
+// ponytail: a name the Trash shortened is missed (undo then reports it not found)
 export async function findTrashed(original: string, trashDirs: [dir: string, top: string][]): Promise<string | null> {
-  const stem = basename(original, extname(original))
+  const stem = basename(original).split('.')[0]
   let best: { file: string; date: string } | null = null
   for (const [dir, top] of trashDirs) {
     const names = await readdir(join(dir, 'info')).catch(() => [] as string[])

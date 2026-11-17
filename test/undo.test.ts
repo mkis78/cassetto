@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { runOpLocal } from '../src/main/fileOps'
-import { allFailed, inverseOf, runUndo, removeIfSameScript, stampScript, UndoStack, type UndoDeps, type UndoRecord } from '../src/main/undo'
+import { inverseOf, runUndo, removeIfSameScript, stampScript, UndoStack, type UndoDeps, type UndoRecord } from '../src/main/undo'
 import type { FileOp, Trashed } from '../src/shared/types'
 
 const dir = () => mkdtempSync(join(tmpdir(), 'tundo-'))
@@ -182,10 +182,24 @@ describe('runUndo', () => {
   })
 })
 
-test('allFailed: every step reported failed, so the record can be retried', () => {
-  const rec: UndoRecord = { host: 'h', label: 'x', steps: [{ kind: 'move', from: '/d/b', to: '/d/a' }, { kind: 'rmdir', path: '/d/n' }] }
-  expect(allFailed(rec, [{ path: '/d/a', error: 'ssh' }, { path: '/d/n', error: 'ssh' }])).toBe(true)
-  expect(allFailed(rec, [{ path: '/d/a', error: 'ssh' }])).toBe(false)
+describe('retry: only a record that failed whole because ssh failed', () => {
+  const down = () => Promise.reject(new Error('ssh: host down'))
+  const remoteRec: UndoRecord = { host: 'h', label: 'x', steps: [{ kind: 'move', from: '/d/b', to: '/d/a' }, { kind: 'rmdir', path: '/d/n' }] }
+  test('a remote record whose ssh call throws for every step is retried', async () => {
+    const r = await runUndo(remoteRec, { local: none, remote: down, script: down })
+    expect(r.failed).toHaveLength(2)
+    expect(r.retry).toBe(true)
+  })
+  test('a remote record with a lasting failure is not', async () => {
+    const r = await runUndo(remoteRec, { local: none, remote: down, script: async () => 'missing' })
+    expect(r.retry).toBe(false)
+  })
+  test('a local record whose items are gone from the Trash is not', async () => {
+    const rec = inverseOf(null, { op: 'trash', paths: ['/d/a', '/d/b'] }, new Set(), [], new Map())!
+    const r = await runUndo(rec, deps)
+    expect(r.failed.map(f => f.error)).toEqual(['Non trovato nel Cestino', 'Non trovato nel Cestino'])
+    expect(r.retry).toBe(false)
+  })
 })
 
 test('UndoStack keeps the last 50', () => {

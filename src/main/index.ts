@@ -6,8 +6,8 @@ import { readFile, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
-import { runOpLocal, runOpRemote } from './fileOps'
-import { allFailed, inverseOf, runUndo, stampScript, UndoStack } from './undo'
+import { parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from './fileOps'
+import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
 import { appsFor, openWith } from './platform/openWith'
 import { ejectVolume, listVolumes } from './platform/volumes'
@@ -176,11 +176,17 @@ handle('files:op', async (host: string | null, op: FileOp) => {
   if (rec) undos.push(rec)
   return { failed: res.failed }
 })
+// for undo: an ssh failure is thrown (not reported per item), so runUndo can tell it from a lasting refusal
+const remoteUndoOp = async (host: string, op: FileOp) => {
+  const r = await sshRun(host, remoteOpScript(op), { timeout: 10 * 60_000 })
+  if (!r.ok) throw new Error(r.error)
+  return parseOpOutput(r.out.toString())
+}
 handle('files:undo', async (): Promise<UndoResult> => {
   const r = undos.pop()
   if (!r) return null
-  const res = await runUndo(r, { local: op => runOpLocal(op, trashItems), remote: runOpRemote, script: remoteScript })
-  if (allFailed(r, res.failed)) undos.push(r) // nothing was undone (host down?): Cmd+Z can try again
+  const { retry, ...res } = await runUndo(r, { local: op => runOpLocal(op, trashItems), remote: remoteUndoOp, script: remoteScript })
+  if (retry) undos.push(r) // ssh failed for every step, nothing was undone: Cmd+Z can try again
   return res
 })
 handle('files:undoLabel', () => undos.peek()?.label ?? null)

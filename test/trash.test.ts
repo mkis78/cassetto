@@ -36,6 +36,20 @@ describe('freedesktop trash', () => {
     expect(await findTrashed('/o/x', [[d, '/']])).toBe(join(d, 'files', 'x'))
   })
 
+  test.each([
+    ['foo.tar.gz', 'foo.2.tar.gz'],
+    ['.bashrc', '.2.bashrc']
+  ])('findTrashed finds the newer duplicate of %s, named %s by gio', async (name, dup) => {
+    const d = dir()
+    mkdirSync(join(d, 'info'))
+    mkdirSync(join(d, 'files'))
+    writeFileSync(join(d, 'info', `${name}.trashinfo`), `[Trash Info]\nPath=/o/${name}\nDeletionDate=2026-11-17T10:00:00\n`)
+    writeFileSync(join(d, 'info', `${dup}.trashinfo`), `[Trash Info]\nPath=/o/${name}\nDeletionDate=2026-11-17T11:00:00\n`)
+    writeFileSync(join(d, 'files', name), '')
+    writeFileSync(join(d, 'files', dup), '')
+    expect(await findTrashed(`/o/${name}`, [[d, '/']])).toBe(join(d, 'files', dup))
+  })
+
   test('findTrashed reads a Path relative to the mount top ($topdir/.Trash-$uid)', async () => {
     const top = dir()
     const d = join(top, '.Trash-501')

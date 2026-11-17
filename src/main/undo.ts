@@ -81,23 +81,22 @@ const exists = (p: string) => lstat(p).then(() => true, () => false)
 
 export interface UndoDeps {
   local: (op: FileOp) => Promise<OpResult & { trashed: Trashed[] }>
-  remote: (host: string, op: FileOp) => Promise<OpResult>
+  remote: (host: string, op: FileOp) => Promise<OpResult> // an ssh failure is thrown
   script: (host: string, script: string) => Promise<string> // a remote script's trimmed output; an ssh failure is thrown
 }
 
-// every step failed (say the host is down): nothing changed, so the record can be tried again
-export const allFailed = (r: UndoRecord, failed: { path: string; error: string }[]): boolean => {
-  const paths = new Set(failed.map(f => f.path))
-  return r.steps.every(s => paths.has(s.kind === 'move' ? s.to : s.path))
-}
 
 // Never overwrites: a step whose name is taken or whose source is gone is reported, the others go on.
 // Order: originals back from the Trash, then one batch to the Trash (the copies they replace, created things), then the rest
 // (a replaced item comes back to a name the batch has just freed).
-export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullable<UndoResult>> {
+// retry: every step failed because ssh itself failed (host down): nothing changed, so the record can be tried again;
+// a lasting failure (gone from the Trash, name taken) is not retried.
+export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullable<UndoResult> & { retry: boolean }> {
   const failed: { path: string; error: string }[] = []
   const touched: string[] = []
   const fail = (path: string, error: string) => failed.push({ path, error })
+  let thrown = 0 // failures from an ssh call that threw
+  const sshFailed = (path: string, e: unknown) => (fail(path, (e as Error).message), thrown++)
   const steps = [...r.steps].reverse()
   const move = async (s: Extract<Step, { kind: 'move' }>): Promise<boolean> => {
     touched.push(s.from, s.to)
@@ -106,7 +105,13 @@ export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullabl
       return false
     }
     const op: FileOp = { op: 'rename', from: s.from, to: s.to }
-    const res = r.host ? await deps.remote(r.host, op) : await deps.local(op)
+    let res: OpResult
+    try {
+      res = r.host ? await deps.remote(r.host, op) : await deps.local(op)
+    } catch (e) {
+      sshFailed(s.to, e)
+      return false
+    }
     failed.push(...res.failed.map(f => ({ path: s.to, error: f.error })))
     return !res.failed.length
   }
@@ -127,9 +132,10 @@ export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullabl
         else if (out === 'changed') fail(s.path, t("Modificato dopo l'operazione: non rimosso"))
         else if (out !== 'removed') fail(s.path, out)
       } catch (e) {
-        fail(s.path, (e as Error).message)
+        sshFailed(s.path, e)
       }
     } else await move(s)
   }
-  return { label: r.label, failed, dirs: [...new Set(touched.filter(Boolean).map(p => dirname(p)))] }
+  const retry = r.host !== null && failed.length === r.steps.length && thrown === failed.length
+  return { label: r.label, failed, retry, dirs: [...new Set(touched.filter(Boolean).map(p => dirname(p)))] }
 }

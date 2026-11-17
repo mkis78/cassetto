@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
-import type { AppState } from '../shared/types'
+import type { AppState, TileParams } from '../shared/types'
 import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
 import TerminalTile from './TerminalTile'
@@ -8,10 +8,11 @@ import { destroyTerminal } from './terminals'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
-import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
+import Sidebar from './Sidebar'
+import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, focusTile, openFolder, openTerminal, runUndo, tileActions, tileFolder, whereOf } from './tiles'
+import { closeTiles, cycleTile, focusTile, openFolder, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
@@ -99,6 +100,7 @@ export default function App() {
     const path = await window.api.pickFolder()
     if (path && dv.current) openFolder(dv.current, { path, host: null })
   }
+  const toggleSidebar = () => setState(s => s && { ...s, sidebar: { ...s.sidebar, collapsed: !s.sidebar?.collapsed } })
   const home = () => dv.current && openFolder(dv.current, { path: getSettings().filesHome ?? null, host: null })
 
   useEffect(() => {
@@ -108,6 +110,8 @@ export default function App() {
       if ((document.activeElement as HTMLElement | null)?.closest('[data-recording]')) return // a shortcut being set in Impostazioni
       // the action bar, Ctrl+Space unless changed; checked first, so it wins whatever it was set to
       if (fromEvent(e) === (getSettings().barShortcut ?? DEFAULT_BAR)) return void (e.preventDefault(), e.stopPropagation(), setPalette({ mode: 'bar' }))
+      // Cmd+Alt+S (Ctrl+Alt+S on Linux): the sidebar, expanded or a rail
+      if (e.code === 'KeyS' && e.altKey && !e.shiftKey && (window.api.platform === 'darwin' ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey)) return void (e.preventDefault(), e.stopPropagation(), toggleSidebar())
       if (!(window.api.platform === 'darwin' ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey)) return
       const inEditor = !!(e.target as Element | null)?.closest?.('.cm-editor') // there Cmd+K belongs to the editor's chords
       const act = { KeyP: () => setPalette({ mode: window.api.platform === 'darwin' && e.shiftKey ? 'commands' : 'files' }), BracketRight: () => cycle(1), BracketLeft: () => cycle(-1), ...(!inEditor && !e.shiftKey && { KeyK: () => setSshDialog(true) }) }[e.code]
@@ -207,6 +211,10 @@ export default function App() {
     setTimeout(() => focusTile(api.activePanel), 50)
   }
 
+  // the folder of the Files tab in front, for the sidebar's highlight (the layout changes, and so this render, when it moves)
+  const front = active()?.params as TileParams | undefined
+  const activeFiles = front?.kind === 'files' ? { host: front.host, path: front.path } : null
+
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }
   const paletteActions = (): Command[] => {
     const p = active()
@@ -221,6 +229,7 @@ export default function App() {
       { label: t('Tab successivo'), hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1), icon: SquareArrowRight },
       { label: t('Tab precedente'), hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1), icon: SquareArrowLeft },
       ...(p ? [{ label: t('Chiudi tab'), hint: 'Cmd+W', run: () => closeTiles([p]), icon: X }, { label: p.api.isMaximized() ? t('Ripristina pannello') : t('Massimizza pannello'), run: () => (p.api.isMaximized() ? p.api.exitMaximized() : p.api.maximize()), icon: p.api.isMaximized() ? Minimize2 : Maximize2 }] : []),
+      { label: state.sidebar?.collapsed ? t('Espandi barra laterale') : t('Comprimi barra laterale'), hint: 'Cmd+Alt+S', run: toggleSidebar, icon: PanelLeft },
       { label: t('Impostazioni…'), hint: 'Cmd+,', run: () => setSettingsOpen(true), icon: Settings }
     ].map(c => ({ ...c, group }))
     const arrangements: Command[] = (Object.keys(PRESETS) as Preset[]).map(k => ({ label: t('Disponi: {how}', { how: t(PRESETS[k].label).toLowerCase() }), run: () => arrangeTabs(k), icon: ARRANGE_ICON[k], group: t('Disposizione') }))
@@ -255,8 +264,15 @@ export default function App() {
         </div>
       )}
       <WelcomeContext.Provider value={welcome}>
-        <div className="ws-body">
-          <DockviewReact theme={theme} components={components} onReady={onReady} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} leftHeaderActionsComponent={NewTabButton} watermarkComponent={Welcome} />
+        <div className="ws-row">
+          <Sidebar state={state.sidebar ?? {}} onChange={sidebar => update(s => ({ ...s, sidebar }))} api={dv.current} activePath={activeFiles} />
+          {/* a sidebar item dropped on a panel no Files tab took (another host, a terminal, an editor): a new Files tab */}
+          <div className="ws-body" onDragOver={e => e.dataTransfer.types.includes(PLACE_DND) && e.preventDefault()} onDrop={e => {
+            const raw = e.dataTransfer.getData(PLACE_DND)
+            if (raw && dv.current) openFolder(dv.current, JSON.parse(raw))
+          }}>
+            <DockviewReact theme={theme} components={components} onReady={onReady} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} leftHeaderActionsComponent={NewTabButton} watermarkComponent={Welcome} />
+          </div>
         </div>
       </WelcomeContext.Provider>
       {/* closing goes back to the list first, so an action's own focus (a rename box) can take it after */}

@@ -39,6 +39,17 @@ export interface AppState {
   layout: unknown | null // dockview toJSON()
   layouts?: SavedLayout[] // saved by name, to reopen later
   settings?: Settings
+  sidebar?: SidebarState
+}
+
+// a folder kept in the sidebar, here or on an ssh host
+export type Favourite = { host: string | null; path: string; name?: string; color?: TabColor }
+// closed: the sections folded shut ('fav' | 'places' | 'disks' | 'servers')
+export interface SidebarState {
+  collapsed?: boolean
+  width?: number
+  closed?: string[]
+  favourites?: Favourite[]
 }
 
 export interface Settings {

@@ -36,6 +36,18 @@ export function openFolder(api: DockviewApi, where: { path: string | null; host:
   })
 }
 
+// a folder from the sidebar: in the Files tab in front when it is on the same host (it stays on one host for life),
+// otherwise, or when asked, in a new tab; path null is the host's home
+export const NAVIGATE = 'cassetto:navigate'
+export function navigate(api: DockviewApi, where: { host: string | null; path: string | null }, newTab: boolean): void {
+  const p = api.activePanel
+  const q = p?.params as TileParams | undefined
+  if (p && !newTab && q?.kind === 'files' && q.host === where.host) window.dispatchEvent(new CustomEvent(NAVIGATE, { detail: { id: p.id, path: where.path } }))
+  else openFolder(api, where)
+}
+// what a sidebar item carries when dragged onto a panel: { host, path }
+export const PLACE_DND = 'cassetto/place'
+
 // keyboard focus for a tab: the element it marks with data-autofocus
 export function focusTile(p: IDockviewPanel | undefined): void {
   p?.view.content.element.querySelector<HTMLElement>('[data-autofocus]')?.focus()

@@ -11,7 +11,7 @@ import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { baseName, CHANGED, changed, runUndo, openEditor, openFolder, openTerminal, setTileActions } from './tiles'
+import { baseName, CHANGED, changed, runUndo, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -230,6 +230,29 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     window.addEventListener(CHANGED, f)
     return () => window.removeEventListener(CHANGED, f)
   }, [reload])
+  // a sidebar click aimed at this tab
+  useEffect(() => {
+    const f = (e: Event) => {
+      const { id, path } = (e as CustomEvent<{ id: string; path: string | null }>).detail
+      if (id === api.id) (setSel(null), void load(path))
+    }
+    window.addEventListener(NAVIGATE, f)
+    return () => window.removeEventListener(NAVIGATE, f)
+  }, [load])
+  // a sidebar item dropped here: same host opens it in this tab; another host bubbles up to App, which opens a new tab
+  const placeDrop = {
+    onDragOver: (ev: React.DragEvent) => ev.dataTransfer.types.includes(PLACE_DND) && (ev.preventDefault(), (ev.dataTransfer.dropEffect = 'copy')),
+    onDrop: (ev: React.DragEvent) => {
+      const raw = ev.dataTransfer.getData(PLACE_DND)
+      if (!raw) return
+      const w = JSON.parse(raw) as { host: string | null; path: string | null }
+      if (w.host !== host) return
+      ev.preventDefault()
+      ev.stopPropagation()
+      setSel(null)
+      void load(w.path)
+    }
+  }
 
   // what an action works on: the selection when the clicked entry is part of it, otherwise that entry alone
   const chosen = (full?: string) => (full && !picked.has(full) ? [full] : [...picked])
@@ -633,7 +656,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
 
   return (
     // Cmd/Ctrl+F: to the search box from anywhere in the tile
-    <div ref={rootRef} className="files-tile" onKeyDown={e => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && (e.preventDefault(), inputRef.current?.focus())}>
+    <div ref={rootRef} className="files-tile" {...placeDrop} onKeyDown={e => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && (e.preventDefault(), inputRef.current?.focus())}>
       <div className="files-bar">
         <button title={t('Cartella superiore (⌫)')} disabled={!here || here === '/'} onClick={up}>
           <ArrowUp {...ICON} />

@@ -140,16 +140,24 @@ handle('files:read', (host: string | null, path: string) => (host ? readRemote(h
 handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: t('testo non valido') } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
 // Cmd+Z: the inverse of each successful op, in memory
 const undos = new UndoStack()
+// no trailing newline, to compare equal with what the removal script computes; empty (missing path, or ssh failed): no stamp
 const stampOf = async (host: string, path: string) => {
   const r = await sshRun(host, stampScript(path), { timeout: 60_000 })
-  return r.ok ? r.out.toString() : null
+  const s = r.ok ? r.out.toString().replace(/\n+$/, '') : ''
+  return s || null
+}
+const remoteScript = async (host: string, script: string) => {
+  const r = await sshRun(host, script, { timeout: 60_000 })
+  if (!r.ok) throw new Error(r.error)
+  return r.out.toString().trim()
 }
 handle('files:op', async (host: string | null, op: FileOp) => {
   const res = host ? await runOpRemote(host, op) : await runOpLocal(op, trashItems)
   const failed = new Set(res.failed.map(f => f.path))
   const stamps = new Map<string, string>()
   if (host && (op.op === 'mkdir' || op.op === 'touch' || op.op === 'copy')) {
-    const made = 'items' in op ?op.items.filter(i => !failed.has(i.src)).map(i => i.dest) : [op.path]
+    // mkdir needs no stamp: undo uses rmdir
+    const made = op.op === 'mkdir' ? [] : 'items' in op ?op.items.filter(i => !failed.has(i.src)).map(i => i.dest) : [op.path]
     for (const p of made) {
       const s = await stampOf(host, p)
       if (s !== null) stamps.set(p, s)
@@ -161,7 +169,7 @@ handle('files:op', async (host: string | null, op: FileOp) => {
 })
 handle('files:undo', async (): Promise<UndoResult> => {
   const r = undos.pop()
-  return r ? runUndo(r, { local: op => runOpLocal(op, trashItems), remote: runOpRemote, stamp: stampOf, remove: (host, path) => runOpRemote(host, { op: 'delete', paths: [path] }) }) : null
+  return r ? runUndo(r, { local: op => runOpLocal(op, trashItems), remote: runOpRemote, script: remoteScript }) : null
 })
 handle('files:undoLabel', () => undos.peek()?.label ?? null)
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself

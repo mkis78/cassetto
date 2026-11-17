@@ -1,9 +1,10 @@
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import { runOpLocal } from '../src/main/fileOps'
-import { inverseOf, runUndo, stampScript, UndoStack, type UndoDeps, type UndoRecord } from '../src/main/undo'
+import { inverseOf, runUndo, removeIfSameScript, stampScript, UndoStack, type UndoDeps, type UndoRecord } from '../src/main/undo'
 import type { FileOp, Trashed } from '../src/shared/types'
 
 const dir = () => mkdtempSync(join(tmpdir(), 'tundo-'))
@@ -16,7 +17,7 @@ const fakeTrash = async (ps: string[]): Promise<Trashed[]> =>
   })
 const local = (op: FileOp) => runOpLocal(op, fakeTrash)
 const none = () => Promise.reject(new Error('unused'))
-const deps: UndoDeps = { local, remote: none, stamp: none, remove: none }
+const deps: UndoDeps = { local, remote: none, script: none }
 const inv = (host: string | null, op: FileOp, failed: string[] = [], trashed: Trashed[] = [], stamps = new Map<string, string>()) => inverseOf(host, op, new Set(failed), trashed, stamps)
 
 describe('inverseOf', () => {
@@ -48,8 +49,17 @@ describe('inverseOf', () => {
   })
   test('created things: trash locally, removeIfSame remotely', () => {
     expect(inv(null, { op: 'touch', path: '/d/f' })!.steps).toEqual([{ kind: 'trash', path: '/d/f' }])
-    expect(inv('h', { op: 'mkdir', path: '/d/f' }, [], [], new Map([['/d/f', 'S']]))!.steps).toEqual([{ kind: 'removeIfSame', path: '/d/f', stamp: 'S' }])
+    expect(inv('h', { op: 'mkdir', path: '/d/f' })!.steps).toEqual([{ kind: 'rmdir', path: '/d/f' }])
+    expect(inv('h', { op: 'touch', path: '/d/f' })).toBeNull() // no stamp, no way to check it later
     expect(inv('h', { op: 'copy', items: [{ src: '/s/a', dest: '/d/a', replace: false }] }, [], [], new Map([['/d/a', 'T']]))!.steps).toEqual([{ kind: 'removeIfSame', path: '/d/a', stamp: 'T' }])
+  })
+  test('a replaced item with no known Trash path is reported, not forgotten', () => {
+    const op: FileOp = { op: 'copy', items: [{ src: '/s/a', dest: '/d/a', replace: true }] }
+    expect(inv(null, op, [], [{ path: '/d/a' }])!.steps[0]).toEqual({ kind: 'move', from: '', to: '/d/a', fromTrash: true })
+  })
+  test('a cross-volume move (original trashed) is undone from the Trash', () => {
+    const op: FileOp = { op: 'move', items: [{ src: '/s/a', dest: '/d/a', replace: false }] }
+    expect(inv(null, op, [], [{ path: '/s/a', trashed: '/bin/a' }])!.steps).toEqual([{ kind: 'trash', path: '/d/a' }, { kind: 'move', from: '/bin/a', to: '/s/a', fromTrash: true }])
   })
   test('trash moves each item back, even one without a Trash path', () => {
     const r = inv(null, { op: 'trash', paths: ['/d/a', '/d/b'] }, [], [{ path: '/d/a', trashed: '/bin/a' }])!
@@ -100,15 +110,50 @@ describe('runUndo', () => {
     await runUndo(c, deps)
     expect(existsSync(join(d, 'c'))).toBe(false)
   })
-  test('remote undo refuses a changed copy', async () => {
-    const remove = vi.fn()
-    const rec: UndoRecord = { host: 'h', label: 'x', steps: [{ kind: 'removeIfSame', path: '/r/f', stamp: 'A' }] }
-    const r = await runUndo(rec, { ...deps, stamp: async () => 'B', remove })
-    expect(r.failed).toEqual([{ path: '/r/f', error: "Modificato dopo l'operazione: non rimosso" }])
-    expect(remove).not.toHaveBeenCalled()
-    const ok = vi.fn(async () => ({ failed: [] }))
-    expect((await runUndo(rec, { ...deps, stamp: async () => 'A', remove: ok })).failed).toEqual([])
-    expect(ok).toHaveBeenCalledWith('h', '/r/f')
+  // the remote scripts, run by the local sh
+  const sh = async (_h: string, script: string) => execFileSync('/bin/sh', ['-c', script]).toString().trim()
+  const shDeps: UndoDeps = { ...deps, script: sh }
+  const stampNow = async (p: string) => (await sh('h', stampScript(p))).replace(/\n+$/, '')
+  test('remote undo removes an unchanged copy, refuses a changed one', async () => {
+    const d = dir()
+    const f = join(d, 'f')
+    writeFileSync(f, 'one')
+    const rec: UndoRecord = { host: 'h', label: 'x', steps: [{ kind: 'removeIfSame', path: f, stamp: await stampNow(f) }] }
+    writeFileSync(f, 'changed!')
+    expect(await runUndo(rec, shDeps)).toMatchObject({ failed: [{ path: f, error: "Modificato dopo l'operazione: non rimosso" }] })
+    expect(existsSync(f)).toBe(true)
+    rec.steps = [{ kind: 'removeIfSame', path: f, stamp: await stampNow(f) }]
+    expect((await runUndo(rec, shDeps)).failed).toEqual([])
+    expect(existsSync(f)).toBe(false)
+    expect((await runUndo(rec, shDeps)).failed).toEqual([{ path: f, error: 'Non trovato' }]) // missing: empty stamp is not a match
+  })
+  test('the removal script checks and removes in one go', async () => {
+    const d = dir()
+    writeFileSync(join(d, 'f'), 'x')
+    expect(await sh('h', removeIfSameScript(join(d, 'f'), 'nope'))).toBe('changed')
+    expect(existsSync(join(d, 'f'))).toBe(true)
+  })
+  test('remote undo of mkdir refuses a folder that got content', async () => {
+    const d = dir()
+    mkdirSync(join(d, 'n'))
+    const rec: UndoRecord = { host: 'h', label: 'x', steps: [{ kind: 'rmdir', path: join(d, 'n') }] }
+    writeFileSync(join(d, 'n', 'f'), 'x')
+    expect((await runUndo(rec, shDeps)).failed).toHaveLength(1)
+    expect(existsSync(join(d, 'n', 'f'))).toBe(true)
+    rmSync(join(d, 'n', 'f'))
+    expect((await runUndo(rec, shDeps)).failed).toEqual([])
+    expect(existsSync(join(d, 'n'))).toBe(false)
+  })
+  test('undo of a cross-volume move takes the original back from the Trash', async () => {
+    const d = dir()
+    const [s, t] = [join(d, 's'), join(d, 't')]
+    writeFileSync(s, 'src')
+    writeFileSync(t, 'src')
+    const trashed = await fakeTrash([s]) // what the EXDEV path did: dest copied, src trashed
+    const rec = inverseOf(null, { op: 'move', items: [{ src: s, dest: t, replace: false }] }, new Set(), trashed, new Map())!
+    expect((await runUndo(rec, deps)).failed).toEqual([])
+    expect(readFileSync(s, 'utf8')).toBe('src')
+    expect(existsSync(t)).toBe(false)
   })
 })
 

@@ -5,11 +5,18 @@ import { shQuote } from './ssh'
 import { t } from '../shared/i18n'
 
 // fromTrash: the source is an item in the Trash, so a missing one is reported as such
-export type Step = { kind: 'move'; from: string; to: string; fromTrash?: boolean } | { kind: 'trash'; path: string } | { kind: 'removeIfSame'; path: string; stamp: string }
+export type Step = { kind: 'move'; from: string; to: string; fromTrash?: boolean } | { kind: 'trash'; path: string } | { kind: 'rmdir'; path: string } | { kind: 'removeIfSame'; path: string; stamp: string }
 export type UndoRecord = { host: string | null; label: string; steps: Step[] }
 
 // what a remote copy looks like, to tell later whether anyone touched it
 export const stampScript = (path: string): string => `find -- ${shQuote(path)} -exec sh -c 'stat -c "%n %s %Y" -- "$@" 2>/dev/null || stat -f "%N %z %m" -- "$@"' _ {} + | sort`
+
+// Check and removal in one remote script, so nothing can arrive in between. Prints removed, changed, missing, or the error.
+// `stamp` has no trailing newline (a command substitution drops it); an empty stamp means the path is not there.
+export const removeIfSameScript = (path: string, stamp: string): string =>
+  `s=$(${stampScript(path)}); if [ -z "$s" ]; then echo missing; elif [ "$s" = ${shQuote(stamp)} ]; then if e=$(rm -rf -- ${shQuote(path)} 2>&1); then echo removed; else echo "$e"; fi; else echo changed; fi`
+// rmdir refuses a folder that is not empty
+export const rmdirScript = (path: string): string => `if e=$(rmdir -- ${shQuote(path)} 2>&1); then echo removed; else echo "$e"; fi`
 
 // the label for n items: one name, or a count
 const named = (n: number, name: string, one: string, many: string) => (n === 1 ? t(one, { name }) : t(many, { n }))
@@ -20,6 +27,7 @@ export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, 
   const rec = (label: string, steps: Step[]): UndoRecord | null => (steps.length ? { host, label, steps } : null)
   const created = (p: string): Step[] => {
     if (!host) return [{ kind: 'trash', path: p }]
+    if (op.op === 'mkdir') return [{ kind: 'rmdir', path: p }]
     const stamp = stamps.get(p)
     return stamp === undefined ? [] : [{ kind: 'removeIfSame', path: p, stamp }]
   }
@@ -36,9 +44,14 @@ export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, 
       if (host && op.items.some(i => i.replace)) return null // ponytail: a remote replace deletes for good, there is nothing to bring back
       const items = op.items.filter(i => !failed.has(i.src))
       const steps = items.flatMap((i): Step[] => {
-        const old = i.replace ? trashed.find(x => x.path === i.dest && x.trashed) : undefined
-        const back: Step[] = old ? [{ kind: 'move', from: old.trashed!, to: i.dest, fromTrash: true }] : []
-        return [...back, ...(op.op === 'copy' ? created(i.dest) : [{ kind: 'move' as const, from: i.dest, to: i.src }])]
+        // an unknown Trash path still makes a step, which reports "Non trovato nel Cestino"
+        const old = i.replace ? trashed.find(x => x.path === i.dest) : undefined
+        const back: Step[] = old ? [{ kind: 'move', from: old.trashed ?? '', to: i.dest, fromTrash: true }] : []
+        // a move across volumes copied dest and trashed src: the original comes back from the Trash
+        const gone = op.op === 'move' ? trashed.find(x => x.path === i.src) : undefined
+        const undo: Step[] =
+          op.op === 'copy' ? created(i.dest) : gone ? [{ kind: 'trash', path: i.dest }, { kind: 'move', from: gone.trashed ?? '', to: i.src, fromTrash: true }] : [{ kind: 'move', from: i.dest, to: i.src }]
+        return [...back, ...undo]
       })
       const name = items[0] ? basename(items[0].src) : ''
       return rec(op.op === 'copy' ? named(items.length, name, 'Copiato «{name}»', 'Copiati {n} elementi') : named(items.length, name, 'Spostato «{name}»', 'Spostati {n} elementi'), steps)
@@ -66,8 +79,7 @@ const exists = (p: string) => lstat(p).then(() => true, () => false)
 export interface UndoDeps {
   local: (op: FileOp) => Promise<OpResult & { trashed: Trashed[] }>
   remote: (host: string, op: FileOp) => Promise<OpResult>
-  stamp: (host: string, path: string) => Promise<string | null>
-  remove: (host: string, path: string) => Promise<OpResult>
+  script: (host: string, script: string) => Promise<string> // a remote script's trimmed output; an ssh failure is thrown
 }
 
 // Never overwrites: a step whose name is taken or whose source is gone is reported, the others go on.
@@ -82,7 +94,17 @@ export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullabl
   }
   for (const s of [...r.steps].reverse()) {
     if (s.kind === 'trash') continue
-    if (s.kind === 'move') {
+    if (s.kind === 'rmdir' || s.kind === 'removeIfSame') {
+      touched.push(s.path)
+      try {
+        const out = await deps.script(r.host!, s.kind === 'rmdir' ? rmdirScript(s.path) : removeIfSameScript(s.path, s.stamp))
+        if (out === 'missing') fail(s.path, t('Non trovato'))
+        else if (out === 'changed') fail(s.path, t("Modificato dopo l'operazione: non rimosso"))
+        else if (out !== 'removed') fail(s.path, out)
+      } catch (e) {
+        fail(s.path, (e as Error).message)
+      }
+    } else {
       touched.push(s.from, s.to)
       if (s.fromTrash && (!s.from || !(await exists(s.from)))) {
         fail(s.to, t('Non trovato nel Cestino'))
@@ -91,12 +113,6 @@ export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullabl
       const op: FileOp = { op: 'rename', from: s.from, to: s.to }
       const res = r.host ? await deps.remote(r.host, op) : await deps.local(op)
       failed.push(...res.failed.map(f => ({ path: s.to, error: f.error })))
-    } else {
-      touched.push(s.path)
-      const now = await deps.stamp(r.host!, s.path)
-      if (now === null) fail(s.path, t('Non trovato'))
-      else if (now !== s.stamp) fail(s.path, t("Modificato dopo l'operazione: non rimosso"))
-      else failed.push(...(await deps.remove(r.host!, s.path)).failed)
     }
   }
   return { label: r.label, failed, dirs: [...new Set(touched.filter(Boolean).map(p => dirname(p)))] }

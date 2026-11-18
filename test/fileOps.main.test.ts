@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
@@ -236,14 +236,20 @@ describe('extract', () => {
       expect(existsSync(join(d, 'bad'))).toBe(false)
     })
   })
-  test.skipIf(!existsSync('/usr/bin/zip'))('a zip with a duplicate entry extracts, last one wins', async () => {
+  // PATH with unzip but no tar, so the remote script cannot fall back to it
+  const shNoTar = async (op: FileOp): Promise<OpResult> => {
+    const bin = dir()
+    for (const c of ['unzip', 'mkdir', 'rm']) symlinkSync(execFileSync('/bin/sh', ['-c', `command -v ${c}`]).toString().trim(), join(bin, c))
+    return parseOpOutput(execFileSync('/bin/sh', ['-c', remoteOpScript(op)], { env: { PATH: bin } }).toString())
+  }
+  // a zip holding two entries named f, made by python (zip itself never writes a duplicate)
+  const py = spawnSync('python3', ['-V']).status === 0
+  test.skipIf(!py).each([['local', local], ['remote script', sh], ['remote script, unzip only', shNoTar]] as const)('%s: a zip with a duplicate entry extracts, last one wins', async (_, run) => {
     const d = dir()
-    mkdirSync(join(d, 's'))
-    writeFileSync(join(d, 's/f'), 'one')
-    execFileSync('zip', ['-q', join(d, 'x.zip'), 'f'], { cwd: join(d, 's') })
-    writeFileSync(join(d, 's/f'), 'two')
-    execFileSync('zip', ['-qg', join(d, 'x.zip'), 'f'], { cwd: join(d, 's') }) // -g appends instead of updating
-    expect(await local({ op: 'extract', archive: join(d, 'x.zip'), dest: join(d, 'o') })).toEqual({ failed: [] })
+    const code = "import sys,zipfile,warnings;warnings.simplefilter('ignore');z=zipfile.ZipFile(sys.argv[1],'w');z.writestr('f','one');z.writestr('f','two');z.close()"
+    execFileSync('python3', ['-I', '-c', code, join(d, 'x.zip')])
+    expect(await run({ op: 'extract', archive: join(d, 'x.zip'), dest: join(d, 'o') })).toEqual({ failed: [] })
+    expect(readFileSync(join(d, 'o/f'), 'utf8')).toBe('two')
   })
   test('extractCommand: bsdtar on macOS, unzip for zip elsewhere', () => {
     expect(extractCommand('darwin', '/a.zip', '/d')).toEqual(['tar', ['-xf', '/a.zip', '-C', '/d']])

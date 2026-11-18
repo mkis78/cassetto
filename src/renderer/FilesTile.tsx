@@ -775,7 +775,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       ) : (
         <div className="files-body">
           {searching && listing ? (
-            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} />
+            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={(full, double) => (double && isArchive(full) ? void extract(full) : open(full, false))} />
           ) : (
             <div ref={listRef} tabIndex={0} data-autofocus className={`files-list files-${view}` + (loading ? ' loading' : '')} onKeyDown={keys}>
               {view === 'columns'

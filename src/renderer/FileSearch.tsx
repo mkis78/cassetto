@@ -16,7 +16,7 @@ type Props = {
   q: SearchQuery
   onSelect: (full: string) => void
   onFolder: (dir: string) => void // "Apri cartella": the files tile goes there
-  onOpen: (full: string) => void
+  onOpen: (full: string, double?: boolean) => void
 }
 
 export const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/')) || '/'
@@ -54,10 +54,10 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
 
 
   const fullOf = (hit: SearchHit) => `${cwd.replace(/\/$/, '')}/${hit.path}`
-  const act = (choice: string, hit: SearchHit) => {
+  const act = (choice: string, hit: SearchHit, double = false) => {
     const full = fullOf(hit)
     const at = hit.line ? `${full}:${hit.line}` : full
-    if (choice === 'open') return onOpen(full)
+    if (choice === 'open') return onOpen(full, double)
     if (choice === 'copyPath') return void window.api.clipboardWrite(host ? `${host}:${at}` : at)
     if (choice === 'folder') return onFolder(dirOf(full))
   }
@@ -82,7 +82,7 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
     return {
       className: `file ${cls}` + (i === cur ? ' selected' : ''),
       onClick: () => pick(i),
-      onDoubleClick: () => act('open', hit),
+      onDoubleClick: () => act('open', hit, true),
       onContextMenu: (e: React.MouseEvent) => menu(e, hit)
     }
   }

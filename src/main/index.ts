@@ -11,7 +11,9 @@ import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
 import { appsFor, openWith } from './platform/openWith'
 import { ejectVolume, listVolumes } from './platform/volumes'
-import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
+import { JobQueue } from './jobs'
+import type { JobSpec } from '../shared/jobs'
+import { isValidHost, listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
 import { existsSync, renameSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
@@ -198,6 +200,28 @@ handle('files:undoLabel', () => undos.peek()?.label ?? null)
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
 let release: Release | null = null
 const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })
+// the copy/move queue; Tasks 2-4 give the worker its branches (copyLocal, copyRemote, transfer)
+const queue = new JobQueue({
+  worker: async () => {
+    throw new Error(t('Non ancora disponibile'))
+  },
+  emit: jobs => win?.webContents.send('jobs', jobs)
+})
+const validSpec = (s: any): s is JobSpec => {
+  const host = (h: unknown) => h === null || (typeof h === 'string' && isValidHost(h))
+  return (
+    !!s && (s.op === 'copy' || s.op === 'move') && host(s.from) && host(s.to) && Array.isArray(s.items) &&
+    s.items.every((i: any) => !!i && typeof i.src === 'string' && typeof i.dest === 'string' && typeof i.replace === 'boolean')
+  )
+}
+handle('jobs:start', (spec: unknown) => {
+  if (!validSpec(spec)) throw new Error('invalid job')
+  return queue.start({ op: spec.op, from: spec.from, to: spec.to, items: spec.items.map(i => ({ src: i.src, dest: i.dest, replace: i.replace })) })
+})
+handle('jobs:cancel', (id: string) => queue.cancel(id))
+handle('jobs:clear', () => queue.clear())
+handle('jobs:list', () => queue.list())
+
 handle('update:check', async () => {
   if (!selfUpdate()) return null
   release = await checkRelease(app.getVersion())
@@ -423,7 +447,21 @@ app.whenReady().then(() => {
   setMenu()
   sweep(archiveBase()).finally(createWindow) // caches of a crashed run are not held by anyone
 })
-app.on('before-quit', () => ptys.killAll())
+let quitAsked = false
+app.on('before-quit', e => {
+  ptys.killAll()
+  if (quitAsked || !queue.running()) return
+  e.preventDefault()
+  quitAsked = true // asked once: the next quit goes through
+  dialog
+    .showMessageBox(win!, { type: 'warning', buttons: [t('Esci'), t('Annulla')], defaultId: 1, cancelId: 1, message: t('Ci sono trasferimenti in corso.'), detail: t('Uscendo verranno annullati.') })
+    .then(async r => {
+      if (r.response !== 0) return void (quitAsked = false)
+      queue.list().forEach(j => queue.cancel(j.id))
+      for (let i = 0; i < 50 && queue.running(); i++) await new Promise(r => setTimeout(r, 100)) // up to 5 s to settle
+      app.quit()
+    })
+})
 let cleaned = false
 // after the windows closed: a window's beforeunload (unsaved editor) may still cancel the quit in before-quit
 app.on('will-quit', e => {

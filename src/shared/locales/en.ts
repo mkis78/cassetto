@@ -446,4 +446,8 @@ export const EN: Record<string, string> = {
   "Apri con {name}": "Open with {name}",
   "Altra app…": "Other app…",
   "Applicazioni": "Applications",
+  "Non ancora disponibile": "Not available yet",
+  "Esci": "Quit",
+  "Ci sono trasferimenti in corso.": "Transfers are in progress.",
+  "Uscendo verranno annullati.": "Quitting will cancel them."
 }

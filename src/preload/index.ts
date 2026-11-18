@@ -3,6 +3,7 @@ import type { AppInfo, AppState, FileOp, ListResult, OpResult, Place, Preview, R
 import type { MenuItem } from '../shared/menus'
 import type { Disk } from '../shared/status'
 import type { Tag } from '../shared/tags'
+import type { JobSnapshot, JobSpec } from '../shared/jobs'
 import type { UpdateStatus } from '../main/release'
 
 // a listener for a message from main; returns how to remove it
@@ -53,6 +54,11 @@ const api = {
   relaunch: (): Promise<void> => ipcRenderer.invoke('app:relaunch'),
   checkUpdate: (): Promise<{ version: string } | null> => ipcRenderer.invoke('update:check'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('update:install'),
+  jobStart: (spec: JobSpec): Promise<string> => ipcRenderer.invoke('jobs:start', spec),
+  jobCancel: (id: string): Promise<void> => ipcRenderer.invoke('jobs:cancel', id),
+  jobClear: (): Promise<void> => ipcRenderer.invoke('jobs:clear'),
+  jobList: (): Promise<JobSnapshot[]> => ipcRenderer.invoke('jobs:list'),
+  onJobs: listen<[JobSnapshot[]]>('jobs'),
   onUpdateStatus: listen<[UpdateStatus]>('update:status'),
   onUpdateFound: listen<[string]>('update:found'),
   editTags: (paths: string[], change: { add?: Tag[]; remove?: string[] }): Promise<OpResult> => ipcRenderer.invoke('tags:edit', paths, change),

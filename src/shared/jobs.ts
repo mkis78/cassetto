@@ -13,3 +13,7 @@ export type JobSnapshot = {
   ended: number | null
 }
 export const routeOf = (s: Pick<JobSpec, 'from' | 'to'>): string => `${s.from ?? 'local'}>${s.to ?? 'local'}`
+export const isEnded = (j: Pick<JobSnapshot, 'state'>): boolean => j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
+const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/')) || '/'
+// the folders a job changes: where its items go, and where they leave for a move
+export const jobDirs = (s: JobSpec): string[] => [...new Set(s.items.flatMap(i => [dirOf(i.dest), ...(s.op === 'move' ? [dirOf(i.src)] : [])]))]

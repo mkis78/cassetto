@@ -9,6 +9,7 @@ import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
 import Sidebar from './Sidebar'
+import Transfers from './Transfers'
 import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
@@ -253,6 +254,7 @@ export default function App() {
     <div className={`app platform-${window.api.platform}`}>
       <div className="topbar">
         <div className="spacer" />
+        <Transfers />
         <button className="topbar-btn" title={t('Disposizione e layout salvati')} onClick={layoutChoice}>
           <LayoutDashboard {...ICON} /> {lastLayout || t('Layout')} <ChevronDown size={12} strokeWidth={2} />
         </button>

@@ -76,6 +76,10 @@ A sidebar with the places you go to most. **Cmd+Alt+S** (Ctrl+Alt+S on Linux) sw
 - **Drop files on an item** to move them there (hold Option to copy).
 - **Favourites**: add a folder with right-click → **Add to Favourites**, from the action bar, or by dragging it into the sidebar. Drag to reorder; right-click to rename, colour or remove. In Settings, show them as a **List** or as **Tiles**.
 
+### Transfers
+
+Copies and moves run in the background, one after another, with their progress in the top bar: a ring with how far along they are, and a click lists each one with its size, speed and time left, and **Cancel** (nothing half-copied is left behind). Files also go **between your Mac and your SSH servers**, or from one server to another, with the same gestures: drag them from one panel to another, or copy and paste. Between machines a drop always copies; Cut and Paste moves. What failed is listed under the transfer until you **Clear** it. Transfers between machines can't be undone.
+
 ### Undo
 
 **Cmd+Z** (Ctrl+Z on Linux) in a files panel undoes the last move, copy, rename, new file or folder, or move to the Trash, which brings the item back from the Trash. It is also in the action bar. Permanent deletes can't be undone. On an SSH server, a created item is removed only if you haven't changed it since.

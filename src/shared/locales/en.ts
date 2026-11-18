@@ -299,7 +299,6 @@ export const EN: Record<string, string> = {
   "Verde acqua": "Teal",
   "(alcuni)": "(some)",
   "Modifica tag…": "Edit Tags…",
-  "Incolla (solo dallo stesso host)": "Paste (only from the same host)",
   "Apri in un nuovo tab": "Open in a New Tab",
   "Apri nell'editor": "Open in the Editor",
   "Seleziona tutto": "Select All",
@@ -440,7 +439,6 @@ export const EN: Record<string, string> = {
   "Rimuovi dai preferiti": "Remove from Favourites",
   "Trascina qui una cartella": "Drag a folder here",
   "Tutti i server…": "All servers…",
-  "Solo tra file dello stesso host": "Only between files on the same host",
   "Solo le cartelle vanno nei preferiti": "Only folders can be favourites",
   "Barra laterale: stile preferiti": "Sidebar: favourites style",
   "Tessere": "Tiles",
@@ -450,5 +448,16 @@ export const EN: Record<string, string> = {
   "Applicazioni": "Applications",
   "Esci": "Quit",
   "Ci sono trasferimenti in corso.": "Transfers are in progress.",
-  "Uscendo verranno annullati.": "Quitting will cancel them."
+  "Uscendo verranno annullati.": "Quitting will cancel them.",
+  "Trasferimenti": "Transfers",
+  "questo Mac": "this Mac",
+  "questo computer": "this computer",
+  "In coda": "Queued",
+  "Calcolo…": "Measuring…",
+  "Completato": "Done",
+  "{n} non riusciti": "{n} failed",
+  "{done} di {total}": "{done} of {total}",
+  "{n} s": "{n} s",
+  "{n} min": "{n} min",
+  "{n} h": "{n} h"
 }

@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { routeOf, type JobSnapshot, type JobSpec } from '../shared/jobs'
+import { isEnded as ended, routeOf, type JobSnapshot, type JobSpec } from '../shared/jobs'
 
 export type Progress = { total(n: number | null): void; add(bytes: number): void; item(name: string | null): void; fail(path: string, error: string): void }
 export type Worker = (spec: JobSpec, p: Progress, signal: AbortSignal) => Promise<void>
 
 type Job = JobSnapshot & { ctrl: AbortController }
-const ended = (j: JobSnapshot) => j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
 
 // jobs on the same route (from>to) run one after another, in start order; other routes run concurrently
 export class JobQueue {

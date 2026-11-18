@@ -37,5 +37,5 @@ test('read-only menus keep only non-modifying items', () => {
   const bg = filesMenu({ target: 'background', remote: false, readOnly: true })
   expect(ids(bg)).toEqual(['refresh', 'terminal'])
   expect(noStraySeps(filesMenu({ target: 'dir', remote: false, readOnly: true }))).toBe(true)
-  expect(ids(actionsMenu({ ready: true, paste: 'ok', readOnly: true }))).toEqual(['terminal', 'refresh'])
+  expect(ids(actionsMenu({ ready: true, paste: true, readOnly: true }))).toEqual(['terminal', 'refresh'])
 })

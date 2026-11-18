@@ -9,8 +9,8 @@ import { isInside } from '../shared/fileOps'
 import { dirOf } from './FileSearch'
 import { listKey } from '../shared/listNav'
 import { t, tx } from '../shared/i18n'
-import { baseName, changed, navigate, PLACE_DND } from './tiles'
-import { DND } from './FilesTile'
+import { baseName, navigate, PLACE_DND, startJob } from './tiles'
+import { DND, draggedNow, dropCopies, type Dragged } from './FilesTile'
 import { themeDots } from './Tab'
 import { popup } from './menuIcons'
 import { ICON } from './icons'
@@ -103,18 +103,15 @@ export default function Sidebar({ state, onChange, api, activePath, tiles, onAll
     e.dataTransfer.effectAllowed = it.fav !== undefined ? 'copyMove' : 'copy'
   }
 
-  // files from a panel dropped on a folder here: moved in (Option copies) through main, so Undo takes them back.
-  // Same host only; a name already there fails and is reported, nothing is overwritten
+  // files from a panel dropped on a folder here: a job in main that moves them in (Option copies; onto another machine
+  // or out of an archive always a copy); same host keeps Undo. A name already there fails in the job, nothing is overwritten
   const dropFiles = async (dest: string, host: string | null, raw: string, alt: boolean) => {
-    const d = JSON.parse(raw) as { host: string | null; paths: string[]; copyOnly?: true }
-    const copy = alt || !!d.copyOnly // out of an archive: always a copy
-    if (d.host !== host) return toast(t('Solo tra file dello stesso host'))
+    const d = JSON.parse(raw) as Dragged
+    const copy = dropCopies(d, host, alt)
     const srcs = copy ? d.paths : d.paths.filter(p => dirOf(p) !== dest)
-    if (srcs.some(s => isInside(s, dest))) return toast(t('Non puoi copiare o spostare una cartella dentro sé stessa'))
+    if (d.host === host && srcs.some(s => isInside(s, dest))) return toast(t('Non puoi copiare o spostare una cartella dentro sé stessa'))
     if (!srcs.length) return
-    const r = await window.api.fileOp(host, { op: copy ? 'copy' : 'move', items: srcs.map(src => ({ src, dest: child(dest, baseName(src)), replace: false })) })
-    changed('sidebar', [dest, ...(copy ? [] : srcs.map(dirOf))])
-    if (r.failed.length) toast(r.failed.map(f => `${baseName(f.path)}: ${f.error}`).join('\n'))
+    await startJob({ op: copy ? 'copy' : 'move', from: d.host, to: host, items: srcs.map(src => ({ src, dest: child(dest, baseName(src)), replace: false })) }, d.root)
   }
   // on a favourite, place or disk: files go in; on a favourite, a dragged favourite takes its place
   const itemDrop = (it: Item) =>
@@ -126,7 +123,7 @@ export default function Sidebar({ state, onChange, api, activePath, tiles, onAll
             if (!reorder && !e.dataTransfer.types.includes(DND)) return
             e.preventDefault()
             e.stopPropagation()
-            e.dataTransfer.dropEffect = !reorder && e.altKey ? 'copy' : 'move'
+            e.dataTransfer.dropEffect = !reorder && dropCopies(draggedNow(), it.host, e.altKey) ? 'copy' : 'move'
             setDropOn(it.key)
           },
           onDragLeave: () => setDropOn(d => (d === it.key ? null : d)),
@@ -163,8 +160,8 @@ export default function Sidebar({ state, onChange, api, activePath, tiles, onAll
         return void (w.path !== null && setFavs(l => addFavourite(l, { host: w.host, path: w.path! })))
       }
       if (!raw) return
-      const d = JSON.parse(raw) as { host: string | null; paths: string[]; copyOnly?: true }
-      if (d.copyOnly) return // a folder inside an archive lives in a cache that goes away
+      const d = JSON.parse(raw) as Dragged
+      if (d.root) return // a folder inside an archive lives in a cache that goes away
       // only folders, the ones that list: the drag does not say which are
       const dirs = (await Promise.all(d.paths.map(async p => ((await window.api.listDir(d.host, p)).ok ? p : null)))).filter(p => p !== null)
       if (!dirs.length) return toast(t('Solo le cartelle vanno nei preferiti'))

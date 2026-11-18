@@ -38,9 +38,9 @@ export function tagsMenu(c: { known: { name: string; color: number }[]; has: (na
   }
 }
 
-// count: entries selected; paste: what the internal clipboard holds ('other-host': copied on another host, null: nothing);
+// count: entries selected; paste: the internal clipboard holds something (any host: a paste across hosts is a transfer);
 // tags: the Tag submenu, for local files; openWith: the apps for the selected local files (undefined: no submenu)
-export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; readOnly?: boolean }): MenuItem[] {
+export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; readOnly?: boolean }): MenuItem[] {
   const all = filesMenuAll(c)
   return c.readOnly ? keepOnly(all, id => ['open', 'copy', 'copyPath', 'terminal', 'refresh'].includes(id) || id.startsWith('openWith:')) : all
 }
@@ -55,12 +55,12 @@ function keepOnly(items: MenuItem[], ok: (id: string) => boolean): MenuItem[] {
   return kept.filter((i, n) => !i.separator || (n > 0 && n < kept.length - 1 && !kept[n - 1].separator))
 }
 
-function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean }): MenuItem[] {
+function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean }): MenuItem[] {
   const create = [
     sep,
     { id: 'newFile', label: t('Nuovo file') },
     { id: 'newFolder', label: t('Nuova cartella') },
-    { id: 'paste', label: c.paste === 'other-host' ? t('Incolla (solo dallo stesso host)') : t('Incolla'), enabled: c.paste === 'ok' }
+    { id: 'paste', label: t('Incolla'), enabled: !!c.paste }
   ]
   const edit = [
     sep,
@@ -106,12 +106,12 @@ export function viewMenu(c: { view: 'list' | 'icons' | 'columns' | 'gallery'; hi
 }
 
 // the files tile's "Azioni" button: on the folder shown
-export function actionsMenu(c: { ready: boolean; paste: 'ok' | 'other-host' | null; readOnly?: boolean }): MenuItem[] {
+export function actionsMenu(c: { ready: boolean; paste: boolean; readOnly?: boolean }): MenuItem[] {
   const all: MenuItem[] = [
     { id: 'newFile', label: t('Nuovo file'), enabled: c.ready },
     { id: 'newFolder', label: t('Nuova cartella'), enabled: c.ready },
     { id: 'terminal', label: t('Apri terminale qui'), enabled: c.ready },
-    { id: 'paste', label: c.paste === 'other-host' ? t('Incolla (solo dallo stesso host)') : t('Incolla'), enabled: c.ready && c.paste === 'ok' },
+    { id: 'paste', label: t('Incolla'), enabled: c.ready && c.paste },
     sep,
     { id: 'refresh', label: t('Aggiorna') }
   ]

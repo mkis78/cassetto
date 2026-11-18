@@ -2,6 +2,7 @@ import type { DockviewApi, IDockviewPanel } from 'dockview-react'
 import type { TileParams } from '../shared/types'
 import type { Command } from './Palette'
 import { t } from '../shared/i18n'
+import { isEnded, type JobSpec } from '../shared/jobs'
 
 // what each tab offers the action bar, asked for when the bar opens (so it sees the selection of that moment)
 const actions = new Map<string, () => Command[]>()
@@ -19,6 +20,15 @@ export async function runUndo(): Promise<void> {
   changed('undo', r.dirs)
   const text = r.failed.length ? r.failed.map(f => `${f.path}: ${f.error}`).join('\n') : t('Annullato: {label}', { label: r.label })
   window.dispatchEvent(new CustomEvent('cassetto:toast', { detail: { text, error: r.failed.length > 0 } }))
+}
+
+// a copy or move as a job in main; out of an archive (`root`, its cache) it holds the cache until the job ends (App lets go)
+export async function startJob(spec: JobSpec, root?: string): Promise<void> {
+  const id = await window.api.jobStart(spec)
+  if (!root) return
+  await window.api.archiveHold(`job:${id}`, spec.from, root)
+  // ended before the hold landed: App already let go, so let go here
+  if ((await window.api.jobList()).every(j => j.id !== id || isEnded(j))) void window.api.archiveRelease(`job:${id}`)
 }
 
 export const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p

@@ -11,7 +11,7 @@ import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { addToFavourites, CHANGED, changed, runUndo, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
+import { addToFavourites, CHANGED, changed, runUndo, startJob, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -38,17 +38,22 @@ const EMPTY: SearchQuery = { text: '', mode: 'name', regex: false, word: false }
 const MAX_SHOWN = 2000
 
 // copy/cut, shared by every Files tile; the paths belong to the host they were taken from
-let clip: { host: string | null; paths: string[]; cut: boolean } | null = null
-// every change of the clipboard lets go of the archive cache it held; a copy taken inside an archive holds that cache (`root`)
-const setClip = (next: typeof clip, root?: string) => {
+// root: taken inside an archive, the cache it lives in (read-only: copied, never cut)
+let clip: { host: string | null; paths: string[]; cut: boolean; root?: string } | null = null
+// every change of the clipboard lets go of the archive cache it held; a copy taken inside an archive holds that cache
+const setClip = (next: typeof clip) => {
   void window.api.archiveRelease('clipboard')
   clip = next
-  if (next && root) void window.api.archiveHold('clipboard', next.host, root)
+  if (next?.root) void window.api.archiveHold('clipboard', next.host, next.root)
 }
 // what a drag carries: the host and the paths; also kept here, since a dragover cannot read the data, only its types
 export const DND = 'application/x-cassetto-files'
-// copyOnly: taken out of an archive, so every drop copies
-let dragging: { host: string | null; paths: string[]; copyOnly?: true } | null = null
+// root: taken out of an archive (its cache), so every drop copies
+export type Dragged = { host: string | null; paths: string[]; root?: string }
+let dragging: Dragged | null = null
+export const draggedNow = () => dragging
+// a drop copies with Alt, out of an archive, and onto another machine; otherwise it moves
+export const dropCopies = (d: Dragged | null, to: string | null, alt: boolean) => alt || !!d?.root || d?.host !== to
 type Editing = { dir: string; kind: 'newFile' | 'newFolder' | 'rename'; name: string; from?: string; error?: string }
 
 const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1)
@@ -352,23 +357,22 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
 
   // what an action works on: the selection when the clicked entry is part of it, otherwise that entry alone
   const chosen = (full?: string) => (full && !picked.has(full) ? [full] : [...picked])
-  const clipFor = () => (!clip ? null : clip.host === host ? 'ok' : 'other-host') as 'ok' | 'other-host' | null
 
-  // what failed, after any message the caller already has; nothing to say leaves the notice alone
-  const report = (r: OpResult, before: string[] = []) => {
+  // what failed; nothing to say leaves the notice alone
+  const report = (r: OpResult) => {
     const n = r.failed.length
-    const lines = n ? [...before, `${n === 1 ? t('1 operazione non riuscita') : t('{n} operazioni non riuscite', { n })}:\n` + r.failed.map(f => `${nameOf(f.path)}: ${f.error}`).join('\n')] : before
-    if (lines.length) setNotice(lines.join('\n\n'))
+    if (n) setNotice(`${n === 1 ? t('1 operazione non riuscita') : t('{n} operazioni non riuscite', { n })}:\n` + r.failed.map(f => `${nameOf(f.path)}: ${f.error}`).join('\n'))
   }
   // a Mac disk does not tell "a" from "A": names clash without regard to case there
   const fold = (n: string) => (!host && window.api.platform === 'darwin' ? n.toLowerCase() : n)
 
-  // copy or move `srcs` into `destDir`, asking about names already there (a duplicate keeps both without asking);
-  // true when something was sent to main
-  const transfer = async (mode: 'copy' | 'move', srcs: string[], destDir: string, keepAll = false): Promise<boolean> => {
-    if (mode === 'move') srcs = srcs.filter(s => dirOf(s) !== destDir) // already there
+  // copy or move `srcs` (on `from`, this tab's host by default) into `destDir` here, as a job in main, asking about names
+  // already there (a duplicate keeps both without asking); root: the archive cache the sources live in; true when a job started
+  const transfer = async (mode: 'copy' | 'move', srcs: string[], destDir: string, { from = host, root, keepAll = false }: { from?: string | null; root?: string; keepAll?: boolean } = {}): Promise<boolean> => {
+    const same = from === host // paths on two machines never contain each other
+    if (same && mode === 'move') srcs = srcs.filter(s => dirOf(s) !== destDir) // already there
     if (!srcs.length) return false
-    if (srcs.some(s => isInside(s, destDir))) return setNotice(t('Non puoi copiare o spostare una cartella dentro sé stessa')), false
+    if (same && srcs.some(s => isInside(s, destDir))) return setNotice(t('Non puoi copiare o spostare una cartella dentro sé stessa')), false
     const r = await window.api.listDir(host, destDir) // fresh: the listing on screen may be old
     if (!r.ok) return setNotice(r.error), false
     const taken = new Set(r.listing.entries.map(e => fold(e.name)))
@@ -390,7 +394,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       if (c === 'replace') {
         const dest = child(destDir, name)
         // replacing an entry with itself, or the folder that holds the source, would destroy the source
-        if (dest === src || isInside(dest, src)) refused.push(name)
+        if (same && (dest === src || isInside(dest, src))) refused.push(name)
         else items.push({ src, dest, replace: true })
         continue
       }
@@ -398,18 +402,16 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       taken.add(fold(n))
       items.push({ src, dest: child(destDir, n), replace: false })
     }
-    const before = refused.length ? [t('Non sostituiti (sostituirebbero sé stessi): {names}', { names: refused.join(', ') })] : []
-    if (!items.length) return report({ failed: [] }, before), false
-    report(await window.api.fileOp(host, { op: mode, items }), before)
-    changed(api.id, [destDir, ...(mode === 'move' ? srcs.map(dirOf) : [])])
-    await refreshTo(items.length === 1 ? items[0].dest : undefined)
+    if (refused.length) setNotice(t('Non sostituiti (sostituirebbero sé stessi): {names}', { names: refused.join(', ') }))
+    if (!items.length) return false
+    await startJob({ op: mode, from, to: host, items }, root) // App refreshes the folders when it ends
     return true
   }
 
   const paste = async (destDir: string) => {
     const c = clip
-    if (!c || c.host !== host || readOnly) return
-    if ((await transfer(c.cut ? 'move' : 'copy', c.paths, destDir)) && c.cut) setClip(null) // a cut is pasted once
+    if (!c || readOnly) return
+    if ((await transfer(c.cut ? 'move' : 'copy', c.paths, destDir, { from: c.host, root: c.root })) && c.cut) setClip(null) // a cut is pasted once
   }
 
   // Finder tags (local only): the entries behind paths, the tags known here, a change applied and shown
@@ -503,20 +505,19 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     setSel(s)
   }
 
-  // drag the selection onto a folder or a folder's background, in this tile or another on the same host:
-  // move, or copy with Alt
+  // drag the selection onto a folder or a folder's background, in this tile or another: on the same host move, or copy
+  // with Alt; onto another machine always copy
   const drag = (ev: React.DragEvent, full: string) => {
-    dragging = { host, paths: chosen(full), ...(readOnly && { copyOnly: true as const }) }
+    dragging = { host, paths: chosen(full), ...(readOnly && { root: archives[archives.length - 1].root }) }
     ev.dataTransfer.setData(DND, JSON.stringify(dragging))
     ev.dataTransfer.effectAllowed = 'copyMove'
   }
   const dropProps = (dir: string) => readOnly ? {} : ({
     onDragOver: (ev: React.DragEvent) => {
-      // ponytail: no drops across hosts; copying between machines needs a transfer of its own
-      if (!ev.dataTransfer.types.includes(DND) || dragging?.host !== host) return
+      if (!ev.dataTransfer.types.includes(DND)) return
       ev.preventDefault()
       ev.stopPropagation()
-      ev.dataTransfer.dropEffect = ev.altKey || dragging?.copyOnly ? 'copy' : 'move'
+      ev.dataTransfer.dropEffect = dropCopies(dragging, host, ev.altKey) ? 'copy' : 'move'
       setDropOn(dir)
     },
     onDragLeave: () => setDropOn(d => (d === dir ? null : d)),
@@ -526,8 +527,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       if (!raw) return
       ev.preventDefault()
       ev.stopPropagation()
-      const d = JSON.parse(raw) as { host: string | null; paths: string[]; copyOnly?: true }
-      if (d.host === host && !d.paths.includes(dir)) transfer(ev.altKey || d.copyOnly ? 'copy' : 'move', d.paths, dir)
+      const d = JSON.parse(raw) as Dragged
+      if (d.host !== host || !d.paths.includes(dir)) transfer(dropCopies(d, host, ev.altKey) ? 'copy' : 'move', d.paths, dir, { from: d.host, root: d.root })
     }
   })
 
@@ -535,7 +536,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const take = (cut: boolean) => {
     const paths = chosen()
     if (readOnly && cut) return
-    if (paths.length) setClip({ host, paths, cut }, readOnly ? archives[archives.length - 1].root : undefined)
+    if (paths.length) setClip({ host, paths, cut, ...(readOnly && { root: archives[archives.length - 1].root }) })
   }
   const pasteHere = () => void ((col?.path ?? here) && paste(col?.path ?? here!))
 
@@ -578,7 +579,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const tags = entry && !host && !readOnly ? tagsMenu({ known, has: tagState(items), dots: TAG_HEX.map((h, i) => h || (i ? '' : '#8e8e93')) }) : undefined
     const apps = entry && !entry.dir && !host ? await window.api.appsFor(items) : undefined
     const choice = await popup(
-      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags, openWith: apps, archive: !!entry && !entry.dir && items.length === 1 && isArchive(entry.name), readOnly })
+      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: !!clip, tags, openWith: apps, archive: !!entry && !entry.dir && items.length === 1 && isArchive(entry.name), readOnly })
     )
     if (!choice) return
     if (choice === 'openWith:other') return void window.api.pickApp(items).then(err => err && setNotice(err))
@@ -587,8 +588,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'newFile' || choice === 'newFolder') return startCreate(choice, full)
     if (choice === 'paste') return paste(full)
     if (choice === 'rename') return startRename(full)
-    if (choice === 'duplicate') return transfer('copy', items, dir, true)
-    if (choice === 'copy' || choice === 'cut') return void setClip({ host, paths: items, cut: choice === 'cut' }, readOnly ? archives[archives.length - 1].root : undefined)
+    if (choice === 'duplicate') return transfer('copy', items, dir, { keepAll: true })
+    if (choice === 'copy' || choice === 'cut') return void setClip({ host, paths: items, cut: choice === 'cut', ...(readOnly && { root: archives[archives.length - 1].root }) })
     if (choice === 'delete') return askDelete(items)
     if (choice?.startsWith('tag:')) return toggleTag(items, known[Number(choice.slice(4))])
     if (choice === 'tags') return setTagging(items)
@@ -703,7 +704,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const actionChoice = async (e: React.MouseEvent) => {
     const at = below(e)
     const dir = error ? null : (col?.path ?? listing?.path ?? null)
-    const choice = await popup(actionsMenu({ ready: !!dir, paste: clipFor(), readOnly }), at)
+    const choice = await popup(actionsMenu({ ready: !!dir, paste: !!clip, readOnly }), at)
     if ((choice === 'newFile' || choice === 'newFolder') && dir) startCreate(choice, dir)
     if (choice === 'paste' && dir) paste(dir)
     if (choice === 'terminal' && dir) openTerminal(containerApi, { cwd: dir, host }, api.id)
@@ -728,7 +729,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             ...(one && oneDir ? [{ label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, one), icon: Star }] : []),
             ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
             ...(one ? [{ label: t('Rinomina'), hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
-            { label: t('Duplica'), run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus }
+            { label: t('Duplica'), run: () => void transfer('copy', items, dirOf(items[0]), { keepAll: true }), icon: CopyPlus }
           ]),
           { label: t('Copia'), hint: 'Cmd+C', run: () => take(false), icon: Copy },
           ...(readOnly ? [] : [{ label: t('Taglia'), hint: 'Cmd+X', run: () => take(true), icon: Scissors }]),
@@ -745,7 +746,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
               { label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, dir), icon: Star }
             ]),
             { label: t('Apri terminale qui'), hint: 'Cmd+Alt+T', run: () => openTerminal(containerApi, { cwd: oneDir && one ? one : dir, host }, api.id), icon: SquareTerminal },
-            ...(clipFor() === 'ok' && !readOnly ? [{ label: t('Incolla'), hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
+            ...(clip && !readOnly ? [{ label: t('Incolla'), hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
           ]
         : []),
       { label: t('Cerca per nome'), hint: 'Cmd+F', run: () => (set({ mode: 'name' }), setTimeout(() => inputRef.current?.focus())), icon: Search },

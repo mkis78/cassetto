@@ -10,7 +10,7 @@ test('files menu depends on what was clicked', () => {
   expect(ids(filesMenu({ target: 'background', remote: false }))).toEqual(['refresh', 'terminal', 'newFile', 'newFolder', 'paste'])
   expect(find(filesMenu({ target: 'file', remote: true }), 'delete')?.label).toBe('Elimina definitivamente…') // no trash over ssh
   expect(find(filesMenu({ target: 'file', remote: false, count: 2 }), 'rename')?.enabled).toBe(false)
-  expect(find(filesMenu({ target: 'background', remote: false, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
+  expect(find(filesMenu({ target: 'background', remote: false, paste: false }), 'paste')?.enabled).toBe(false)
 })
 
 test('open with submenu, local files only', () => {
@@ -63,11 +63,11 @@ test('view menu: the current view and toggles ticked, no side preview in the gal
   expect(find(viewMenu({ view: 'gallery', hidden: false, preview: true }), 'preview')?.enabled).toBe(false)
 })
 
-test('actions menu: nothing to create in a folder that failed, paste only from the same host', () => {
-  expect(ids(actionsMenu({ ready: true, paste: null }))).toEqual(['newFile', 'newFolder', 'terminal', 'paste', 'refresh'])
-  expect(find(actionsMenu({ ready: false, paste: 'ok' }), 'newFile')?.enabled).toBe(false)
-  expect(find(actionsMenu({ ready: true, paste: 'other-host' }), 'paste')?.enabled).toBe(false)
-  expect(find(actionsMenu({ ready: true, paste: 'ok' }), 'paste')?.enabled).toBe(true)
+test('actions menu: nothing to create in a folder that failed, paste when the clipboard holds something', () => {
+  expect(ids(actionsMenu({ ready: true, paste: false }))).toEqual(['newFile', 'newFolder', 'terminal', 'paste', 'refresh'])
+  expect(find(actionsMenu({ ready: false, paste: true }), 'newFile')?.enabled).toBe(false)
+  expect(find(actionsMenu({ ready: true, paste: false }), 'paste')?.enabled).toBe(false)
+  expect(find(actionsMenu({ ready: true, paste: true }), 'paste')?.enabled).toBe(true)
 })
 
 test('layouts menu: save, then each layout to open and to delete', () => {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { JobQueue, type Worker } from '../src/main/jobs'
-import type { JobSnapshot, JobSpec } from '../src/shared/jobs'
+import { jobDirs, type JobSnapshot, type JobSpec } from '../src/shared/jobs'
 
 const spec = (to: string | null = null): JobSpec => ({ op: 'copy', from: null, to, items: [{ src: '/a', dest: '/b', replace: false }] })
 const defer = () => {
@@ -143,4 +143,10 @@ describe('JobQueue', () => {
     p.fail('x', 'late')
     expect(q.list()[1]).toMatchObject({ bytes: 0, failed: [] })
   })
+})
+
+test('a job changes the folders it copies into, and the ones a move empties', () => {
+  const items = [{ src: '/a/x', dest: '/b/x', replace: false }, { src: '/a/y', dest: '/b/y 2', replace: false }, { src: '/z', dest: '/b/z', replace: true }]
+  expect(jobDirs({ op: 'copy', from: null, to: 'srv', items })).toEqual(['/b'])
+  expect(jobDirs({ op: 'move', from: null, to: 'srv', items })).toEqual(['/b', '/a', '/'])
 })

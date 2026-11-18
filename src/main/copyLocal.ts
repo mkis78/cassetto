@@ -6,16 +6,11 @@ import { pipeline } from 'node:stream/promises'
 import type { Trashed } from '../shared/types'
 import type { JobItem, JobSpec } from '../shared/jobs'
 import type { Progress } from './jobs'
-import { EXISTS, place } from './fileOps'
+import { exists, place, taken } from './fileOps'
 import { t } from '../shared/i18n'
 
 // below this a file is copied whole (a clone on APFS, instant); above it streamed, so its bytes show as they pass
 const BIG = 64 * 1024 * 1024
-
-const exists = (p: string) => lstat(p).then(() => true, () => false)
-const taken = (e: unknown): never => {
-  throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(t(EXISTS)) : e
-}
 
 // bytes of the regular files under p, symlinks not followed; a missing path counts 0 (its copy reports the error)
 async function size(p: string, signal: AbortSignal): Promise<number> {
@@ -27,17 +22,22 @@ async function size(p: string, signal: AbortSignal): Promise<number> {
   return n
 }
 
-// s to d, every name claimed atomically so nothing is ever overwritten; `claimed` runs once d is ours
-async function copyTree(s: string, d: string, p: Progress, signal: AbortSignal, claimed = () => {}): Promise<void> {
+// s to d, every name claimed atomically so nothing is ever overwritten; `claimed` runs once d is ours.
+// Folder modes are collected in `modes`, applied once the whole item is done: a read-only folder still takes its
+// contents, and a partial item can still be removed.
+async function copyTree(s: string, d: string, p: Progress, signal: AbortSignal, modes: [string, number][], claimed = () => {}): Promise<void> {
   signal.throwIfAborted()
   const st = await lstat(s)
   if (st.isDirectory()) {
     await mkdir(d).catch(taken)
     claimed()
-    for (const e of await readdir(s)) await copyTree(join(s, e), join(d, e), p, signal)
-    return chmod(d, st.mode) // last: a read-only folder still takes its contents
+    modes.push([d, st.mode])
+    for (const e of await readdir(s)) await copyTree(join(s, e), join(d, e), p, signal, modes)
+    return
   }
   if (st.isSymbolicLink()) return symlink(await readlink(s), d).then(claimed, taken)
+  // a FIFO would block open forever, past any cancel; sockets and devices are not content either
+  if (!st.isFile()) throw new Error(t('Tipo di file non supportato'))
   if (st.size < BIG) {
     await copyFile(s, d, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE).catch(taken)
     claimed()
@@ -78,19 +78,21 @@ export async function copyLocal(spec: JobSpec, p: Progress, signal: AbortSignal,
         p.item(basename(i.src))
         let mine = false
         const claimed = () => (mine = true)
+        const modes: [string, number][] = []
         try {
           const no = refused.get(i.dest)
           if (no !== undefined) throw new Error(no)
-          if (spec.op === 'copy') await copyTree(i.src, i.dest, p, signal, claimed)
+          if (spec.op === 'copy') await copyTree(i.src, i.dest, p, signal, modes, claimed)
           else
             try {
               await place(i.src, i.dest)
               p.add(sizes[k])
             } catch (e) {
               if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
-              await copyTree(i.src, i.dest, p, signal, claimed)
+              await copyTree(i.src, i.dest, p, signal, modes, claimed)
               crossed.push(i.src)
             }
+          for (const [d, m] of modes.reverse()) await chmod(d, m) // innermost first
           done.push(i)
         } catch (e) {
           if (mine) await rm(i.dest, { recursive: true, force: true }).catch(() => {})

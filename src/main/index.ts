@@ -213,7 +213,8 @@ const queue = new JobQueue({
     try {
       record(await copyLocal(spec, p, signal, trashItems))
     } catch (e) {
-      record(e as { done: JobItem[]; trashed: Trashed[] }) // copyLocal attaches both to what it throws
+      const r = e as { done?: JobItem[]; trashed?: Trashed[] } // copyLocal attaches both to what it throws
+      record({ done: r.done ?? [], trashed: r.trashed ?? [] })
       throw e
     }
   },

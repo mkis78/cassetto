@@ -9,7 +9,7 @@ import { isArchive } from '../shared/fileOps'
 // Nothing here overwrites unless an item says replace: an existing name fails with this.
 export const EXISTS = tx('Esiste già')
 
-const exists = (p: string) => lstat(p).then(() => true, () => false)
+export const exists = (p: string) => lstat(p).then(() => true, () => false)
 // two names for one file: a case-only rename on a case-insensitive disk (macOS)
 const same = (a: string, b: string) => Promise.all([lstat(a), lstat(b)]).then(([x, y]) => x.dev === y.dev && x.ino === y.ino, () => false)
 
@@ -45,6 +45,11 @@ export function extractCommand(platform: string, archive: string, dest: string):
   return ['tar', ['-xf', archive, '-C', dest]]
 }
 
+// a name taken by someone else (EEXIST) reads as EXISTS
+export const taken = (e: unknown): never => {
+  throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(t(EXISTS)) : e
+}
+
 const fresh = async (p: string) => {
   if (await exists(p)) throw new Error(t(EXISTS))
 }
@@ -52,19 +57,16 @@ const fresh = async (p: string) => {
 // src to dest without ever replacing what is there: the new name is claimed first, atomically
 // (mkdir for a folder, which rename then takes over since it is empty; a hard link for a file)
 export async function place(src: string, dest: string): Promise<void> {
-  const claim = (e: unknown) => {
-    throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(t(EXISTS)) : e
-  }
   const st = await lstat(src)
   if (st.isDirectory()) {
-    await mkdir(dest).catch(claim)
+    await mkdir(dest).catch(taken)
     return rename(src, dest).catch(async e => {
       await rmdir(dest).catch(() => {})
       throw e
     })
   }
   // ponytail: a symlink (macOS link() follows it) or a disk without hard links falls back to check-then-rename
-  const linked = st.isSymbolicLink() ? false : await link(src, dest).then(() => true, e => ((e as NodeJS.ErrnoException).code === 'EEXIST' ? claim(e) : false))
+  const linked = st.isSymbolicLink() ? false : await link(src, dest).then(() => true, e => ((e as NodeJS.ErrnoException).code === 'EEXIST' ? taken(e) : false))
   if (linked) return unlink(src)
   await fresh(dest)
   return rename(src, dest)
@@ -127,9 +129,7 @@ async function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]
         [
           op.dest,
           async () => {
-            await mkdir(op.dest).catch(e => {
-              throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(t(EXISTS)) : e
-            })
+            await mkdir(op.dest).catch(taken)
             try {
               const [cmd, args] = extractCommand(process.platform, op.archive, op.dest)
               const child = promisify(execFile)(cmd, args)

@@ -1,4 +1,5 @@
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
@@ -151,5 +152,39 @@ describe('copyLocal', () => {
     expect(readFileSync(join(d, 'first2'), 'utf8')).toBe('x')
     expect(statSync(join(d, 'tree', 'big.bin')).size).toBe(BIG)
     expect(r.added).toBeLessThan(BIG)
+  })
+  // a-ro is copied (and, before the fix, made read-only) before z-pipe fails the item
+  const readOnlyTree = () => {
+    const d = dir()
+    const src = join(d, 'tree')
+    mkdirSync(join(src, 'a-ro'), { recursive: true })
+    writeFileSync(join(src, 'a-ro', 'f'), 'x')
+    chmodSync(join(src, 'a-ro'), 0o555)
+    return { d, src, dest: join(d, 'copy') }
+  }
+
+  test('refuses a FIFO and removes the partial item, read-only folders included', async () => {
+    const { src, dest } = readOnlyTree()
+    execFileSync('mkfifo', [join(src, 'z-pipe')])
+    expect(readdirSync(src)).toEqual(['a-ro', 'z-pipe'])
+    const { r, p } = progress()
+    const res = await run('copy', [{ src, dest, replace: false }], p)
+    expect(res.done).toEqual([])
+    expect(r.failed).toEqual([{ path: src, error: 'Tipo di file non supportato' }])
+    expect(r.added).toBe(1) // a-ro/f was copied first
+    expect(existsSync(dest)).toBe(false)
+    rmSync(join(src, 'z-pipe'))
+    await run('copy', [{ src, dest, replace: false }], progress().p)
+    expect(statSync(join(dest, 'a-ro')).mode & 0o777).toBe(0o555)
+  })
+
+  test('cancel removes a partial item holding a read-only folder', async () => {
+    const { src, dest } = readOnlyTree()
+    writeFileSync(join(src, 'b.txt'), 'b')
+    const ctrl = new AbortController()
+    const { p } = progress(() => ctrl.abort()) // after a-ro/f
+    const e = await run('copy', [{ src, dest, replace: false }], p, ctrl.signal).catch(e => e)
+    expect(e.name).toBe('AbortError')
+    expect(existsSync(dest)).toBe(false)
   })
 })

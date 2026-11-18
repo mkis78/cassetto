@@ -56,9 +56,12 @@ export async function copyRemote(spec: JobSpec, p: Progress, signal: AbortSignal
         if (n > counted) p.add(n - counted), (counted = n)
       }
       let live = true
+      let busy = false // a du still running on a big tree: skip the tick
       const poll = setInterval(async () => {
-        if (signal.aborted) return
+        if (signal.aborted || busy) return
+        busy = true
         const r = await run(`du -sk -- ${q(i.dest)}`, signal)
+        busy = false
         if (live && !r.code) count(kb(r.out))
       }, 2000)
       // first line: the process group to kill on cancel, and whether the destination was already there (then it is not ours to remove).
@@ -76,9 +79,13 @@ export async function copyRemote(spec: JobSpec, p: Progress, signal: AbortSignal
       const [pg, existed] = (nl < 0 ? '' : r.out.slice(0, nl)).trim().split(/\s+/)
       if (signal.aborted) {
         if (/^\d+$/.test(pg)) {
-          // a replace already removed the old destination; a move leaves a partial one only while its source is still there (mv across filesystems)
-          const mine = i.replace || existed === '0'
-          const rm = !mine ? '' : spec.op === 'move' ? `if [ -e ${q(i.src)} ] || [ -L ${q(i.src)} ]; then rm -rf -- ${D}; fi` : `rm -rf -- ${D}`
+          // ours to remove: a replace (cancelled even before its own rm ran, the old destination goes too: the user chose to replace it),
+          // or a destination that was not there. Never for a move: a cross-filesystem mv cancelled while deleting its source
+          // may leave the destination as the only whole copy.
+          // ponytail: so a cancelled cross-filesystem remote move can leave a partial destination behind
+          const mine = spec.op === 'copy' && (i.replace || existed === '0')
+          // the dying copy must not write after the rm: wait up to 5 s for its group to be gone
+          const rm = mine ? `i=0; while kill -0 -${pg} 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done; rm -rf -- ${D}` : ''
           await run(`kill -TERM -${pg} 2>/dev/null; kill -TERM ${pg} 2>/dev/null; ${rm}`)
         }
         signal.throwIfAborted()

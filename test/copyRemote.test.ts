@@ -99,7 +99,7 @@ describe('copyRemote', () => {
     expect(alive(pid)).toBe(false)
   })
 
-  test('cancel of a move with its source still there removes the partial destination', async () => {
+  test('cancel of a move never removes its destination', async () => {
     const d = dir()
     writeFileSync(join(d, 'a'), 'data')
     const { run } = runner({ name: 'mv', body: `echo partial > "$3"; exec sleep 30` })
@@ -109,7 +109,7 @@ describe('copyRemote', () => {
     await until(() => existsSync(join(d, 'a2')))
     ctrl.abort()
     expect((await job.catch(e => e)).name).toBe('AbortError')
-    expect(existsSync(join(d, 'a2'))).toBe(false)
+    expect(readFileSync(join(d, 'a2'), 'utf8')).toBe('partial\n')
     expect(readFileSync(join(d, 'a'), 'utf8')).toBe('data')
   })
 })

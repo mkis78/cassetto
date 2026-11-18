@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net,
 import { pathToFileURL } from 'node:url'
 import { APP_ORIGIN, appFile } from './appProtocol'
 import { execFile } from 'node:child_process'
-import { readFile, stat, statfs } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
@@ -19,6 +19,7 @@ import { editTags, folderTags, runTagSearch } from './tags'
 import { canSelfUpdate, checkRelease, installRelease, type Release } from './release'
 import type { Tag } from '../shared/tags'
 import { listLocal, previewLocal, readLocal, writeLocal } from './files'
+import { ArchiveCaches, openLocal, remoteOpenScript, sweep } from './archives'
 import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
 import { shortcut, type MenuItem } from '../shared/menus'
@@ -283,6 +284,48 @@ handle('search:run', async (tileId: string, run: number, host: string | null, cw
     if (searches.get(tileId) === ac) searches.delete(tileId)
   }
 })
+// archives browsed as folders: each is extracted once into a cache that lives while some tab (or the clipboard) holds it
+const archiveBase = () => join(app.getPath('userData'), 'archives')
+const removeCache = async (host: string | null, root: string) => {
+  if (host) await sshRun(host, 'rm -rf -- ' + shQuote(root))
+  else await rm(root, { recursive: true, force: true })
+}
+const archives = new ArchiveCaches({ base: archiveBase(), remove: removeCache })
+const opening = new Map<string, AbortController>() // one open per holder: a new one cancels the previous
+handle('archive:open', async (host: string | null, archive: string, holder: string) => {
+  opening.get(holder)?.abort()
+  const ac = new AbortController()
+  opening.set(holder, ac)
+  try {
+    let root: string
+    let hidden: number
+    if (host) {
+      const r = await sshRun(host, remoteOpenScript(archive), { timeout: 10 * 60_000, signal: ac.signal })
+      if (!r.ok) return { ok: false, error: r.error }
+      const [d, n] = r.out.toString().split('\0')
+      if (!d) return { ok: false, error: t('Estrazione non riuscita') }
+      root = d
+      hidden = Number(n) || 0
+    } else {
+      await mkdir(archiveBase(), { recursive: true })
+      ;({ root, hidden } = await openLocal(archiveBase(), archive, ac.signal))
+    }
+    if (ac.signal.aborted) {
+      if (host) await removeCache(host, root).catch(() => {}) // a local cache stays for the next open
+      return { ok: false, error: t('Annullato') }
+    }
+    archives.acquire(host, root, holder)
+    return { ok: true, root, hidden }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  } finally {
+    if (opening.get(holder) === ac) opening.delete(holder)
+  }
+})
+handle('archive:cancel', (holder: string) => opening.get(holder)?.abort())
+handle('archive:hold', (holder: string, host: string | null, root: string) => archives.acquire(host, root, holder))
+handle('archive:release', (holder: string, root?: string) => archives.release(holder, root))
+handle('archive:releaseAll', () => archives.releaseAll())
 // a command's output, or '' when it fails (not installed, no such preference)
 const run = (file: string, args: string[]) => new Promise<string>(ok => execFile(file, args, { timeout: 3000 }, (err, out) => ok(err ? '' : out)))
 
@@ -356,7 +399,7 @@ app.whenReady().then(() => {
   barShortcut = loadState(stateFile()).settings?.barShortcut ?? DEFAULT_BAR
   if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '../../build/icon.png')) // the packaged app gets it from the bundle
   setMenu()
-  createWindow()
+  sweep(archiveBase()).finally(createWindow) // caches of a crashed run are not held by anyone
 })
-app.on('before-quit', () => ptys.killAll())
+app.on('before-quit', () => (ptys.killAll(), archives.releaseAll().then(() => sweep(archiveBase()))))
 app.on('window-all-closed', () => app.quit())

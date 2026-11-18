@@ -1,5 +1,7 @@
 // English for every text the app shows, keyed by its Italian (see shared/i18n). test/i18n.test.ts checks none is missing.
 export const EN: Record<string, string> = {
+  "Annullato": "Cancelled",
+  "Estrazione non riuscita": "Extraction failed",
   "Annullato: {label}": "Undone: {label}",
   "Annulla: {label}": "Undo: {label}",
   "Copiato, ma l'originale non è stato spostato nel Cestino: {error}": "Copied, but the original was not moved to the Trash: {error}",

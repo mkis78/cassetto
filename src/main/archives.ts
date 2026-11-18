@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { lstat, mkdir, readdir, readlink, rename, rm, stat } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { extractCommand } from './fileOps'
 import { shQuote } from './ssh'
@@ -51,8 +51,8 @@ export async function pruneLinks(root: string): Promise<number> {
       if (st.isDirectory()) await walk(p)
       else if (st.isSymbolicLink()) {
         const target = await readlink(p)
-        const rel = relative(root, resolve(dirname(p), target))
-        if (isAbsolute(target) || rel === '..' || rel.startsWith('../') || rel.startsWith('..\\') || isAbsolute(rel)) {
+        // ponytail: any `..` segment goes, even one that stays inside; a chain of links (q -> ., x -> q/q/../..) defeats a lexical check
+        if (isAbsolute(target) || target.split(/[\\/]/).includes('..')) {
           await rm(p, { force: true })
           n++
         }
@@ -85,17 +85,24 @@ export async function openLocal(base: string, archive: string, signal: AbortSign
   }
 }
 
-// prints <cache dir>\0<links removed>; a failed extraction removes the dir and exits non-zero
-// ponytail: a cancel kills ssh but not necessarily the remote tar; its dir stays in /tmp until the host cleans it
-export function remoteOpenScript(archive: string): string {
+// the cache dir is named by main so a cancel can remove it
+export const remoteCacheDir = (): string => `/tmp/cassetto-archive-${randomBytes(8).toString('hex')}`
+
+// a root main may delete: its own cache folder locally, a cassetto-archive dir in /tmp on a host
+export const ownedCache = (host: string | null, root: string, base: string): boolean =>
+  host ? /^\/tmp\/cassetto-archive-[A-Za-z0-9]+$/.test(root) : dirname(root) === base
+
+// extracts into `d`, prints <links removed>; a failed extraction removes the dir and exits non-zero
+export function remoteOpenScript(archive: string, d: string): string {
   const a = shQuote(archive)
   const tar = `tar -xf ${a} -C "$d"`
   const run = /\.zip$/i.test(archive) ? `unzip -q -o -- ${a} -d "$d" || ${tar}` : tar
   return [
-    `d=$(mktemp -d /tmp/cassetto-archive-XXXXXX) || exit 1`,
+    `d=${shQuote(d)}`,
+    `mkdir -m 700 -- "$d" || exit 1`,
     `{ ${run}; } || { rm -rf -- "$d"; exit 1; }`,
     `n=$(find "$d" -type l | while IFS= read -r l; do case $(readlink "$l") in (/*|*..*) rm -f -- "$l"; echo x;; esac; done | wc -l)`,
-    `printf '%s\\0%s' "$d" "$((n))"`
+    `printf '%s' "$((n))"`
   ].join('\n')
 }
 

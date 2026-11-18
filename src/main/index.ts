@@ -19,7 +19,7 @@ import { editTags, folderTags, runTagSearch } from './tags'
 import { canSelfUpdate, checkRelease, installRelease, type Release } from './release'
 import type { Tag } from '../shared/tags'
 import { listLocal, previewLocal, readLocal, writeLocal } from './files'
-import { ArchiveCaches, openLocal, remoteOpenScript, sweep } from './archives'
+import { ArchiveCaches, openLocal, ownedCache, remoteCacheDir, remoteOpenScript, sweep } from './archives'
 import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
 import { shortcut, type MenuItem } from '../shared/menus'
@@ -287,6 +287,7 @@ handle('search:run', async (tileId: string, run: number, host: string | null, cw
 // archives browsed as folders: each is extracted once into a cache that lives while some tab (or the clipboard) holds it
 const archiveBase = () => join(app.getPath('userData'), 'archives')
 const removeCache = async (host: string | null, root: string) => {
+  if (!ownedCache(host, root, archiveBase())) return // the renderer names these paths: only ours are deleted
   if (host) await sshRun(host, 'rm -rf -- ' + shQuote(root))
   else await rm(root, { recursive: true, force: true })
 }
@@ -300,12 +301,13 @@ handle('archive:open', async (host: string | null, archive: string, holder: stri
     let root: string
     let hidden: number
     if (host) {
-      const r = await sshRun(host, remoteOpenScript(archive), { timeout: 10 * 60_000, signal: ac.signal })
-      if (!r.ok) return { ok: false, error: r.error }
-      const [d, n] = r.out.toString().split('\0')
-      if (!d) return { ok: false, error: t('Estrazione non riuscita') }
-      root = d
-      hidden = Number(n) || 0
+      root = remoteCacheDir()
+      const r = await sshRun(host, remoteOpenScript(archive, root), { timeout: 10 * 60_000, signal: ac.signal })
+      if (!r.ok) {
+        await removeCache(host, root).catch(() => {}) // a cancel or a lost connection may have left the dir
+        return { ok: false, error: ac.signal.aborted ? t('Annullato') : r.error }
+      }
+      hidden = Number(r.out.toString()) || 0
     } else {
       await mkdir(archiveBase(), { recursive: true })
       ;({ root, hidden } = await openLocal(archiveBase(), archive, ac.signal))
@@ -323,7 +325,7 @@ handle('archive:open', async (host: string | null, archive: string, holder: stri
   }
 })
 handle('archive:cancel', (holder: string) => opening.get(holder)?.abort())
-handle('archive:hold', (holder: string, host: string | null, root: string) => archives.acquire(host, root, holder))
+handle('archive:hold', (holder: string, host: string | null, root: string) => ownedCache(host, root, archiveBase()) && archives.acquire(host, root, holder))
 handle('archive:release', (holder: string, root?: string) => archives.release(holder, root))
 handle('archive:releaseAll', () => archives.releaseAll())
 // a command's output, or '' when it fails (not installed, no such preference)
@@ -401,5 +403,12 @@ app.whenReady().then(() => {
   setMenu()
   sweep(archiveBase()).finally(createWindow) // caches of a crashed run are not held by anyone
 })
-app.on('before-quit', () => (ptys.killAll(), archives.releaseAll().then(() => sweep(archiveBase()))))
+let cleaned = false
+app.on('before-quit', e => {
+  ptys.killAll()
+  if (cleaned) return
+  e.preventDefault() // the caches go first (remote ones over ssh), but never keep the user waiting long
+  cleaned = true
+  Promise.race([archives.releaseAll().then(() => sweep(archiveBase())), new Promise(r => setTimeout(r, 3000))]).finally(() => app.quit())
+})
 app.on('window-all-closed', () => app.quit())

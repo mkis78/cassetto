@@ -3,14 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, test, vi } from 'vitest'
-import { ArchiveCaches, cacheKey, openLocal, remoteOpenScript } from '../src/main/archives'
+import { ArchiveCaches, cacheKey, openLocal, ownedCache, remoteCacheDir, remoteOpenScript } from '../src/main/archives'
 
 const made: string[] = []
 const dir = () => (made[made.push(mkdtempSync(join(tmpdir(), 'arch-'))) - 1])
 afterAll(() => made.forEach(d => rmSync(d, { recursive: true, force: true })))
 const sig = () => new AbortController().signal
 
-// a .tar.gz holding a/b.txt, plus (with links) in -> a/b.txt, abs -> /etc/passwd, up -> ../../x
+// a .tar.gz holding a/b.txt, plus (with links) in -> a/b.txt, q -> ., and the escaping abs -> /etc/passwd, up -> ../../x, x -> q/q/../..
 function archive(links = false): string {
   const src = dir()
   mkdirSync(join(src, 'a'))
@@ -19,6 +19,8 @@ function archive(links = false): string {
     symlinkSync('a/b.txt', join(src, 'in'))
     symlinkSync('/etc/passwd', join(src, 'abs'))
     symlinkSync('../../x', join(src, 'up'))
+    symlinkSync('.', join(src, 'q'))
+    symlinkSync('q/q/../..', join(src, 'x'))
   }
   const out = join(dir(), 'x.tar.gz')
   execFileSync('tar', ['-czf', out, '-C', src, ...readdirSync(src)])
@@ -97,32 +99,47 @@ describe('openLocal', () => {
   })
   test('removes symlinks leaving the cache', async () => {
     const { root, hidden } = await openLocal(dir(), archive(true), sig())
-    expect(hidden).toBe(2)
-    expect(readdirSync(root).sort()).toEqual(['a', 'in'])
+    expect(hidden).toBe(3)
+    expect(readdirSync(root).sort()).toEqual(['a', 'in', 'q'])
   })
 })
 
 describe('remoteOpenScript', () => {
-  const run = (a: string) => spawnSync('/bin/sh', ['-c', remoteOpenScript(a)])
-  test('good archive: prints the dir and 0 removed', () => {
-    const r = run(archive())
-    expect(r.status).toBe(0)
-    const [d, n] = r.stdout.toString().split('\0')
+  const run = (a: string, d = remoteCacheDir()) => ({ d, r: spawnSync('/bin/sh', ['-c', remoteOpenScript(a, d)]) })
+  test('good archive: extracts into the given dir, 0 removed', () => {
+    const { d, r } = run(archive())
     made.push(d)
-    expect(n).toBe('0')
+    expect(r.status).toBe(0)
+    expect(r.stdout.toString()).toBe('0')
     expect(readFileSync(join(d, 'a/b.txt'), 'utf8')).toBe('hello')
   })
-  test('corrupt archive: fails and leaves no dir', () => {
-    const before = readdirSync('/tmp').filter(n => n.startsWith('cassetto-archive-'))
-    const r = run(corrupt())
+  test('corrupt archive: fails and removes the dir', () => {
+    const { d, r } = run(corrupt())
     expect(r.status).not.toBe(0)
-    expect(readdirSync('/tmp').filter(n => n.startsWith('cassetto-archive-'))).toEqual(before)
+    expect(existsSync(d)).toBe(false)
+  })
+  test('an existing dir is refused and left alone', () => {
+    const d = dir()
+    expect(run(archive(), d).r.status).not.toBe(0)
+    expect(existsSync(d)).toBe(true)
   })
   test('symlinks leaving the cache are removed and counted', () => {
-    const [d, n] = run(archive(true)).stdout.toString().split('\0')
+    const { d, r } = run(archive(true))
     made.push(d)
-    expect(n).toBe('2')
-    expect(readdirSync(d).sort()).toEqual(['a', 'in'])
-    expect(existsSync(d)).toBe(true)
+    expect(r.stdout.toString()).toBe('3')
+    expect(readdirSync(d).sort()).toEqual(['a', 'in', 'q'])
+  })
+})
+
+describe('ownedCache', () => {
+  test('only our cache folders may be deleted', () => {
+    expect(ownedCache(null, '/u/archives/abc', '/u/archives')).toBe(true)
+    expect(ownedCache(null, '/u/archives', '/u/archives')).toBe(false)
+    expect(ownedCache(null, '/home/me', '/u/archives')).toBe(false)
+    expect(ownedCache(null, '/u/archives/a/b', '/u/archives')).toBe(false)
+    expect(ownedCache('h', remoteCacheDir(), '/u/archives')).toBe(true)
+    expect(ownedCache('h', '/home/me', '/u/archives')).toBe(false)
+    expect(ownedCache('h', '/tmp/cassetto-archive-ab/..', '/u/archives')).toBe(false)
+    expect(ownedCache('h', '/tmp', '/u/archives')).toBe(false)
   })
 })

@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, test, vi } from 'vitest'
@@ -110,7 +110,7 @@ describe('remoteOpenScript', () => {
     const { d, r } = run(archive())
     made.push(d)
     expect(r.status).toBe(0)
-    expect(r.stdout.toString()).toBe('0')
+    expect(r.stdout.toString()).toBe(`0\n${realpathSync(d)}`) // the real path: /tmp is a link on macOS
     expect(readFileSync(join(d, 'a/b.txt'), 'utf8')).toBe('hello')
   })
   test('corrupt archive: fails and removes the dir', () => {
@@ -126,7 +126,7 @@ describe('remoteOpenScript', () => {
   test('symlinks leaving the cache are removed and counted', () => {
     const { d, r } = run(archive(true))
     made.push(d)
-    expect(r.stdout.toString()).toBe('3')
+    expect(r.stdout.toString().split('\n')[0]).toBe('3')
     expect(readdirSync(d).sort()).toEqual(['a', 'in', 'q'])
   })
 })
@@ -140,6 +140,9 @@ describe('ownedCache', () => {
     expect(ownedCache(null, '/u/archives/.', '/u/archives')).toBe(false)
     expect(ownedCache(null, '/u/archives/a/b', '/u/archives')).toBe(false)
     expect(ownedCache('h', remoteCacheDir(), '/u/archives')).toBe(true)
+    expect(ownedCache('h', '/private/tmp/cassetto-archive-ab', '/u/archives')).toBe(true)
+    expect(ownedCache('h', '/private/tmp/cassetto-archive-ab/..', '/u/archives')).toBe(false)
+    expect(ownedCache('h', '/private/tmp', '/u/archives')).toBe(false)
     expect(ownedCache('h', '/home/me', '/u/archives')).toBe(false)
     expect(ownedCache('h', '/tmp/cassetto-archive-ab/..', '/u/archives')).toBe(false)
     expect(ownedCache('h', '/tmp', '/u/archives')).toBe(false)

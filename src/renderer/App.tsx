@@ -175,7 +175,7 @@ export default function App() {
     api.onDidLayoutChange(() => update(s => ({ ...s, layout: api.toJSON() })))
     // a closed terminal tab ends its shell, a closed Files tab lets go of its archives; not one that comes straight back (fromJSON rebuilds every panel
     // for an arrangement or a saved layout, with the same ids)
-    api.onDidRemovePanel(p => setTimeout(() => !api.getPanel(p.id) && (destroyTerminal(p.id), void window.api.archiveRelease(p.id))))
+    api.onDidRemovePanel(p => setTimeout(() => !api.getPanel(p.id) && (destroyTerminal(p.id), void window.api.archiveCancel(p.id), void window.api.archiveRelease(p.id))))
     setTimeout(() => focusTile(api.activePanel), 50)
   }
 

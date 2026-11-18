@@ -307,7 +307,9 @@ handle('archive:open', async (host: string | null, archive: string, holder: stri
         await removeCache(host, root).catch(() => {}) // a cancel or a lost connection may have left the dir
         return { ok: false, error: ac.signal.aborted ? t('Annullato') : r.error }
       }
-      hidden = Number(r.out.toString()) || 0
+      const [n, real] = r.out.toString().split('\n')
+      hidden = Number(n) || 0
+      if (ownedCache(host, real, archiveBase())) root = real // as listings show it: /tmp may be a link (/private/tmp on macOS)
     } else {
       await mkdir(archiveBase(), { recursive: true })
       ;({ root, hidden } = await openLocal(archiveBase(), archive, ac.signal))

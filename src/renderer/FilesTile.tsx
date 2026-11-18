@@ -238,14 +238,14 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   }
 
   // an archive opens as a folder: extracted into a cache main keeps while this tab is inside
-  // ponytail: a host whose /tmp is a symlink (macOS: /private/tmp) lists the cache under another path, so load() leaves it at once;
-  // main returning the resolved root fixes it if such hosts matter
   const enterArchive = async (full: string) => {
     cancelled.current = false
     setOpening(nameOf(full))
+    const n = seq.current
     const r = await window.api.archiveOpen(host, full, api.id)
     setOpening(null)
     if (!r.ok) return void (!cancelled.current && setNotice(`${nameOf(full)}: ${r.error}`))
+    if (n !== seq.current) return void window.api.archiveRelease(api.id, r.root) // the user went elsewhere meanwhile: don't pull them back
     setLevels([...levels.current, { archive: full, root: r.root }])
     set({ text: '' }) // from a search result: show the archive, not the search
     setSel(null)
@@ -852,7 +852,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       ) : (
         <div className="files-body">
           {searching && listing ? (
-            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} />
+            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} shownPath={shownPath} />
           ) : (
             <div ref={listRef} tabIndex={0} data-autofocus className={`files-list files-${view}` + (loading ? ' loading' : '')} onKeyDown={keys}>
               {view === 'columns'

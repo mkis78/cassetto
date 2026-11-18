@@ -88,11 +88,11 @@ export async function openLocal(base: string, archive: string, signal: AbortSign
 // the cache dir is named by main so a cancel can remove it
 export const remoteCacheDir = (): string => `/tmp/cassetto-archive-${randomBytes(8).toString('hex')}`
 
-// a root main may delete: its own cache folder locally, a cassetto-archive dir in /tmp on a host
+// a root main may delete: its own cache folder locally, a cassetto-archive dir in /tmp (or /private/tmp, its real path on macOS) on a host
 export const ownedCache = (host: string | null, root: string, base: string): boolean =>
-  host ? /^\/tmp\/cassetto-archive-[A-Za-z0-9]+$/.test(root) : resolve(root) === root && dirname(root) === base // not `<base>/..` or `<base>/.`
+  host ? /^(\/private)?\/tmp\/cassetto-archive-[A-Za-z0-9]+$/.test(root) : resolve(root) === root && dirname(root) === base // not `<base>/..` or `<base>/.`
 
-// extracts into `d`, prints <links removed>; a failed extraction removes the dir and exits non-zero
+// extracts into `d`, prints <links removed>\n<d's real path>; a failed extraction removes the dir and exits non-zero
 export function remoteOpenScript(archive: string, d: string): string {
   const a = shQuote(archive)
   const tar = `tar -xf ${a} -C "$d"`
@@ -102,7 +102,7 @@ export function remoteOpenScript(archive: string, d: string): string {
     `mkdir -m 700 -- "$d" || exit 1`,
     `{ ${run}; } || { rm -rf -- "$d"; exit 1; }`,
     `n=$(find "$d" -type l | while IFS= read -r l; do case $(readlink "$l") in (/*|*..*) rm -f -- "$l"; echo x;; esac; done | wc -l)`,
-    `printf '%s' "$((n))"`
+    `printf '%s\\n%s' "$((n))" "$(cd -- "$d" && pwd -P)"`
   ].join('\n')
 }
 

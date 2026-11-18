@@ -5,6 +5,7 @@ export const EN: Record<string, string> = {
   "Annullato: {label}": "Undone: {label}",
   "Annulla: {label}": "Undo: {label}",
   "Copiato, ma l'originale non è stato spostato nel Cestino: {error}": "Copied, but the original was not moved to the Trash: {error}",
+  "Copiato, ma l'originale non è stato rimosso: {error}": "Copied, but the original was not removed: {error}",
   "Sul server non c'è un Cestino": "The server has no Trash",
   "{error} (esito incerto: aggiorna per vedere cosa è cambiato)": "{error} (outcome uncertain: refresh to see what changed)",
   "Immagine troppo grande per l'anteprima": "Image too large to preview",
@@ -447,7 +448,6 @@ export const EN: Record<string, string> = {
   "Apri con {name}": "Open with {name}",
   "Altra app…": "Other app…",
   "Applicazioni": "Applications",
-  "Non ancora disponibile": "Not available yet",
   "Esci": "Quit",
   "Ci sono trasferimenti in corso.": "Transfers are in progress.",
   "Uscendo verranno annullati.": "Quitting will cancel them."

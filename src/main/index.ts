@@ -14,6 +14,7 @@ import { ejectVolume, listVolumes } from './platform/volumes'
 import { JobQueue } from './jobs'
 import { copyLocal } from './copyLocal'
 import { copyRemote, sshRunner } from './copyRemote'
+import { spawnSide, transfer } from './transfer'
 import type { JobItem, JobSpec } from '../shared/jobs'
 import { isValidHost, listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
@@ -202,10 +203,10 @@ handle('files:undoLabel', () => undos.peek()?.label ?? null)
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
 let release: Release | null = null
 const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })
-// the copy/move queue; Task 4 gives the worker its cross-host branch (transfer)
+// the copy/move queue; between machines there is no undo
 const queue = new JobQueue({
   worker: async (spec, p, signal) => {
-    if (spec.from !== spec.to) throw new Error(t('Non ancora disponibile'))
+    if (spec.from !== spec.to) return transfer(spec, p, signal, { spawn: spawnSide, trash: trashItems })
     const host = spec.from
     // undo for the items that completed, after a cancel or failure too; stamps as files:op takes them for a remote copy
     const record = async ({ done, trashed = [] }: { done: JobItem[]; trashed?: Trashed[] }) => {

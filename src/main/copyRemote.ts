@@ -1,4 +1,4 @@
-import { spawn, type SpawnOptions } from 'node:child_process'
+import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { posix } from 'node:path'
 import type { JobItem, JobSpec } from '../shared/jobs'
 import type { Progress } from './jobs'
@@ -9,31 +9,35 @@ import { t } from '../shared/i18n'
 // runs a script on the host; on abort the local child is killed and what it printed so far comes back
 export type Runner = (script: string, signal?: AbortSignal) => Promise<{ code: number; out: string; err: string }>
 
+// what c printed, once it is done (stdout only if `out`, else the caller consumes it); on abort `kill` runs
+export const collect = (c: ChildProcess, signal?: AbortSignal, { out: read = true, kill = (): void => void c.kill() }: { out?: boolean; kill?: () => void } = {}): ReturnType<Runner> =>
+  new Promise(resolve => {
+    let out = ''
+    let err = ''
+    if (read) c.stdout!.setEncoding('utf8').on('data', d => (out += d))
+    c.stderr!.setEncoding('utf8').on('data', d => (err += d))
+    const end = (code: number | null) => {
+      signal?.removeEventListener('abort', kill)
+      resolve({ code: code ?? -1, out, err })
+    }
+    signal?.addEventListener('abort', kill, { once: true })
+    if (signal?.aborted) kill()
+    c.on('error', e => ((err += e.message), end(-1)))
+    c.on('exit', code => signal?.aborted && end(code)) // a killed shell's children may still hold the pipes open
+    c.on('close', end)
+  })
+
 export const spawnRunner =
   (file: string, args: (script: string) => string[], o: SpawnOptions = {}): Runner =>
   (script, signal) =>
-    new Promise(resolve => {
-      const c = spawn(file, args(script), { ...o, stdio: ['ignore', 'pipe', 'pipe'] })
-      let out = ''
-      let err = ''
-      c.stdout!.setEncoding('utf8').on('data', d => (out += d))
-      c.stderr!.setEncoding('utf8').on('data', d => (err += d))
-      const kill = () => c.kill()
-      const end = (code: number | null) => {
-        signal?.removeEventListener('abort', kill)
-        resolve({ code: code ?? -1, out, err })
-      }
-      signal?.addEventListener('abort', kill, { once: true })
-      if (signal?.aborted) kill()
-      c.on('error', e => ((err += e.message), end(-1)))
-      c.on('exit', code => signal?.aborted && end(code)) // a killed shell's children may still hold the pipes open
-      c.on('close', end)
-    })
+    collect(spawn(file, args(script), { ...o, stdio: ['ignore', 'pipe', 'pipe'] }), signal)
 
 // BatchMode: never ask for input here; the user authenticates in an SSH tile, which opens the shared connection
 export const sshRunner = (host: string): Runner => spawnRunner('ssh', s => [...sshOptions(), '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', host, '--', remoteSh(s)])
 
-const kb = (s: string) => (parseInt(s, 10) || 0) * 1024
+export const kb = (s: string) => (parseInt(s, 10) || 0) * 1024
+// one line per item, empty when du fails
+export const sizesScript = (items: JobItem[]) => items.map(i => `echo "$(du -sk -- ${q(i.src)} 2>/dev/null | cut -f1)"`).join('\n')
 
 // A same-host remote copy or move, one script per item, so each item's result streams. Bytes are an estimate: `du -sk`
 // of the sources up front, of the current destination every 2 s. A cancel kills the item's process group on the host,
@@ -41,8 +45,7 @@ const kb = (s: string) => (parseInt(s, 10) || 0) * 1024
 export async function copyRemote(spec: JobSpec, p: Progress, signal: AbortSignal, run: Runner): Promise<{ done: JobItem[] }> {
   const done: JobItem[] = []
   try {
-    // one line per item, empty when du fails
-    const m = await run(spec.items.map(i => `echo "$(du -sk -- ${q(i.src)} 2>/dev/null | cut -f1)"`).join('\n'), signal)
+    const m = await run(sizesScript(spec.items), signal)
     signal.throwIfAborted()
     const sizes = m.out.split('\n').map(kb)
     p.total(m.code ? null : spec.items.reduce((a, _, k) => a + (sizes[k] ?? 0), 0))

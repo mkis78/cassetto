@@ -1,0 +1,3 @@
+# the site is docs/index.html; design docs and plans stay in the repo, not on the site
+exclude:
+  - superpowers

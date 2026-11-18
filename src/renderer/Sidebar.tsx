@@ -105,8 +105,9 @@ export default function Sidebar({ state, onChange, api, activePath, tiles, onAll
 
   // files from a panel dropped on a folder here: moved in (Option copies) through main, so Undo takes them back.
   // Same host only; a name already there fails and is reported, nothing is overwritten
-  const dropFiles = async (dest: string, host: string | null, raw: string, copy: boolean) => {
-    const d = JSON.parse(raw) as { host: string | null; paths: string[] }
+  const dropFiles = async (dest: string, host: string | null, raw: string, alt: boolean) => {
+    const d = JSON.parse(raw) as { host: string | null; paths: string[]; copyOnly?: true }
+    const copy = alt || !!d.copyOnly // out of an archive: always a copy
     if (d.host !== host) return toast(t('Solo tra file dello stesso host'))
     const srcs = copy ? d.paths : d.paths.filter(p => dirOf(p) !== dest)
     if (srcs.some(s => isInside(s, dest))) return toast(t('Non puoi copiare o spostare una cartella dentro sé stessa'))
@@ -162,7 +163,8 @@ export default function Sidebar({ state, onChange, api, activePath, tiles, onAll
         return void (w.path !== null && setFavs(l => addFavourite(l, { host: w.host, path: w.path! })))
       }
       if (!raw) return
-      const d = JSON.parse(raw) as { host: string | null; paths: string[] }
+      const d = JSON.parse(raw) as { host: string | null; paths: string[]; copyOnly?: true }
+      if (d.copyOnly) return // a folder inside an archive lives in a cache that goes away
       // only folders, the ones that list: the drag does not say which are
       const dirs = (await Promise.all(d.paths.map(async p => ((await window.api.listDir(d.host, p)).ok ? p : null)))).filter(p => p !== null)
       if (!dirs.length) return toast(t('Solo le cartelle vanno nei preferiti'))

@@ -63,6 +63,10 @@ Cassetto works alongside the Finder or your Linux file manager rather than repla
 - **Preview** text, Markdown and images with the space bar.
 - **Status bar** at the foot of each panel: what the folder holds and how much it weighs, the selected file's kind, size and date, the total of a folder on request, and the free space on the disk.
 
+### Archives
+
+Double-click a `.zip`, `.tar`, `.tar.gz` (and the other tar formats) to **open it as a folder**, locally or on an SSH server: browse, preview, search and open what's inside without leaving Cassetto. It is read-only: take files out by dragging them to another panel or the sidebar, or with copy and paste (always a copy; the archive is never changed). Leave it like any folder (up from its top, Home, the sidebar). To unpack it all instead, right-click → **Extract Here**.
+
 ### Sidebar
 
 A sidebar with the places you go to most. **Cmd+Alt+S** (Ctrl+Alt+S on Linux) switches it between the full panel and a slim icon rail.

@@ -60,7 +60,8 @@ export default function App() {
   const theme = useTheme() === 'light' ? themeLight : themeDark
 
   // the language first: everything after is drawn in it
-  useEffect(() => void window.api.loadState().then(s => (setLang(resolveLang(s.settings?.language, navigator.language)), setState(s))), [])
+  // caches held by a renderer that reloaded go first: the restored tabs open their archives again
+  useEffect(() => void Promise.all([window.api.loadState(), window.api.archiveReleaseAll()]).then(([s]) => (setLang(resolveLang(s.settings?.language, navigator.language)), setState(s))), [])
   useEffect(() => applySettings(state?.settings), [state?.settings])
   // at start and after each change: warn when macOS (or Raycast) keeps the bar's shortcut for itself
   useEffect(() => {
@@ -172,9 +173,9 @@ export default function App() {
     }
     if (!api.panels.length) openFolder(api, { path: getSettings().filesHome ?? null, host: null }) // first launch: the home
     api.onDidLayoutChange(() => update(s => ({ ...s, layout: api.toJSON() })))
-    // a closed terminal tab ends its shell; not one that comes straight back (fromJSON rebuilds every panel
+    // a closed terminal tab ends its shell, a closed Files tab lets go of its archives; not one that comes straight back (fromJSON rebuilds every panel
     // for an arrangement or a saved layout, with the same ids)
-    api.onDidRemovePanel(p => setTimeout(() => !api.getPanel(p.id) && destroyTerminal(p.id)))
+    api.onDidRemovePanel(p => setTimeout(() => !api.getPanel(p.id) && (destroyTerminal(p.id), void window.api.archiveRelease(p.id))))
     setTimeout(() => focusTile(api.activePanel), 50)
   }
 
@@ -220,7 +221,7 @@ export default function App() {
 
   // the folder of the Files tab in front, for the sidebar's highlight (the layout changes, and so this render, when it moves)
   const front = active()?.params as TileParams | undefined
-  const activeFiles = front?.kind === 'files' ? { host: front.host, path: front.path } : null
+  const activeFiles = front?.kind === 'files' ? whereOf(active()) : null // inside an archive: the folder holding it
 
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }
   const paletteActions = (): Command[] => {

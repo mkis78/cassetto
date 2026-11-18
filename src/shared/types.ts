@@ -1,13 +1,14 @@
 import type { Tag } from './tags'
 import type { LangSetting } from './i18n'
 import type { TabColor } from './menus'
+import type { ArchiveLevel } from './archives'
 
-// name, color: what the user gave the tab; without a name it shows the folder's
-export type FilesParams = { kind: 'files'; host: string | null; path: string | null; hidden?: boolean; preview?: boolean; query?: SearchQuery | null; name?: string; color?: TabColor }
+// name, color: what the user gave the tab; without a name it shows the folder's; archives: the ones it is inside, outermost first
+export type FilesParams = { kind: 'files'; host: string | null; path: string | null; hidden?: boolean; preview?: boolean; query?: SearchQuery | null; name?: string; color?: TabColor; archives?: ArchiveLevel[] }
 // a shell in `cwd`, here or on `host` over ssh
 export type TerminalParams = { kind: 'terminal'; host: string | null; cwd: string; name?: string; color?: TabColor }
-// a text file being edited, here or on `host`
-export type EditorParams = { kind: 'editor'; host: string | null; path: string; name?: string; color?: TabColor; wrap?: boolean; whitespace?: boolean; mdPreview?: boolean }
+// a text file being edited, here or on `host`; readOnly: a file inside an archive, never saved
+export type EditorParams = { kind: 'editor'; host: string | null; path: string; name?: string; color?: TabColor; wrap?: boolean; whitespace?: boolean; mdPreview?: boolean; readOnly?: boolean }
 export type TileParams = FilesParams | TerminalParams | EditorParams
 
 export interface SearchQuery {

@@ -206,7 +206,7 @@ button { font: inherit; }
 .host span { flex: 1; font-family: Menlo, monospace; }
 .files-tile { display: flex; flex-direction: column; height: 100%; background: var(--bg); font: 12px Menlo, monospace; }
 .files-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--line); background: var(--bar); }
-.files-bar button, .files-error button { background: var(--raised); color: var(--fg); border: 1px solid var(--line2); border-radius: 4px; padding: 1px 8px; cursor: pointer; margin-right: 6px; }
+.files-bar button, .files-error button, .files-opening button { background: var(--raised); color: var(--fg); border: 1px solid var(--line2); border-radius: 4px; padding: 1px 8px; cursor: pointer; margin-right: 6px; }
 .files-bar button:disabled { opacity: .4; cursor: default; }
 .files-path { flex: 1; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--fg-strong); }
 .files-list { flex: 1; overflow: auto; padding: 4px 0; }
@@ -223,7 +223,10 @@ button { font: inherit; }
 .git-log:focus .git-row.sel { background: var(--focus); }
 .notes-tile .file:focus { background: var(--focus); outline: none; }
 .files-list:focus .file.selected { background: var(--focus); }
-.files-body { flex: 1; display: flex; min-height: 0; }
+.files-body { flex: 1; display: flex; min-height: 0; position: relative; }
+/* an archive being extracted: over the list until it opens or is cancelled */
+.files-opening { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--bg); color: var(--fg2); z-index: 2; }
+.files-opening button { margin: 0 0 0 4px; }
 .files-preview { width: 50%; flex: none; overflow: auto; border-left: 1px solid var(--line); color: var(--fg); }
 .files-preview-head { position: sticky; top: 0; padding: 4px 10px; background: var(--bar); border-bottom: 1px solid var(--line); color: var(--fg-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .files-preview > pre { margin: 0; padding: 8px 10px; white-space: pre; user-select: text; }

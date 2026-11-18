@@ -93,22 +93,23 @@ window.addEventListener('beforeunload', e => {
 })
 
 // a file opens once: asking again shows its tab instead of a second copy
-export function openEditor(api: DockviewApi, where: { path: string; host: string | null }, nextTo?: string): void {
+export function openEditor(api: DockviewApi, where: { path: string; host: string | null; readOnly?: boolean }, nextTo?: string): void {
   const same = api.panels.find(p => {
     const q = p.params as TileParams | undefined
     return q?.kind === 'editor' && q.path === where.path && q.host === where.host
   })
   if (same) return void (same.api.setActive(), focusTile(same))
   const ref = nextTo ?? api.activePanel?.id
-  const params: TileParams = { kind: 'editor', host: where.host, path: where.path }
+  const params: TileParams = { kind: 'editor', host: where.host, path: where.path, ...(where.readOnly && { readOnly: true }) }
   api.addPanel({ id: crypto.randomUUID(), component: 'editor', title: baseName(where.path), params, position: ref ? { referencePanel: ref, direction: 'within' } : undefined })
 }
 
-// where a tab is: the folder it shows, or the one its terminal was opened in
+// where a tab is: the folder it shows (inside an archive: the folder holding it, never a cache), or the one its terminal was opened in
 export function whereOf(p: IDockviewPanel | undefined): { path: string | null; host: string | null } {
   const q = p?.params as TileParams | undefined
   if (!q) return { path: null, host: null }
   if (q.kind === 'editor') return { path: q.path.slice(0, q.path.lastIndexOf('/')) || '/', host: q.host }
+  if (q.kind === 'files' && q.archives?.length) return { path: q.archives[0].archive.slice(0, q.archives[0].archive.lastIndexOf('/')) || '/', host: q.host }
   return { path: q.kind === 'terminal' ? q.cwd : q.path, host: q.host }
 }
 

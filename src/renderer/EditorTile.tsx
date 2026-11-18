@@ -118,7 +118,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
 
   const save = async () => {
     const v = view.current
-    if (!v) return
+    if (!v || params.readOnly) return
     const text = v.state.doc.toString()
     // someone else (git, another app) changed the file since it was opened: ask before writing over it
     const disk = await window.api.readFile(host, path)
@@ -150,6 +150,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
           doc: r.text,
           extensions: [
             basicSetup,
+            EditorState.readOnly.of(!!params.readOnly), // a file inside an archive: Cassetto never writes into a cache
             sublime(() => void saveRef.current(), openBar),
             md ? markdownKeys(() => toggleRef.current.preview()) : [],
             keymap.of([{ key: 'Alt-z', run: () => (toggleRef.current.wrap(), true) }]),

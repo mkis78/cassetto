@@ -11,7 +11,7 @@ import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { addToFavourites, baseName, CHANGED, changed, runUndo, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
+import { addToFavourites, CHANGED, changed, runUndo, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -22,10 +22,11 @@ import { archiveStem, copyName, isArchive, isInside, nameError, okPrefix, rangeS
 import type { FileOp, OpResult } from '../shared/types'
 import { ConfirmDelete, ConflictDialog, type Choice } from './FileDialogs'
 import { popup } from './menuIcons'
+import { displayPath, insideArchive, parentOf, type ArchiveLevel } from '../shared/archives'
 
 type View = 'list' | 'icons' | 'columns' | 'gallery'
 type Sort = { key: SortKey; desc: boolean }
-type Params = { kind: 'files'; host: string | null; path: string | null; hidden?: boolean; preview?: boolean; query?: SearchQuery | null; view?: View; sort?: Sort; cols?: string[] }
+type Params = { kind: 'files'; host: string | null; path: string | null; hidden?: boolean; preview?: boolean; query?: SearchQuery | null; view?: View; sort?: Sort; cols?: string[]; archives?: ArchiveLevel[] }
 type Col = Listing & { error?: string } // a folder in the columns view, or why it could not be opened
 
 const VIEW_ICON = { list: List, icons: LayoutGrid, columns: Columns3, gallery: GalleryHorizontal }
@@ -38,14 +39,22 @@ const MAX_SHOWN = 2000
 
 // copy/cut, shared by every Files tile; the paths belong to the host they were taken from
 let clip: { host: string | null; paths: string[]; cut: boolean } | null = null
+// every change of the clipboard lets go of the archive cache it held; a copy taken inside an archive holds that cache (`root`)
+const setClip = (next: typeof clip, root?: string) => {
+  void window.api.archiveRelease('clipboard')
+  clip = next
+  if (next && root) void window.api.archiveHold('clipboard', next.host, root)
+}
 // what a drag carries: the host and the paths; also kept here, since a dragover cannot read the data, only its types
 export const DND = 'application/x-cassetto-files'
-let dragging: { host: string | null; paths: string[] } | null = null
+// copyOnly: taken out of an archive, so every drop copies
+let dragging: { host: string | null; paths: string[]; copyOnly?: true } | null = null
 type Editing = { dir: string; kind: 'newFile' | 'newFolder' | 'rename'; name: string; from?: string; error?: string }
 
 const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1)
-const parent = (p: string) => p.replace(/\/[^/]+\/?$/, '') || '/'
 const child = (dir: string, name: string) => (dir === '/' ? '/' : dir + '/') + name
+// a tab's title: the last segment of the path as shown ("foto.zip" at an archive's top)
+const titleOf = (p: string, levels: ArchiveLevel[]) => displayPath(p, levels).split(/\/| › ?/).filter(Boolean).pop() ?? '/'
 
 export default function FilesTile({ params, api, containerApi }: IDockviewPanelProps<Params>) {
   const { host } = params
@@ -70,6 +79,12 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const [confirm, setConfirm] = useState<{ paths: string[]; permanent: boolean; note?: string } | null>(null)
   const [conflict, setConflict] = useState<{ names: string[]; done: (c: Record<string, Choice> | null) => void } | null>(null)
   const [dropOn, setDropOn] = useState<string | null>(null)
+  // the archives this tab is inside, outermost first; the ref is what load() reads
+  const [archives, setArchives] = useState<ArchiveLevel[]>(params.archives ?? [])
+  const levels = useRef(archives)
+  const setLevels = (next: ArchiveLevel[]) => ((levels.current = next), setArchives(next), api.updateParameters({ archives: next }))
+  const [opening, setOpening] = useState<string | null>(null) // the archive being extracted, for the overlay
+  const cancelled = useRef(false)
   // the selection follows `sel` unless `sel` is already part of it
   useEffect(() => setPicked(p => (!sel ? new Set() : p.has(sel.path) ? p : new Set([sel.path]))), [sel])
   useEffect(() => void api.updateParameters({ sort }), [sort])
@@ -112,11 +127,16 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       if (n !== seq.current) return // the user already moved on
       setLoading(false)
       if (r.ok) {
+        // left some archive levels: from the innermost out, the ones not around the new folder let go of their cache
+        const lv = levels.current
+        let keep = lv.length
+        while (keep && !insideArchive(r.listing.path, lv.slice(0, keep))) keep--
+        if (keep < lv.length) (lv.slice(keep).forEach(l => void window.api.archiveRelease(api.id, l.root)), setLevels(lv.slice(0, keep)))
         setListing(r.listing)
         setCols([])
         setError(null)
         api.updateParameters({ path: r.listing.path }) // reopen here after a restart
-        api.setTitle(baseName(r.listing.path) || '/')
+        api.setTitle(titleOf(r.listing.path, levels.current))
       } else if (!host && path !== null && path === getSettings().filesHome) load(null) // the base folder is gone: home
       else setError(r.error)
     },
@@ -138,7 +158,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       setListing(ok[0])
       setCols(ok.slice(1))
       api.updateParameters({ path: ok[0].path })
-      api.setTitle(baseName(ok[0].path) || '/')
+      api.setTitle(titleOf(ok[0].path, levels.current))
       const found = (p: string | null) => {
         const e = p && ok.find(l => l.path === dirOf(p))?.entries.find(x => x.name === p.slice(dirOf(p).length + 1))
         return e && p ? { path: p, dir: e.dir } : null
@@ -151,9 +171,38 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
 
   useEffect(() => {
     // the columns view reopens as deep as it was left
-    if (params.path && params.cols?.length && params.view === 'columns') reload([params.path, ...params.cols])
-    else load(params.path)
+    const start = (m = (p: string) => p) => (params.path && params.cols?.length && params.view === 'columns' ? reload([params.path, ...params.cols].map(m)) : load(params.path && m(params.path)))
+    if (params.archives?.length) void reopen(params.archives).then(m => m && start(m))
+    else start()
   }, [load])
+
+  // a tab left inside archives: each is extracted again, outermost first (caches do not outlive the app);
+  // returns how a saved path maps into the new caches, or null after falling back next to the archive that failed
+  const reopen = async (saved: ArchiveLevel[]) => {
+    const lv: ArchiveLevel[] = []
+    const moved = (p: string) => {
+      const i = saved.findIndex((s, i) => i < lv.length && insideArchive(p, [s]))
+      return i < 0 ? p : lv[i].root + p.slice(saved[i].root.length)
+    }
+    cancelled.current = false
+    for (const s of saved) {
+      const archive = moved(s.archive)
+      setOpening(nameOf(archive))
+      const r = await window.api.archiveOpen(host, archive, api.id)
+      if (!r.ok) {
+        setOpening(null)
+        setLevels(lv)
+        if (!cancelled.current) setNotice(t('Archivio non trovato: {name}', { name: nameOf(archive) }))
+        void load(dirOf(archive))
+        return null
+      }
+      if (r.root !== s.root) void window.api.archiveRelease(api.id, s.root) // a remote cache is new each time; a tab rebuilt in place held the old one
+      lv.push({ archive, root: r.root })
+    }
+    setOpening(null)
+    setLevels(lv)
+    return moved
+  }
 
   // the folder of column `i`, loaded after the ones before it; a newer pick drops a late answer
   const colSeq = useRef(0)
@@ -165,6 +214,10 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   }
 
   const here = error ? target : (listing?.path ?? null)
+  // inside an archive nothing changes it: menus, drops, keys and the action bar all ask this
+  const readOnly = !!here && insideArchive(here, archives)
+  // the path as the user sees it, archive boundary included (for Copia percorso)
+  const shownPath = (p: string) => (host ? `${host}:` : '') + displayPath(p, archives)
   // a remote folder has no recursive search: the box filters what is listed
   const searching = !!q.text && !!listing
   const visible = (l: Listing) => sortBy(l.entries.filter(e => hidden || !e.name.startsWith('.')), sort.key, sort.desc)
@@ -184,18 +237,38 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     await refreshTo(dest)
   }
 
-  const open = (full: string, dir: boolean) => {
+  // an archive opens as a folder: extracted into a cache main keeps while this tab is inside
+  // ponytail: a host whose /tmp is a symlink (macOS: /private/tmp) lists the cache under another path, so load() leaves it at once;
+  // main returning the resolved root fixes it if such hosts matter
+  const enterArchive = async (full: string) => {
+    cancelled.current = false
+    setOpening(nameOf(full))
+    const r = await window.api.archiveOpen(host, full, api.id)
+    setOpening(null)
+    if (!r.ok) return void (!cancelled.current && setNotice(`${nameOf(full)}: ${r.error}`))
+    setLevels([...levels.current, { archive: full, root: r.root }])
+    set({ text: '' }) // from a search result: show the archive, not the search
+    setSel(null)
+    await load(r.root)
+    if (r.hidden) setNotice(t('{n} collegamenti esterni non mostrati', { n: r.hidden }))
+  }
+
+  // browse: false for an archive picked with others (Apri on a multi-selection hands it to the system as before)
+  const open = (full: string, dir: boolean, browse = true) => {
     if (dir) return void (setSel(null), load(full))
-    // a remote file has no app here to open it: it opens in the editor
-    if (host) return openEditor(containerApi, { path: full, host }, api.id)
+    if (browse && isArchive(full)) return void enterArchive(full)
+    // a remote file has no app here to open it: it opens in the editor (read-only for a file inside an archive)
+    if (host) return openEditor(containerApi, { path: full, host, readOnly }, api.id)
     window.api.openPath(full).then(err => err && setNotice(`${nameOf(full)}: ${err}`))
   }
 
   // back to the parent with the folder we left selected, like Finder
+  // from an archive's top: next to the archive, with it selected (load lets go of the level)
   const up = () => {
     if (!here || here === '/') return
-    setSel({ path: here, dir: true })
-    load(parent(here))
+    const p = parentOf(here, archives)
+    setSel(p.select ? { path: p.select, dir: false } : { path: here, dir: true })
+    load(p.path)
   }
 
   // select an entry of column `i`; in the columns view a folder opens the next column
@@ -335,8 +408,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
 
   const paste = async (destDir: string) => {
     const c = clip
-    if (!c || c.host !== host) return
-    if ((await transfer(c.cut ? 'move' : 'copy', c.paths, destDir)) && c.cut) clip = null // a cut is pasted once
+    if (!c || c.host !== host || readOnly) return
+    if ((await transfer(c.cut ? 'move' : 'copy', c.paths, destDir)) && c.cut) setClip(null) // a cut is pasted once
   }
 
   // Finder tags (local only): the entries behind paths, the tags known here, a change applied and shown
@@ -433,17 +506,17 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   // drag the selection onto a folder or a folder's background, in this tile or another on the same host:
   // move, or copy with Alt
   const drag = (ev: React.DragEvent, full: string) => {
-    dragging = { host, paths: chosen(full) }
+    dragging = { host, paths: chosen(full), ...(readOnly && { copyOnly: true as const }) }
     ev.dataTransfer.setData(DND, JSON.stringify(dragging))
     ev.dataTransfer.effectAllowed = 'copyMove'
   }
-  const dropProps = (dir: string) => ({
+  const dropProps = (dir: string) => readOnly ? {} : ({
     onDragOver: (ev: React.DragEvent) => {
       // ponytail: no drops across hosts; copying between machines needs a transfer of its own
       if (!ev.dataTransfer.types.includes(DND) || dragging?.host !== host) return
       ev.preventDefault()
       ev.stopPropagation()
-      ev.dataTransfer.dropEffect = ev.altKey ? 'copy' : 'move'
+      ev.dataTransfer.dropEffect = ev.altKey || dragging?.copyOnly ? 'copy' : 'move'
       setDropOn(dir)
     },
     onDragLeave: () => setDropOn(d => (d === dir ? null : d)),
@@ -453,24 +526,25 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       if (!raw) return
       ev.preventDefault()
       ev.stopPropagation()
-      const d = JSON.parse(raw) as { host: string | null; paths: string[] }
-      if (d.host === host && !d.paths.includes(dir)) transfer(ev.altKey ? 'copy' : 'move', d.paths, dir)
+      const d = JSON.parse(raw) as { host: string | null; paths: string[]; copyOnly?: true }
+      if (d.host === host && !d.paths.includes(dir)) transfer(ev.altKey || d.copyOnly ? 'copy' : 'move', d.paths, dir)
     }
   })
 
   // Cmd/Ctrl+C/X/V on the list: keys, since Chromium sends no clipboard event without a text selection
   const take = (cut: boolean) => {
     const paths = chosen()
-    if (paths.length) clip = { host, paths, cut }
+    if (readOnly && cut) return
+    if (paths.length) setClip({ host, paths, cut }, readOnly ? archives[archives.length - 1].root : undefined)
   }
   const pasteHere = () => void ((col?.path ?? here) && paste(col?.path ?? here!))
 
   const keys = (e: React.KeyboardEvent) => {
     const { key } = e
     const cmd = e.metaKey || e.ctrlKey
-    if (key === 'F2' && sel) return void (e.preventDefault(), startRename(sel.path))
-    if ((cmd && key === 'Backspace') || key === 'Delete') return void (e.preventDefault(), askDelete(chosen()))
-    if (cmd && !e.shiftKey && key.toLowerCase() === 'z') return void (e.preventDefault(), runUndo())
+    if (key === 'F2' && sel) return void (e.preventDefault(), !readOnly && startRename(sel.path))
+    if ((cmd && key === 'Backspace') || key === 'Delete') return void (e.preventDefault(), !readOnly && askDelete(chosen()))
+    if (cmd && !e.shiftKey && key.toLowerCase() === 'z') return void (e.preventDefault(), !readOnly && runUndo())
     if (cmd && key.toLowerCase() === 'a') return void (e.preventDefault(), selectAll())
     if (cmd && !e.shiftKey && ['c', 'x', 'v'].includes(key.toLowerCase())) {
       e.preventDefault()
@@ -501,10 +575,10 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (entry && !picked.has(full)) select(Math.max(0, columns.findIndex(c => c.path === dir)), dir, entry)
     const items = entry ? chosen(full) : []
     const known = knownTags(seenTags())
-    const tags = entry && !host ? tagsMenu({ known, has: tagState(items), dots: TAG_HEX.map((h, i) => h || (i ? '' : '#8e8e93')) }) : undefined
+    const tags = entry && !host && !readOnly ? tagsMenu({ known, has: tagState(items), dots: TAG_HEX.map((h, i) => h || (i ? '' : '#8e8e93')) }) : undefined
     const apps = entry && !entry.dir && !host ? await window.api.appsFor(items) : undefined
     const choice = await popup(
-      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags, openWith: apps, archive: !!entry && !entry.dir && items.length === 1 && isArchive(entry.name) })
+      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags, openWith: apps, archive: !!entry && !entry.dir && items.length === 1 && isArchive(entry.name), readOnly })
     )
     if (!choice) return
     if (choice === 'openWith:other') return void window.api.pickApp(items).then(err => err && setNotice(err))
@@ -514,12 +588,12 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'paste') return paste(full)
     if (choice === 'rename') return startRename(full)
     if (choice === 'duplicate') return transfer('copy', items, dir, true)
-    if (choice === 'copy' || choice === 'cut') return void (clip = { host, paths: items, cut: choice === 'cut' })
+    if (choice === 'copy' || choice === 'cut') return void setClip({ host, paths: items, cut: choice === 'cut' }, readOnly ? archives[archives.length - 1].root : undefined)
     if (choice === 'delete') return askDelete(items)
     if (choice?.startsWith('tag:')) return toggleTag(items, known[Number(choice.slice(4))])
     if (choice === 'tags') return setTagging(items)
-    if (choice === 'open') return entry && open(full, entry.dir)
-    if (choice === 'copyPath') return window.api.clipboardWrite(host ? `${host}:${full}` : full)
+    if (choice === 'open') return entry && open(full, entry.dir, items.length === 1)
+    if (choice === 'copyPath') return window.api.clipboardWrite(shownPath(full))
     if (choice === 'favourite') return addToFavourites(host, full)
     if (choice === 'refresh') return refresh()
     if (choice === 'terminal') return openTerminal(containerApi, { cwd: full, host }, api.id)
@@ -570,8 +644,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
               key={e.name}
               className={'file' + (e.name.startsWith('.') ? ' hidden' : '') + (full === sel?.path || picked.has(full) ? ' selected' : '') + (opened ? ' opened' : '') + (dropOn === full ? ' drop' : '')}
               onClick={ev => select(i, l.path, e, ev.metaKey || ev.ctrlKey ? 'toggle' : ev.shiftKey ? 'range' : 'one')}
-              // ponytail: double-click extracts an archive for now; the "browse as folder" project replaces this
-              onDoubleClick={() => (!e.dir && isArchive(full) ? void extract(full) : open(full, e.dir))}
+              onDoubleClick={() => open(full, e.dir)}
               draggable={!renaming}
               onDragStart={ev => drag(ev, full)}
               onDragEnd={() => (dragging = null)}
@@ -630,7 +703,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const actionChoice = async (e: React.MouseEvent) => {
     const at = below(e)
     const dir = error ? null : (col?.path ?? listing?.path ?? null)
-    const choice = await popup(actionsMenu({ ready: !!dir, paste: clipFor() }), at)
+    const choice = await popup(actionsMenu({ ready: !!dir, paste: clipFor(), readOnly }), at)
     if ((choice === 'newFile' || choice === 'newFolder') && dir) startCreate(choice, dir)
     if (choice === 'paste' && dir) paste(dir)
     if (choice === 'terminal' && dir) openTerminal(containerApi, { cwd: dir, host }, api.id)
@@ -649,26 +722,30 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       : [
           ...(one ? [{ label: t('Apri {name}', { name: what }), hint: t('Invio'), run: () => open(one, oneDir), icon: ExternalLink }] : []),
           ...(barApps.key && barApps.key === items.join('\n') ? barApps.apps.map(a => ({ label: t('Apri con {name}', { name: a.name }), run: () => void window.api.openWith(a.id, items).then(err => err && setNotice(err)), icon: ExternalLink })) : []),
-          ...(one && !oneDir && isArchive(one) ? [{ label: t('Estrai qui'), run: () => void extract(one), icon: ExternalLink }] : []),
-          ...(one && oneDir ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
-          ...(one && oneDir ? [{ label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, one), icon: Star }] : []),
-          ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
-          ...(one ? [{ label: t('Rinomina'), hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
-          { label: t('Duplica'), run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus },
+          ...(readOnly ? [] : [
+            ...(one && !oneDir && isArchive(one) ? [{ label: t('Estrai qui'), run: () => void extract(one), icon: ExternalLink }] : []),
+            ...(one && oneDir ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
+            ...(one && oneDir ? [{ label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, one), icon: Star }] : []),
+            ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
+            ...(one ? [{ label: t('Rinomina'), hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
+            { label: t('Duplica'), run: () => void transfer('copy', items, dirOf(items[0]), true), icon: CopyPlus }
+          ]),
           { label: t('Copia'), hint: 'Cmd+C', run: () => take(false), icon: Copy },
-          { label: t('Taglia'), hint: 'Cmd+X', run: () => take(true), icon: Scissors },
-          { label: t('Copia percorso'), run: () => void window.api.clipboardWrite(items.map(p => (host ? `${host}:${p}` : p)).join('\n')), icon: Link },
-          ...(host ? [] : [{ label: t('Tag…'), run: () => setTagging(items), icon: TagsIcon }]),
-          { label: host ? t('Elimina definitivamente…') : t('Sposta nel Cestino'), hint: 'Cmd+⌫', run: () => askDelete(items), icon: Trash2 }
+          ...(readOnly ? [] : [{ label: t('Taglia'), hint: 'Cmd+X', run: () => take(true), icon: Scissors }]),
+          { label: t('Copia percorso'), run: () => void window.api.clipboardWrite(items.map(shownPath).join('\n')), icon: Link },
+          ...(host || readOnly ? [] : [{ label: t('Tag…'), run: () => setTagging(items), icon: TagsIcon }]),
+          ...(readOnly ? [] : [{ label: host ? t('Elimina definitivamente…') : t('Sposta nel Cestino'), hint: 'Cmd+⌫', run: () => askDelete(items), icon: Trash2 }])
         ].map(c => ({ ...c, group: t('Selezione: {name}', { name: what }) }))
     const onDir: Command[] = [
       ...(dir
         ? [
-            { label: t('Nuovo file'), run: () => void startCreate('newFile', dir), icon: FilePlus },
-            { label: t('Nuova cartella'), run: () => void startCreate('newFolder', dir), icon: FolderPlus },
-            { label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, dir), icon: Star },
+            ...(readOnly ? [] : [
+              { label: t('Nuovo file'), run: () => void startCreate('newFile', dir), icon: FilePlus },
+              { label: t('Nuova cartella'), run: () => void startCreate('newFolder', dir), icon: FolderPlus },
+              { label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, dir), icon: Star }
+            ]),
             { label: t('Apri terminale qui'), hint: 'Cmd+Alt+T', run: () => openTerminal(containerApi, { cwd: oneDir && one ? one : dir, host }, api.id), icon: SquareTerminal },
-            ...(clipFor() === 'ok' ? [{ label: t('Incolla'), hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
+            ...(clipFor() === 'ok' && !readOnly ? [{ label: t('Incolla'), hint: 'Cmd+V', run: () => void paste(dir), icon: ClipboardPaste }] : [])
           ]
         : []),
       { label: t('Cerca per nome'), hint: 'Cmd+F', run: () => (set({ mode: 'name' }), setTimeout(() => inputRef.current?.focus())), icon: Search },
@@ -680,7 +757,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       ...(['list', 'icons', 'columns', 'gallery'] as const).filter(v => v !== view).map(v => ({ label: t('Vista: {name}', { name: t(VIEW_NAME[v]) }), run: () => (setView(v), setCols([])), icon: VIEW_ICON[v] })),
       { label: hidden ? t('Nascondi file nascosti') : t('Mostra file nascosti'), run: () => setHidden(h => !h), icon: hidden ? EyeOff : Eye },
       ...(view !== 'gallery' ? [{ label: showPreview ? t('Nascondi anteprima') : t('Mostra anteprima'), hint: t('Spazio'), run: () => setShowPreview(v => !v), icon: PanelRight }] : [])
-    ].map(c => ({ ...c, group: t('Cartella: {name}', { name: here ? baseName(here) || '/' : '~' }) }))
+    ].map(c => ({ ...c, group: t('Cartella: {name}', { name: here ? titleOf(here, archives) : '~' }) }))
     return [...onSel, ...onDir]
   }
   const barRef = useRef(barActions)
@@ -698,10 +775,10 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           <House {...ICON} />
         </button>
         {/* rtl puts the ellipsis on the left, so the end of a long path stays visible; bdi keeps the text itself intact */}
-        <span className="files-path" title={here ?? ''}>
+        <span className="files-path" title={here ? displayPath(here, archives) : ''}>
           <bdi>
             {host ? `${host}:` : ''}
-            {here ?? '~'}
+            {here ? displayPath(here, archives) : '~'}
           </bdi>
         </span>
         <button title={t('Vista')} onClick={viewChoice}>
@@ -775,7 +852,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       ) : (
         <div className="files-body">
           {searching && listing ? (
-            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={(full, double) => (double && isArchive(full) ? void extract(full) : open(full, false))} />
+            <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} />
           ) : (
             <div ref={listRef} tabIndex={0} data-autofocus className={`files-list files-${view}` + (loading ? ' loading' : '')} onKeyDown={keys}>
               {view === 'columns'
@@ -793,6 +870,13 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
                       </div>
                     </>
                   )}
+            </div>
+          )}
+          {opening && (
+            <div className="files-opening">
+              <span className="spinner" />
+              {t('Apro «{name}»…', { name: opening })}
+              <button onClick={() => ((cancelled.current = true), void window.api.archiveCancel(api.id))}>{t('Annulla')}</button>
             </div>
           )}
           {showPreview && view !== 'gallery' && <FilePreview path={sel && !sel.dir ? sel.path : null} preview={preview && preview.path === sel?.path ? preview.p : null} />}

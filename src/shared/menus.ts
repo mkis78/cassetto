@@ -40,7 +40,22 @@ export function tagsMenu(c: { known: { name: string; color: number }[]; has: (na
 
 // count: entries selected; paste: what the internal clipboard holds ('other-host': copied on another host, null: nothing);
 // tags: the Tag submenu, for local files; openWith: the apps for the selected local files (undefined: no submenu)
-export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean }): MenuItem[] {
+export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; readOnly?: boolean }): MenuItem[] {
+  const all = filesMenuAll(c)
+  return c.readOnly ? keepOnly(all, id => ['open', 'copy', 'copyPath', 'terminal', 'refresh'].includes(id) || id.startsWith('openWith:')) : all
+}
+
+// readOnly (inside an archive): keep the items whose id passes, drop emptied submenus and stray separators
+function keepOnly(items: MenuItem[], ok: (id: string) => boolean): MenuItem[] {
+  const kept = items.flatMap(i => {
+    if (i.separator) return [i]
+    if (i.submenu) { const sub = keepOnly(i.submenu, ok); return sub.length ? [{ ...i, submenu: sub }] : [] }
+    return i.id && ok(i.id) ? [i] : []
+  })
+  return kept.filter((i, n) => !i.separator || (n > 0 && n < kept.length - 1 && !kept[n - 1].separator))
+}
+
+function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean }): MenuItem[] {
   const create = [
     sep,
     { id: 'newFile', label: t('Nuovo file') },
@@ -91,8 +106,8 @@ export function viewMenu(c: { view: 'list' | 'icons' | 'columns' | 'gallery'; hi
 }
 
 // the files tile's "Azioni" button: on the folder shown
-export function actionsMenu(c: { ready: boolean; paste: 'ok' | 'other-host' | null }): MenuItem[] {
-  return [
+export function actionsMenu(c: { ready: boolean; paste: 'ok' | 'other-host' | null; readOnly?: boolean }): MenuItem[] {
+  const all: MenuItem[] = [
     { id: 'newFile', label: t('Nuovo file'), enabled: c.ready },
     { id: 'newFolder', label: t('Nuova cartella'), enabled: c.ready },
     { id: 'terminal', label: t('Apri terminale qui'), enabled: c.ready },
@@ -100,6 +115,7 @@ export function actionsMenu(c: { ready: boolean; paste: 'ok' | 'other-host' | nu
     sep,
     { id: 'refresh', label: t('Aggiorna') }
   ]
+  return c.readOnly ? keepOnly(all, id => id === 'terminal' || id === 'refresh') : all
 }
 
 // a search hit: `line` when it comes from a content search

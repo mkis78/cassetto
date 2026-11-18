@@ -52,7 +52,9 @@ export class JobQueue {
   private flush(): void {
     if (this.timer) clearTimeout(this.timer), (this.timer = null)
     this.last = Date.now()
-    this.out(this.list())
+    try {
+      this.out(this.list())
+    } catch {} // a dead window must not stall the queue
   }
 
   private progress(): void {
@@ -74,13 +76,14 @@ export class JobQueue {
     this.flush()
     const p: Progress = {
       total: n => {
+        if (ended(j)) return
         j.total = n
         if (j.state === 'measuring') (j.state = 'running'), this.flush()
         else this.progress()
       },
-      add: b => ((j.bytes += b), this.progress()),
-      item: name => ((j.current = name), this.progress()),
-      fail: (path, error) => (j.failed.push({ path, error }), this.progress())
+      add: b => !ended(j) && ((j.bytes += b), this.progress()),
+      item: name => !ended(j) && ((j.current = name), this.progress()),
+      fail: (path, error) => !ended(j) && (j.failed.push({ path, error }), this.progress())
     }
     try {
       await this.worker(j.spec, p, j.ctrl.signal)

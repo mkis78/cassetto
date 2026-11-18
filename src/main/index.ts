@@ -447,20 +447,26 @@ app.whenReady().then(() => {
   setMenu()
   sweep(archiveBase()).finally(createWindow) // caches of a crashed run are not held by anyone
 })
-let quitAsked = false
+let asking = false // the dialog is open: further quits wait for the answer
+let confirmed = false // Esci chosen: the quit goes through
 app.on('before-quit', e => {
+  if (!confirmed && queue.running()) {
+    e.preventDefault()
+    if (asking) return
+    asking = true
+    dialog
+      .showMessageBox(win!, { type: 'warning', buttons: [t('Esci'), t('Annulla')], defaultId: 1, cancelId: 1, message: t('Ci sono trasferimenti in corso.'), detail: t('Uscendo verranno annullati.') })
+      .then(async r => {
+        asking = false
+        if (r.response !== 0) return
+        confirmed = true
+        queue.list().forEach(j => queue.cancel(j.id))
+        for (let i = 0; i < 50 && queue.running(); i++) await new Promise(r => setTimeout(r, 100)) // up to 5 s to settle
+        app.quit()
+      })
+    return
+  }
   ptys.killAll()
-  if (quitAsked || !queue.running()) return
-  e.preventDefault()
-  quitAsked = true // asked once: the next quit goes through
-  dialog
-    .showMessageBox(win!, { type: 'warning', buttons: [t('Esci'), t('Annulla')], defaultId: 1, cancelId: 1, message: t('Ci sono trasferimenti in corso.'), detail: t('Uscendo verranno annullati.') })
-    .then(async r => {
-      if (r.response !== 0) return void (quitAsked = false)
-      queue.list().forEach(j => queue.cancel(j.id))
-      for (let i = 0; i < 50 && queue.running(); i++) await new Promise(r => setTimeout(r, 100)) // up to 5 s to settle
-      app.quit()
-    })
 })
 let cleaned = false
 // after the windows closed: a window's beforeunload (unsaved editor) may still cancel the quit in before-quit

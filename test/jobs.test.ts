@@ -117,4 +117,30 @@ describe('JobQueue', () => {
     await tick()
     expect(emits.length).toBeGreaterThan(m)
   })
+
+  test('late progress after the end is ignored; a throwing emit does not stall', async () => {
+    const g = defer()
+    let p!: Parameters<Worker>[1]
+    let boom = false
+    const q = new JobQueue({
+      worker: async (_s, pr) => {
+        p = pr
+        await g.promise
+      },
+      emit: () => {
+        if (boom) throw new Error('destroyed')
+      }
+    })
+    const a = q.start(spec())
+    const b = q.start(spec())
+    await tick()
+    boom = true
+    g.resolve()
+    await tick()
+    expect(state(q, a)).toBe('done')
+    expect(state(q, b)).toBe('done')
+    p.add(5)
+    p.fail('x', 'late')
+    expect(q.list()[1]).toMatchObject({ bytes: 0, failed: [] })
+  })
 })

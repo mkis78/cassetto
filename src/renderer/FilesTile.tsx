@@ -404,8 +404,11 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     }
     if (refused.length) setNotice(t('Non sostituiti (sostituirebbero sé stessi): {names}', { names: refused.join(', ') }))
     if (!items.length) return false
-    await startJob({ op: mode, from, to: host, items }, root) // App refreshes the folders when it ends
-    return true
+    // App refreshes the folders when it ends
+    return startJob({ op: mode, from, to: host, items }, root).then(
+      () => true,
+      e => (setNotice((e as Error).message), false)
+    )
   }
 
   const paste = async (destDir: string) => {

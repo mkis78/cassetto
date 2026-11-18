@@ -16,6 +16,7 @@ import { copyLocal } from './copyLocal'
 import { copyRemote, sshRunner } from './copyRemote'
 import { spawnSide, transfer } from './transfer'
 import type { JobItem, JobSpec } from '../shared/jobs'
+import { isInside } from '../shared/fileOps'
 import { isValidHost, listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
 import { existsSync, renameSync } from 'node:fs'
@@ -232,8 +233,13 @@ const queue = new JobQueue({
 const validSpec = (s: any): s is JobSpec => {
   const host = (h: unknown) => h === null || (typeof h === 'string' && isValidHost(h))
   return (
-    !!s && (s.op === 'copy' || s.op === 'move') && host(s.from) && host(s.to) && Array.isArray(s.items) &&
-    s.items.every((i: any) => !!i && typeof i.src === 'string' && typeof i.dest === 'string' && typeof i.replace === 'boolean')
+    !!s && (s.op === 'copy' || s.op === 'move') && host(s.from) && host(s.to) && Array.isArray(s.items) && s.items.length > 0 &&
+    s.items.every(
+      (i: any) =>
+        !!i && typeof i.src === 'string' && typeof i.dest === 'string' && typeof i.replace === 'boolean' &&
+        // on one machine: into itself would recurse forever, replacing a folder that holds the source would delete it
+        !(s.from === s.to && (isInside(i.src, i.dest) || (i.replace && isInside(i.dest, i.src))))
+    )
   )
 }
 handle('jobs:start', (spec: unknown) => {
@@ -448,9 +454,12 @@ function setMenu(): void {
   )
 }
 
+let started = false // the first window is up: until then a reopen would make a second one
+const reopen = () => void (started && !win && createWindow())
 app.on('second-instance', () => {
-  if (win?.isMinimized()) win.restore()
-  win?.focus()
+  if (!win) return reopen() // closed while transfers ran, and the quit was cancelled
+  if (win.isMinimized()) win.restore()
+  win.focus()
 })
 app.whenReady().then(() => {
   if (!single) return
@@ -467,7 +476,7 @@ app.whenReady().then(() => {
   barShortcut = loadState(stateFile()).settings?.barShortcut ?? DEFAULT_BAR
   if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '../../build/icon.png')) // the packaged app gets it from the bundle
   setMenu()
-  sweep(archiveBase()).finally(createWindow) // caches of a crashed run are not held by anyone
+  sweep(archiveBase()).finally(() => ((started = true), createWindow())) // caches of a crashed run are not held by anyone
 })
 let asking = false // the dialog is open: further quits wait for the answer
 let confirmed = false // Esci chosen: the quit goes through
@@ -480,7 +489,7 @@ app.on('before-quit', e => {
       .showMessageBox(win!, { type: 'warning', buttons: [t('Esci'), t('Annulla')], defaultId: 1, cancelId: 1, message: t('Ci sono trasferimenti in corso.'), detail: t('Uscendo verranno annullati.') })
       .then(async r => {
         asking = false
-        if (r.response !== 0) return
+        if (r.response !== 0) return reopen() // the quit came from closing the window: bring it back
         confirmed = true
         queue.list().forEach(j => queue.cancel(j.id))
         for (let i = 0; i < 50 && queue.running(); i++) await new Promise(r => setTimeout(r, 100)) // up to 5 s to settle
@@ -499,3 +508,4 @@ app.on('will-quit', e => {
   Promise.race([archives.releaseAll().then(() => sweep(archiveBase())), new Promise(r => setTimeout(r, 3000))]).finally(() => app.quit())
 })
 app.on('window-all-closed', () => app.quit())
+app.on('activate', reopen)

@@ -111,7 +111,9 @@ export default function Sidebar({ state, onChange, api, activePath, tiles, onAll
     const srcs = copy ? d.paths : d.paths.filter(p => dirOf(p) !== dest)
     if (d.host === host && srcs.some(s => isInside(s, dest))) return toast(t('Non puoi copiare o spostare una cartella dentro sé stessa'))
     if (!srcs.length) return
-    await startJob({ op: copy ? 'copy' : 'move', from: d.host, to: host, items: srcs.map(src => ({ src, dest: child(dest, baseName(src)), replace: false })) }, d.root)
+    await startJob({ op: copy ? 'copy' : 'move', from: d.host, to: host, items: srcs.map(src => ({ src, dest: child(dest, baseName(src)), replace: false })) }, d.root).catch(e =>
+      toast((e as Error).message)
+    )
   }
   // on a favourite, place or disk: files go in; on a favourite, a dragged favourite takes its place
   const itemDrop = (it: Item) =>

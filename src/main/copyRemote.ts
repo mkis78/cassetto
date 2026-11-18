@@ -2,7 +2,7 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { posix } from 'node:path'
 import type { JobItem, JobSpec } from '../shared/jobs'
 import type { Progress } from './jobs'
-import { parseOpOutput, remoteOpScript } from './fileOps'
+import { EXISTS, parseOpOutput, remoteOpScript } from './fileOps'
 import { remoteSh, shQuote as q, sshOptions } from './ssh'
 import { t } from '../shared/i18n'
 
@@ -97,8 +97,13 @@ export async function copyRemote(spec: JobSpec, p: Progress, signal: AbortSignal
       if (nl >= 0 && body.includes(`O${i.src}\0`)) {
         count(size)
         done.push(i)
-      } else
-        p.fail(i.src, parseOpOutput(body).failed[0]?.error ?? t('{error} (esito incerto: aggiorna per vedere cosa è cambiato)', { error: r.err.trim() || `exit ${r.code}` }))
+      } else {
+        const error = parseOpOutput(body).failed[0]?.error
+        // a copy that failed halfway (an unreadable file) leaves no partial tree under the real name; not when the outcome
+        // is uncertain (the copy may still run), not for a refusal (the name is someone else's), never for a move
+        if (error !== undefined && error !== t(EXISTS) && spec.op === 'copy' && existed === '0') await run(`rm -rf -- ${D}`)
+        p.fail(i.src, error ?? t('{error} (esito incerto: aggiorna per vedere cosa è cambiato)', { error: r.err.trim() || `exit ${r.code}` }))
+      }
     }
   } catch (e) {
     throw Object.assign(e as object, { done })

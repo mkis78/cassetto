@@ -77,6 +77,19 @@ describe('copyRemote', () => {
     expect(res.done.map(i => i.src)).toEqual([join(d, 'c')])
   })
 
+  test('a failed copy removes its partial destination', async () => {
+    const d = dir()
+    mkdirSync(join(d, 'tree'))
+    writeFileSync(join(d, 'tree', 'a'), 'a')
+    writeFileSync(join(d, 'tree', 'secret'), 's')
+    chmodSync(join(d, 'tree', 'secret'), 0)
+    const { r, p } = progress()
+    const res = await go('copy', [{ src: join(d, 'tree'), dest: join(d, 'tree2'), replace: false }], p, runner().run)
+    expect(res.done).toEqual([])
+    expect(r.failed.map(f => f.path)).toEqual([join(d, 'tree')])
+    expect(existsSync(join(d, 'tree2'))).toBe(false)
+  })
+
   test('cancel kills the running copy and removes its partial destination', async () => {
     const d = dir()
     writeFileSync(join(d, 'a'), 'data')

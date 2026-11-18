@@ -204,19 +204,21 @@ test('replaced destinations go to the Trash in one call, before their items are 
   expect(names.map(n => readFileSync(join(d, 'to', n), 'utf8'))).toEqual(['a', 'old', 'c'])
 })
 
+const bsdtar = spawnSync('bsdtar', ['--version']).status === 0
 describe('extract', () => {
   // an archive with a/b.txt inside, made with the system tools
-  const make = (kind: 'tar.gz' | 'zip') => {
+  const make = (kind: 'tar.gz' | 'zip' | '7z') => {
     const d = dir()
     mkdirSync(join(d, 'src/a'), { recursive: true })
     writeFileSync(join(d, 'src/a/b.txt'), 'hi')
     const out = join(d, `x.${kind}`)
     if (kind === 'zip') execFileSync('zip', ['-qr', out, 'a'], { cwd: join(d, 'src') })
+    else if (kind === '7z') execFileSync('bsdtar', ['--format', '7zip', '-cf', out, '-C', join(d, 'src'), 'a'])
     else execFileSync('tar', ['-czf', out, '-C', join(d, 'src'), 'a'])
     return { d, out }
   }
   describe.each([['local', local], ['remote script', sh]] as const)('%s', (_, run) => {
-    test.each(['tar.gz', 'zip'] as const)('%s extracts into a new folder', async kind => {
+    test.each(['tar.gz', 'zip', ...(bsdtar ? ['7z' as const] : [])] as const)('%s extracts into a new folder', async kind => {
       const { d, out } = make(kind)
       expect(await run({ op: 'extract', archive: out, dest: join(d, 'x') })).toEqual({ failed: [] })
       expect(readFileSync(join(d, 'x/a/b.txt'), 'utf8')).toBe('hi')
@@ -255,5 +257,24 @@ describe('extract', () => {
     expect(extractCommand('darwin', '/a.zip', '/d')).toEqual(['tar', ['-xf', '/a.zip', '-C', '/d']])
     expect(extractCommand('linux', '/a.ZIP', '/d')).toEqual(['unzip', ['-q', '-o', '/a.ZIP', '-d', '/d']])
     expect(extractCommand('linux', '/a.tgz', '/d')).toEqual(['tar', ['-xf', '/a.tgz', '-C', '/d']])
+    expect(extractCommand('darwin', '/a.rar', '/d')).toEqual(['tar', ['-xf', '/a.rar', '-C', '/d']])
+    const [cmd, args] = extractCommand('linux', '/a b.7z', '/d')
+    expect([cmd, args.slice(2)]).toEqual(['sh', ['sh', '/a b.7z', '/d']])
+  })
+  // the Linux path for 7z/rar, run here: the first of bsdtar, 7z, unrar on PATH extracts it
+  test.skipIf(!bsdtar)('extractCommand on Linux extracts a 7z through sh', () => {
+    const { d, out } = make('7z')
+    mkdirSync(join(d, 'o'))
+    const [cmd, args] = extractCommand('linux', out, join(d, 'o'))
+    execFileSync(cmd, args)
+    expect(readFileSync(join(d, 'o/a/b.txt'), 'utf8')).toBe('hi')
+  })
+  test('7z/rar with no tool on PATH says which tools are needed', () => {
+    const bin = dir()
+    for (const c of ['mkdir', 'rm']) symlinkSync(execFileSync('/bin/sh', ['-c', `command -v ${c}`]).toString().trim(), join(bin, c))
+    const dest = join(dir(), 'o')
+    const r = spawnSync('/bin/sh', ['-c', remoteOpScript({ op: 'extract', archive: '/x.rar', dest })], { env: { PATH: bin } })
+    expect(parseOpOutput(r.stdout.toString()).failed).toEqual([{ path: dest, error: 'Per aprire questo archivio serve bsdtar, 7z o unrar' }])
+    expect(existsSync(dest)).toBe(false)
   })
 })

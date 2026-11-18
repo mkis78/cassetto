@@ -26,9 +26,23 @@ async function each(steps: [string, () => Promise<unknown>][]): Promise<OpResult
   return { failed }
 }
 
-// argv for extracting `archive` into the existing folder `dest`; bsdtar (macOS) reads zip too, GNU tar (Linux) does not
+// sh that extracts `archive` into the existing folder `d`; `a` and `d` are its shell words (quoted paths or "$1")
+// GNU tar reads neither 7z nor rar, so for those the first tool found wins: bsdtar (libarchive), 7z (p7zip), unrar
+export function extractScript(archive: string, a: string, d: string): string {
+  if (/\.zip$/i.test(archive)) return `unzip -q -o -- ${a} -d ${d} || tar -xf ${a} -C ${d}`
+  if (!SEVEN.test(archive)) return `tar -xf ${a} -C ${d}`
+  const none = shQuote(t('Per aprire questo archivio serve bsdtar, 7z o unrar'))
+  return `if command -v bsdtar >/dev/null; then bsdtar -xf ${a} -C ${d}; elif command -v 7z >/dev/null; then 7z x -y -bd -o${d} -- ${a} >/dev/null; elif command -v unrar >/dev/null; then unrar x -o+ -idq -- ${a} ${d}/; else echo ${none} >&2; false; fi`
+}
+const SEVEN = /\.(7z|rar)$/i
+
+// argv for extracting `archive` into the existing folder `dest`; bsdtar (macOS) reads zip, 7z and rar too, GNU tar (Linux) does not
 export function extractCommand(platform: string, archive: string, dest: string): [string, string[]] {
-  return platform !== 'darwin' && /\.zip$/i.test(archive) ? ['unzip', ['-q', '-o', archive, '-d', dest]] : ['tar', ['-xf', archive, '-C', dest]]
+  if (platform === 'darwin') return ['tar', ['-xf', archive, '-C', dest]]
+  if (/\.zip$/i.test(archive)) return ['unzip', ['-q', '-o', archive, '-d', dest]]
+  // the paths reach sh as $1 and $2, never as script text
+  if (SEVEN.test(archive)) return ['sh', ['-c', extractScript(archive, '"$1"', '"$2"'), 'sh', archive, dest]]
+  return ['tar', ['-xf', archive, '-C', dest]]
 }
 
 const fresh = async (p: string) => {
@@ -162,10 +176,8 @@ export function remoteOpScript(op: FileOp): string {
         .join('\n')
     }
     case 'extract': {
-      const [a, d] = [q(op.archive), q(op.dest)]
-      const tar = `tar -xf ${a} -C ${d}`
-      const run = /\.zip$/i.test(op.archive) ? `unzip -q -o -- ${a} -d ${d} || ${tar}` : tar
-      return step(op.dest, `mkdir -- ${d} && { ${run} || { rm -rf -- ${d}; exit 1; }; }`, op.dest)
+      const d = q(op.dest)
+      return step(op.dest, `mkdir -- ${d} && { ${extractScript(op.archive, q(op.archive), d)} || { rm -rf -- ${d}; exit 1; }; }`, op.dest)
     }
     case 'trash':
       return op.paths.map(p => err(p, q(t("Sul server non c'è un Cestino")))).join('\n')

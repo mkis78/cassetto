@@ -65,7 +65,7 @@ Cassetto works alongside the Finder or your Linux file manager rather than repla
 
 ### Archives
 
-Double-click a `.zip`, `.tar`, `.tar.gz` (and the other tar formats) to **open it as a folder**, locally or on an SSH server: browse, preview, search and open what's inside without leaving Cassetto. It is read-only: take files out by dragging them to another panel or the sidebar, or with copy and paste (always a copy; the archive is never changed). Leave it like any folder (up from its top, Home, the sidebar). To unpack it all instead, right-click → **Extract Here**.
+Double-click a `.zip`, `.tar`, `.tar.gz` (and the other tar formats), `.7z` or `.rar` to **open it as a folder**, locally or on an SSH server: browse, preview, search and open what's inside without leaving Cassetto. It is read-only: take files out by dragging them to another panel or the sidebar, or with copy and paste (always a copy; the archive is never changed). Leave it like any folder (up from its top, Home, the sidebar). To unpack it all instead, right-click → **Extract Here**. On Linux, `.7z` and `.rar` need `bsdtar` (libarchive-tools), `7z` (p7zip) or `unrar` installed; macOS reads them out of the box.
 
 ### Sidebar
 

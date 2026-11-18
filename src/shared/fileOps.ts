@@ -36,6 +36,6 @@ export function rangeSelect(names: string[], anchor: string, target: string): st
 }
 
 // longest first, so ".tar.gz" wins over a bare ".gz" that is not an archive anyway
-const ARCHIVE = /\.(tar\.gz|tar\.bz2|tar\.xz|tgz|tbz2|txz|tar|zip)$/i
+const ARCHIVE = /\.(tar\.gz|tar\.bz2|tar\.xz|tgz|tbz2|txz|tar|zip|7z|rar)$/i
 export const isArchive = (name: string): boolean => ARCHIVE.test(name)
 export const archiveStem = (name: string): string => name.replace(ARCHIVE, '')

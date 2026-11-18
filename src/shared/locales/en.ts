@@ -407,6 +407,7 @@ export const EN: Record<string, string> = {
   "Creato «{name}»": "Created “{name}”",
   "Estratto «{name}»": "Extracted “{name}”",
   "Estrai qui": "Extract Here",
+  "Per aprire questo archivio serve bsdtar, 7z o unrar": "Opening this archive needs bsdtar, 7z or unrar",
   "Apro «{name}»…": "Opening “{name}”…",
   "{n} collegamenti esterni non mostrati": "{n} external links not shown",
   "Archivio non trovato: {name}": "Archive not found: {name}",

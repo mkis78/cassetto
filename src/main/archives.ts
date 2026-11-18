@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { lstat, mkdir, readdir, readlink, rename, rm, stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { extractCommand } from './fileOps'
+import { extractCommand, extractScript } from './fileOps'
 import { shQuote } from './ssh'
 
 export const cacheKey = (host: string | null, path: string, size: number, mtimeMs: number): string =>
@@ -95,9 +95,7 @@ export const ownedCache = (host: string | null, root: string, base: string): boo
 
 // extracts into `d`, prints <links removed>\n<d's real path>; a failed extraction removes the dir and exits non-zero
 export function remoteOpenScript(archive: string, d: string): string {
-  const a = shQuote(archive)
-  const tar = `tar -xf ${a} -C "$d"`
-  const run = /\.zip$/i.test(archive) ? `unzip -q -o -- ${a} -d "$d" || ${tar}` : tar
+  const run = extractScript(archive, shQuote(archive), '"$d"')
   return [
     `d=${shQuote(d)}`,
     `mkdir -m 700 -- "$d" || exit 1`,

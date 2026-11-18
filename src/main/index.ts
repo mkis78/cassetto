@@ -13,6 +13,7 @@ import { appsFor, openWith } from './platform/openWith'
 import { ejectVolume, listVolumes } from './platform/volumes'
 import { JobQueue } from './jobs'
 import { copyLocal } from './copyLocal'
+import { copyRemote, sshRunner } from './copyRemote'
 import type { JobItem, JobSpec } from '../shared/jobs'
 import { isValidHost, listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
@@ -201,20 +202,27 @@ handle('files:undoLabel', () => undos.peek()?.label ?? null)
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
 let release: Release | null = null
 const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })
-// the copy/move queue; Tasks 2-4 give the worker its branches (copyLocal, copyRemote, transfer)
+// the copy/move queue; Task 4 gives the worker its cross-host branch (transfer)
 const queue = new JobQueue({
   worker: async (spec, p, signal) => {
-    if (spec.from || spec.to) throw new Error(t('Non ancora disponibile'))
-    // undo for the items that completed, after a cancel or failure too
-    const record = ({ done, trashed }: { done: JobItem[]; trashed: Trashed[] }) => {
-      const rec = inverseOf(null, { op: spec.op, items: done }, new Set(), trashed, new Map())
+    if (spec.from !== spec.to) throw new Error(t('Non ancora disponibile'))
+    const host = spec.from
+    // undo for the items that completed, after a cancel or failure too; stamps as files:op takes them for a remote copy
+    const record = async ({ done, trashed = [] }: { done: JobItem[]; trashed?: Trashed[] }) => {
+      const stamps = new Map<string, string>()
+      if (host && spec.op === 'copy')
+        for (const i of done) {
+          const s = await stampOf(host, i.dest)
+          if (s !== null) stamps.set(i.dest, s)
+        }
+      const rec = inverseOf(host, { op: spec.op, items: done }, new Set(), trashed, stamps)
       if (rec) undos.push(rec)
     }
     try {
-      record(await copyLocal(spec, p, signal, trashItems))
+      await record(host ? await copyRemote(spec, p, signal, sshRunner(host)) : await copyLocal(spec, p, signal, trashItems))
     } catch (e) {
-      const r = e as { done?: JobItem[]; trashed?: Trashed[] } // copyLocal attaches both to what it throws
-      record({ done: r.done ?? [], trashed: r.trashed ?? [] })
+      const r = e as { done?: JobItem[]; trashed?: Trashed[] } // copyLocal and copyRemote attach these to what they throw
+      await record({ done: r.done ?? [], trashed: r.trashed })
       throw e
     }
   },

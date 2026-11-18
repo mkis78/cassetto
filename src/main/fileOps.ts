@@ -7,7 +7,7 @@ import { t, tx } from '../shared/i18n'
 import { isArchive } from '../shared/fileOps'
 
 // Nothing here overwrites unless an item says replace: an existing name fails with this.
-const EXISTS = tx('Esiste già')
+export const EXISTS = tx('Esiste già')
 
 const exists = (p: string) => lstat(p).then(() => true, () => false)
 // two names for one file: a case-only rename on a case-insensitive disk (macOS)
@@ -51,7 +51,7 @@ const fresh = async (p: string) => {
 
 // src to dest without ever replacing what is there: the new name is claimed first, atomically
 // (mkdir for a folder, which rename then takes over since it is empty; a hard link for a file)
-async function place(src: string, dest: string): Promise<void> {
+export async function place(src: string, dest: string): Promise<void> {
   const claim = (e: unknown) => {
     throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(t(EXISTS)) : e
   }

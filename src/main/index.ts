@@ -12,7 +12,8 @@ import { trashItems } from './platform/trash'
 import { appsFor, openWith } from './platform/openWith'
 import { ejectVolume, listVolumes } from './platform/volumes'
 import { JobQueue } from './jobs'
-import type { JobSpec } from '../shared/jobs'
+import { copyLocal } from './copyLocal'
+import type { JobItem, JobSpec } from '../shared/jobs'
 import { isValidHost, listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
 import { existsSync, renameSync } from 'node:fs'
@@ -202,8 +203,19 @@ let release: Release | null = null
 const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })
 // the copy/move queue; Tasks 2-4 give the worker its branches (copyLocal, copyRemote, transfer)
 const queue = new JobQueue({
-  worker: async () => {
-    throw new Error(t('Non ancora disponibile'))
+  worker: async (spec, p, signal) => {
+    if (spec.from || spec.to) throw new Error(t('Non ancora disponibile'))
+    // undo for the items that completed, after a cancel or failure too
+    const record = ({ done, trashed }: { done: JobItem[]; trashed: Trashed[] }) => {
+      const rec = inverseOf(null, { op: spec.op, items: done }, new Set(), trashed, new Map())
+      if (rec) undos.push(rec)
+    }
+    try {
+      record(await copyLocal(spec, p, signal, trashItems))
+    } catch (e) {
+      record(e as { done: JobItem[]; trashed: Trashed[] }) // copyLocal attaches both to what it throws
+      throw e
+    }
   },
   emit: jobs => win?.webContents.send('jobs', jobs)
 })

@@ -187,8 +187,6 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const open = (full: string, dir: boolean) => {
     if (dir) return void (setSel(null), load(full))
     // a remote file has no app here to open it: it opens in the editor
-    // ponytail: double-click extracts for now; the "browse as folder" project replaces this line
-    if (isArchive(full)) return void extract(full)
     if (host) return openEditor(containerApi, { path: full, host }, api.id)
     window.api.openPath(full).then(err => err && setNotice(`${nameOf(full)}: ${err}`))
   }
@@ -572,7 +570,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
               key={e.name}
               className={'file' + (e.name.startsWith('.') ? ' hidden' : '') + (full === sel?.path || picked.has(full) ? ' selected' : '') + (opened ? ' opened' : '') + (dropOn === full ? ' drop' : '')}
               onClick={ev => select(i, l.path, e, ev.metaKey || ev.ctrlKey ? 'toggle' : ev.shiftKey ? 'range' : 'one')}
-              onDoubleClick={() => open(full, e.dir)}
+              // ponytail: double-click extracts an archive for now; the "browse as folder" project replaces this
+              onDoubleClick={() => (!e.dir && isArchive(full) ? void extract(full) : open(full, e.dir))}
               draggable={!renaming}
               onDragStart={ev => drag(ev, full)}
               onDragEnd={() => (dragging = null)}

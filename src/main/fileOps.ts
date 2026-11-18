@@ -28,7 +28,7 @@ async function each(steps: [string, () => Promise<unknown>][]): Promise<OpResult
 
 // argv for extracting `archive` into the existing folder `dest`; bsdtar (macOS) reads zip too, GNU tar (Linux) does not
 export function extractCommand(platform: string, archive: string, dest: string): [string, string[]] {
-  return platform !== 'darwin' && /\.zip$/i.test(archive) ? ['unzip', ['-q', archive, '-d', dest]] : ['tar', ['-xf', archive, '-C', dest]]
+  return platform !== 'darwin' && /\.zip$/i.test(archive) ? ['unzip', ['-q', '-o', archive, '-d', dest]] : ['tar', ['-xf', archive, '-C', dest]]
 }
 
 const fresh = async (p: string) => {
@@ -118,9 +118,11 @@ async function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]
             })
             try {
               const [cmd, args] = extractCommand(process.platform, op.archive, op.dest)
-              await promisify(execFile)(cmd, args)
+              const child = promisify(execFile)(cmd, args)
+              child.child.stdin?.end() // nothing to answer a prompt: it fails instead of waiting
+              await child
             } catch (e) {
-              await rm(op.dest, { recursive: true, force: true })
+              await rm(op.dest, { recursive: true, force: true }).catch(() => {})
               throw new Error(((e as { stderr?: string }).stderr || (e as Error).message).trim())
             }
           }
@@ -162,7 +164,7 @@ export function remoteOpScript(op: FileOp): string {
     case 'extract': {
       const [a, d] = [q(op.archive), q(op.dest)]
       const tar = `tar -xf ${a} -C ${d}`
-      const run = /\.zip$/i.test(op.archive) ? `unzip -q -- ${a} -d ${d} || ${tar}` : tar
+      const run = /\.zip$/i.test(op.archive) ? `unzip -q -o -- ${a} -d ${d} || ${tar}` : tar
       return step(op.dest, `mkdir -- ${d} && { ${run} || { rm -rf -- ${d}; exit 1; }; }`, op.dest)
     }
     case 'trash':

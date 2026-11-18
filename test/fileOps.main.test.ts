@@ -236,9 +236,18 @@ describe('extract', () => {
       expect(existsSync(join(d, 'bad'))).toBe(false)
     })
   })
+  test.skipIf(!existsSync('/usr/bin/zip'))('a zip with a duplicate entry extracts, last one wins', async () => {
+    const d = dir()
+    mkdirSync(join(d, 's'))
+    writeFileSync(join(d, 's/f'), 'one')
+    execFileSync('zip', ['-q', join(d, 'x.zip'), 'f'], { cwd: join(d, 's') })
+    writeFileSync(join(d, 's/f'), 'two')
+    execFileSync('zip', ['-qg', join(d, 'x.zip'), 'f'], { cwd: join(d, 's') }) // -g appends instead of updating
+    expect(await local({ op: 'extract', archive: join(d, 'x.zip'), dest: join(d, 'o') })).toEqual({ failed: [] })
+  })
   test('extractCommand: bsdtar on macOS, unzip for zip elsewhere', () => {
     expect(extractCommand('darwin', '/a.zip', '/d')).toEqual(['tar', ['-xf', '/a.zip', '-C', '/d']])
-    expect(extractCommand('linux', '/a.ZIP', '/d')).toEqual(['unzip', ['-q', '/a.ZIP', '-d', '/d']])
+    expect(extractCommand('linux', '/a.ZIP', '/d')).toEqual(['unzip', ['-q', '-o', '/a.ZIP', '-d', '/d']])
     expect(extractCommand('linux', '/a.tgz', '/d')).toEqual(['tar', ['-xf', '/a.tgz', '-C', '/d']])
   })
 })

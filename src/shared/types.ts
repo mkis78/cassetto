@@ -86,6 +86,7 @@ export type FileOp =
   | { op: 'rename'; from: string; to: string }
   | { op: 'copy' | 'move'; items: { src: string; dest: string; replace: boolean }[] }
   | { op: 'trash' | 'delete'; paths: string[] }
+  | { op: 'extract'; archive: string; dest: string }
 export type OpResult = { failed: { path: string; error: string }[] } // empty: everything went through
 export type UndoResult = { label: string; failed: { path: string; error: string }[]; dirs: string[] } | null // dirs: folders to refresh; null: nothing to undo
 export type AppInfo = { id: string; name: string; icon?: string } // id: .app bundle path (macOS) or .desktop file (Linux); icon: PNG data URL

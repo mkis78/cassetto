@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../src/shared/fileOps'
+import { archiveStem, copyName, isArchive, isInside, nameError, okPrefix, rangeSelect } from '../src/shared/fileOps'
 
 test('okPrefix keeps listings up to the first failure', () => {
   const ok = (n: number) => ({ ok: true as const, listing: n })
@@ -42,4 +42,9 @@ test('rangeSelect works both ways', () => {
   expect(rangeSelect(['a', 'b', 'c', 'd'], 'b', 'd')).toEqual(['b', 'c', 'd'])
   expect(rangeSelect(['a', 'b', 'c', 'd'], 'c', 'a')).toEqual(['a', 'b', 'c'])
   expect(rangeSelect(['a', 'b'], 'gone', 'b')).toEqual(['b'])
+})
+
+test('isArchive and archiveStem', () => {
+  expect(['a.zip', 'FOTO.TAR.GZ', 'x.tgz', 'a.b.tar.xz', 'n.txt', 'zip', 'a.gz'].map(isArchive)).toEqual([true, true, true, true, false, false, false])
+  expect(['foto.tar.gz', 'FOTO.TAR.GZ', 'a.b.zip', 'x.tgz', 'notes.txt'].map(archiveStem)).toEqual(['foto', 'FOTO', 'a.b', 'x', 'notes.txt'])
 })

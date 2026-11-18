@@ -18,7 +18,7 @@ import StatusBar from './StatusBar'
 import { changedOptions } from '../shared/query'
 import { locale, t, tx } from '../shared/i18n'
 import { getSettings } from './settings'
-import { copyName, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
+import { archiveStem, copyName, isArchive, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
 import type { FileOp, OpResult } from '../shared/types'
 import { ConfirmDelete, ConflictDialog, type Choice } from './FileDialogs'
 import { popup } from './menuIcons'
@@ -170,9 +170,25 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const visible = (l: Listing) => sortBy(l.entries.filter(e => hidden || !e.name.startsWith('.')), sort.key, sort.desc)
   const columns = listing ? (view === 'columns' ? [listing, ...cols] : [listing]) : []
 
+  // into a new folder next to the archive, named after it; a taken name gets the next free one
+  const extract = async (archive: string) => {
+    const d = dirOf(archive)
+    const taken = new Set(columns.find(c => c.path === d)?.entries.map(e => e.name))
+    const stem = archiveStem(nameOf(archive))
+    let name = stem
+    for (let n = 2; taken.has(name); n++) name = `${stem} ${n}` // not copyName: it would treat "a.b" as name + extension
+    const dest = child(d, name)
+    const r = await window.api.fileOp(host, { op: 'extract', archive, dest })
+    if (r.failed.length) return setNotice(`${nameOf(archive)}: ${r.failed[0].error}`)
+    changed(api.id, [d])
+    await refreshTo(dest)
+  }
+
   const open = (full: string, dir: boolean) => {
     if (dir) return void (setSel(null), load(full))
     // a remote file has no app here to open it: it opens in the editor
+    // ponytail: double-click extracts for now; the "browse as folder" project replaces this line
+    if (isArchive(full)) return void extract(full)
     if (host) return openEditor(containerApi, { path: full, host }, api.id)
     window.api.openPath(full).then(err => err && setNotice(`${nameOf(full)}: ${err}`))
   }
@@ -490,11 +506,12 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const tags = entry && !host ? tagsMenu({ known, has: tagState(items), dots: TAG_HEX.map((h, i) => h || (i ? '' : '#8e8e93')) }) : undefined
     const apps = entry && !entry.dir && !host ? await window.api.appsFor(items) : undefined
     const choice = await popup(
-      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags, openWith: apps })
+      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: clipFor(), tags, openWith: apps, archive: !!entry && !entry.dir && items.length === 1 && isArchive(entry.name) })
     )
     if (!choice) return
     if (choice === 'openWith:other') return void window.api.pickApp(items).then(err => err && setNotice(err))
     if (choice.startsWith('openWith:')) return void window.api.openWith(apps![Number(choice.slice(9))].id, items).then(err => err && setNotice(err))
+    if (choice === 'extract') return void extract(full)
     if (choice === 'newFile' || choice === 'newFolder') return startCreate(choice, full)
     if (choice === 'paste') return paste(full)
     if (choice === 'rename') return startRename(full)
@@ -633,6 +650,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
       : [
           ...(one ? [{ label: t('Apri {name}', { name: what }), hint: t('Invio'), run: () => open(one, oneDir), icon: ExternalLink }] : []),
           ...(barApps.key && barApps.key === items.join('\n') ? barApps.apps.map(a => ({ label: t('Apri con {name}', { name: a.name }), run: () => void window.api.openWith(a.id, items).then(err => err && setNotice(err)), icon: ExternalLink })) : []),
+          ...(one && !oneDir && isArchive(one) ? [{ label: t('Estrai qui'), run: () => void extract(one), icon: ExternalLink }] : []),
           ...(one && oneDir ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
           ...(one && oneDir ? [{ label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, one), icon: Star }] : []),
           ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),

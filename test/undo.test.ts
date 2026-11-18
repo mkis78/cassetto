@@ -21,6 +21,12 @@ const deps: UndoDeps = { local, remote: none, script: none }
 const inv = (host: string | null, op: FileOp, failed: string[] = [], trashed: Trashed[] = [], stamps = new Map<string, string>()) => inverseOf(host, op, new Set(failed), trashed, stamps)
 
 describe('inverseOf', () => {
+  test('extract is undone like a created folder', () => {
+    const op: FileOp = { op: 'extract', archive: '/d/a.zip', dest: '/d/a' }
+    expect(inv(null, op)).toEqual({ host: null, label: 'Estratto «a»', steps: [{ kind: 'trash', path: '/d/a' }] })
+    expect(inv('h', op, [], [], new Map([['/d/a', 's']]))!.steps).toEqual([{ kind: 'removeIfSame', path: '/d/a', stamp: 's' }])
+    expect(inv(null, op, ['/d/a'])).toBeNull()
+  })
   test('rename', () => {
     expect(inv(null, { op: 'rename', from: '/d/a', to: '/d/b' })).toEqual({ host: null, label: 'Rinominato «a»', steps: [{ kind: 'move', from: '/d/b', to: '/d/a' }] })
   })

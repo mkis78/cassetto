@@ -1,7 +1,10 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { cp, link, lstat, mkdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
 import type { FileOp, OpResult, Trashed } from '../shared/types'
 import { shQuote, sshRun } from './ssh'
 import { t, tx } from '../shared/i18n'
+import { isArchive } from '../shared/fileOps'
 
 // Nothing here overwrites unless an item says replace: an existing name fails with this.
 const EXISTS = tx('Esiste già')
@@ -21,6 +24,11 @@ async function each(steps: [string, () => Promise<unknown>][]): Promise<OpResult
     }
   }
   return { failed }
+}
+
+// argv for extracting `archive` into the existing folder `dest`; bsdtar (macOS) reads zip too, GNU tar (Linux) does not
+export function extractCommand(platform: string, archive: string, dest: string): [string, string[]] {
+  return platform !== 'darwin' && /\.zip$/i.test(archive) ? ['unzip', ['-q', archive, '-d', dest]] : ['tar', ['-xf', archive, '-C', dest]]
 }
 
 const fresh = async (p: string) => {
@@ -99,6 +107,25 @@ async function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]
         if (x.error) res.failed.push({ path: x.path, error: t("Copiato, ma l'originale non è stato spostato nel Cestino: {error}", { error: x.error }) })
       return res
     }
+    case 'extract':
+      // the new folder is claimed first (mkdir fails if it exists); a failed extraction removes what this op made
+      return each([
+        [
+          op.dest,
+          async () => {
+            await mkdir(op.dest).catch(e => {
+              throw (e as NodeJS.ErrnoException).code === 'EEXIST' ? new Error(t(EXISTS)) : e
+            })
+            try {
+              const [cmd, args] = extractCommand(process.platform, op.archive, op.dest)
+              await promisify(execFile)(cmd, args)
+            } catch (e) {
+              await rm(op.dest, { recursive: true, force: true })
+              throw new Error(((e as { stderr?: string }).stderr || (e as Error).message).trim())
+            }
+          }
+        ]
+      ])
     case 'trash':
       return trash(op.paths).then(r => ({ failed: r.filter(x => x.error).map(x => ({ path: x.path, error: x.error! })) }))
     case 'delete':
@@ -132,6 +159,12 @@ export function remoteOpScript(op: FileOp): string {
         )
         .join('\n')
     }
+    case 'extract': {
+      const [a, d] = [q(op.archive), q(op.dest)]
+      const tar = `tar -xf ${a} -C ${d}`
+      const run = /\.zip$/i.test(op.archive) ? `unzip -q -- ${a} -d ${d} || ${tar}` : tar
+      return step(op.dest, `mkdir -- ${d} && { ${run} || { rm -rf -- ${d}; exit 1; }; }`, op.dest)
+    }
     case 'trash':
       return op.paths.map(p => err(p, q(t("Sul server non c'è un Cestino")))).join('\n')
     case 'delete':
@@ -147,7 +180,7 @@ export function parseOpOutput(out: string): OpResult {
 }
 
 // every path the op touches, for when ssh itself fails
-const pathsOf = (op: FileOp): string[] => ('items' in op ? op.items.map(i => i.src) : 'paths' in op ? op.paths : 'from' in op ? [op.from] : [op.path])
+const pathsOf = (op: FileOp): string[] => ('items' in op ? op.items.map(i => i.src) : 'paths' in op ? op.paths : 'from' in op ? [op.from] : op.op === 'extract' ? [op.dest] : [op.path])
 
 export async function runOpRemote(host: string, op: FileOp): Promise<OpResult> {
   const r = await sshRun(host, remoteOpScript(op), { timeout: 10 * 60_000 })

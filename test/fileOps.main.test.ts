@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSy
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
-import { parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from '../src/main/fileOps'
+import { extractCommand, parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from '../src/main/fileOps'
 import type { FileOp, OpResult } from '../src/shared/types'
 
 // another volume, simulated: rename and link fail with EXDEV while `exdev` is on
@@ -202,4 +202,43 @@ test('replaced destinations go to the Trash in one call, before their items are 
   expect(calls).toEqual([names.map(n => join(d, 'to', n))])
   expect(r.failed).toEqual([{ path: join(d, 'b'), error: 'no' }])
   expect(names.map(n => readFileSync(join(d, 'to', n), 'utf8'))).toEqual(['a', 'old', 'c'])
+})
+
+describe('extract', () => {
+  // an archive with a/b.txt inside, made with the system tools
+  const make = (kind: 'tar.gz' | 'zip') => {
+    const d = dir()
+    mkdirSync(join(d, 'src/a'), { recursive: true })
+    writeFileSync(join(d, 'src/a/b.txt'), 'hi')
+    const out = join(d, `x.${kind}`)
+    if (kind === 'zip') execFileSync('zip', ['-qr', out, 'a'], { cwd: join(d, 'src') })
+    else execFileSync('tar', ['-czf', out, '-C', join(d, 'src'), 'a'])
+    return { d, out }
+  }
+  describe.each([['local', local], ['remote script', sh]] as const)('%s', (_, run) => {
+    test.each(['tar.gz', 'zip'] as const)('%s extracts into a new folder', async kind => {
+      const { d, out } = make(kind)
+      expect(await run({ op: 'extract', archive: out, dest: join(d, 'x') })).toEqual({ failed: [] })
+      expect(readFileSync(join(d, 'x/a/b.txt'), 'utf8')).toBe('hi')
+    })
+    test('an existing dest fails and is left alone', async () => {
+      const { d, out } = make('tar.gz')
+      mkdirSync(join(d, 'x'))
+      writeFileSync(join(d, 'x/keep'), 'k')
+      expect((await run({ op: 'extract', archive: out, dest: join(d, 'x') })).failed).toEqual([{ path: join(d, 'x'), error: 'Esiste già' }])
+      expect(readdirSync(join(d, 'x'))).toEqual(['keep'])
+    })
+    test('a corrupt archive fails and its folder is removed', async () => {
+      const d = dir()
+      writeFileSync(join(d, 'bad.tar.gz'), 'not an archive')
+      const r = await run({ op: 'extract', archive: join(d, 'bad.tar.gz'), dest: join(d, 'bad') })
+      expect(r.failed).toHaveLength(1)
+      expect(existsSync(join(d, 'bad'))).toBe(false)
+    })
+  })
+  test('extractCommand: bsdtar on macOS, unzip for zip elsewhere', () => {
+    expect(extractCommand('darwin', '/a.zip', '/d')).toEqual(['tar', ['-xf', '/a.zip', '-C', '/d']])
+    expect(extractCommand('linux', '/a.ZIP', '/d')).toEqual(['unzip', ['-q', '/a.ZIP', '-d', '/d']])
+    expect(extractCommand('linux', '/a.tgz', '/d')).toEqual(['tar', ['-xf', '/a.tgz', '-C', '/d']])
+  })
 })

@@ -101,3 +101,8 @@ test('tag submenu: ticked when every item has the tag, marked when only some do;
   expect(ids(filesMenu({ target: 'file', remote: false, tags: m }))).toContain('tags')
   expect(ids(filesMenu({ target: 'file', remote: true }))).not.toContain('tags')
 })
+
+test('Estrai qui only for an archive file', () => {
+  expect(ids(filesMenu({ target: 'file', remote: false, archive: true }))).toContain('extract')
+  expect(ids(filesMenu({ target: 'file', remote: false }))).not.toContain('extract')
+})

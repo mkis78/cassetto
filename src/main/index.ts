@@ -164,9 +164,9 @@ handle('files:op', async (host: string | null, op: FileOp) => {
   const res = host ? await runOpRemote(host, op) : await runOpLocal(op, trashItems)
   const failed = new Set(res.failed.map(f => f.path))
   const stamps = new Map<string, string>()
-  if (host && (op.op === 'mkdir' || op.op === 'touch' || op.op === 'copy')) {
+  if (host && (op.op === 'mkdir' || op.op === 'touch' || op.op === 'copy' || op.op === 'extract')) {
     // mkdir needs no stamp: undo uses rmdir
-    const made = op.op === 'mkdir' ? [] : 'items' in op ?op.items.filter(i => !failed.has(i.src)).map(i => i.dest) : [op.path]
+    const made = op.op === 'mkdir' ? [] : 'items' in op ? op.items.filter(i => !failed.has(i.src)).map(i => i.dest) : op.op === 'extract' ? (failed.has(op.dest) ? [] : [op.dest]) : [op.path]
     for (const p of made) {
       const s = await stampOf(host, p)
       if (s !== null) stamps.set(p, s)

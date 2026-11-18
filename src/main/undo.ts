@@ -42,6 +42,8 @@ export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, 
     case 'mkdir':
     case 'touch':
       return failed.has(op.path) ? null : rec(t('Creato «{name}»', { name: basename(op.path) }), created(op.path))
+    case 'extract':
+      return failed.has(op.dest) ? null : rec(t('Estratto «{name}»', { name: basename(op.dest) }), created(op.dest))
     case 'copy':
     case 'move': {
       if (host && op.items.some(i => i.replace)) return null // ponytail: a remote replace deletes for good, there is nothing to bring back

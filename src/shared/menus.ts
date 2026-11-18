@@ -40,7 +40,7 @@ export function tagsMenu(c: { known: { name: string; color: number }[]; has: (na
 
 // count: entries selected; paste: what the internal clipboard holds ('other-host': copied on another host, null: nothing);
 // tags: the Tag submenu, for local files; openWith: the apps for the selected local files (undefined: no submenu)
-export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem; openWith?: AppInfo[] }): MenuItem[] {
+export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: 'ok' | 'other-host' | null; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean }): MenuItem[] {
   const create = [
     sep,
     { id: 'newFile', label: t('Nuovo file') },
@@ -59,7 +59,7 @@ export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: bo
   const split = [sep, { id: 'split:right', label: t('Apri in un pannello a destra') }, { id: 'split:within', label: t('Apri in un nuovo tab') }, { id: 'terminal', label: t('Apri terminale qui') }]
   const tag = c.tags ? [sep, c.tags] : []
   const apps: MenuItem[] = c.openWith && !c.remote ? [{ label: t('Apri con'), submenu: [...c.openWith.map((a, i) => ({ id: `openWith:${i}`, label: a.name, image: a.icon })), ...(c.openWith.length ? [sep] : []), { id: 'openWith:other', label: t('Altra app…') }] }] : []
-  if (c.target === 'file') return [{ id: 'open', label: c.remote ? t('Apri nell\'editor') : t('Apri') }, ...apps, ...(c.remote ? [] : [{ id: 'edit', label: t('Modifica nell\'editor') }]), { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...edit]
+  if (c.target === 'file') return [{ id: 'open', label: c.remote ? t('Apri nell\'editor') : t('Apri') }, ...apps, ...(c.archive ? [{ id: 'extract', label: t('Estrai qui') }] : []), ...(c.remote ? [] : [{ id: 'edit', label: t('Modifica nell\'editor') }]), { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...edit]
   if (c.target === 'dir') return [{ id: 'open', label: t('Apri') }, ...split, { id: 'copyPath', label: t('Copia percorso') }, { id: 'favourite', label: t('Aggiungi ai preferiti') }, ...tag, ...create, ...edit]
   return [{ id: 'refresh', label: t('Aggiorna') }, { id: 'terminal', label: t('Apri terminale qui') }, ...create]
 }

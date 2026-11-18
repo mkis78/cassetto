@@ -403,6 +403,8 @@ export const EN: Record<string, string> = {
   "Grigio": "Gray",
   "Rinominato «{name}»": "Renamed “{name}”",
   "Creato «{name}»": "Created “{name}”",
+  "Estratto «{name}»": "Extracted “{name}”",
+  "Estrai qui": "Extract Here",
   "Copiato «{name}»": "Copied “{name}”",
   "Copiati {n} elementi": "Copied {n} items",
   "Spostato «{name}»": "Moved “{name}”",

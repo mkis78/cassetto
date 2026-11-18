@@ -44,7 +44,7 @@ describe('cacheKey', () => {
 describe('ArchiveCaches', () => {
   const make = () => {
     const remove = vi.fn(async () => {})
-    return { remove, c: new ArchiveCaches({ base: '/b', remove }) }
+    return { remove, c: new ArchiveCaches({ remove }) }
   }
   test('deletes a cache only when its last holder releases', async () => {
     const { c, remove } = make()
@@ -128,6 +128,16 @@ describe('remoteOpenScript', () => {
     made.push(d)
     expect(r.stdout.toString().split('\n')[0]).toBe('3')
     expect(readdirSync(d).sort()).toEqual(['a', 'in', 'q'])
+  })
+  test('a link whose name holds a newline is removed too', () => {
+    const src = dir()
+    symlinkSync('/', join(src, 'a\nb'))
+    const a = join(dir(), 'x.tar.gz')
+    execFileSync('tar', ['-czf', a, '-C', src, 'a\nb'])
+    const { d, r } = run(a)
+    made.push(d)
+    expect(r.stdout.toString().split('\n')[0]).toBe('1')
+    expect(readdirSync(d)).toEqual([])
   })
 })
 

@@ -12,7 +12,7 @@ export const cacheKey = (host: string | null, path: string, size: number, mtimeM
 // who is looking at which cache: a cache goes away when its last holder lets go
 export class ArchiveCaches {
   private held = new Map<string, { host: string | null; holders: Set<string> }>()
-  constructor(private deps: { base: string; remove: (host: string | null, root: string) => Promise<void> }) {}
+  constructor(private deps: { remove: (host: string | null, root: string) => Promise<void> }) {}
 
   acquire(host: string | null, root: string, holder: string): void {
     const c = this.held.get(root) ?? { host, holders: new Set<string>() }
@@ -64,6 +64,7 @@ export async function pruneLinks(root: string): Promise<number> {
 }
 
 // extracts `archive` into base/<key> (reused when already there); a failure leaves nothing behind
+// a key is 40 hex chars: never a `.partial` or `.gone-*` folder (one being extracted or deleted)
 // ponytail: two opens of the same archive at once race on the .partial folder; the renderer opens one per holder
 export async function openLocal(base: string, archive: string, signal: AbortSignal): Promise<{ root: string; hidden: number }> {
   const st = await stat(archive)
@@ -101,7 +102,8 @@ export function remoteOpenScript(archive: string, d: string): string {
     `d=${shQuote(d)}`,
     `mkdir -m 700 -- "$d" || exit 1`,
     `{ ${run}; } || { rm -rf -- "$d"; exit 1; }`,
-    `n=$(find "$d" -type l | while IFS= read -r l; do case $(readlink "$l") in (/*|*..*) rm -f -- "$l"; echo x;; esac; done | wc -l)`,
+    // names go to sh as arguments, never as lines (a link may be named a\nb); `*..*` also prunes foo..bar, the safe direction
+    `n=$(find "$d" -type l -exec sh -c 'for l; do case $(readlink "$l") in (/*|*..*) rm -f -- "$l" && printf x;; esac; done' sh {} + | wc -c)`,
     `printf '%s\\n%s' "$((n))" "$(cd -- "$d" && pwd -P)"`
   ].join('\n')
 }

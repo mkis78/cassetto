@@ -13,7 +13,8 @@ import { appsFor, openWith } from './platform/openWith'
 import { ejectVolume, listVolumes } from './platform/volumes'
 import { listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
-import { existsSync } from 'node:fs'
+import { existsSync, renameSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { PtyManager, terminalLaunch } from './terminal'
 import { editTags, folderTags, runTagSearch } from './tags'
 import { canSelfUpdate, checkRelease, installRelease, type Release } from './release'
@@ -30,6 +31,9 @@ import { DEFAULT_BAR, systemConflict, type SymbolicHotkeys } from '../shared/sho
 
 if (process.env.CASSETTO_USERDATA) app.setPath('userData', process.env.CASSETTO_USERDATA)
 const stateFile = () => join(app.getPath('userData'), 'state.json')
+// one Cassetto per userData: a second one's startup sweep would delete the first one's live caches
+const single = app.requestSingleInstanceLock()
+if (!single) app.quit()
 let win: BrowserWindow | null = null
 // standard and secure: what module scripts, fetch and the editor's lazy chunk need, as on https
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
@@ -289,9 +293,18 @@ const archiveBase = () => join(app.getPath('userData'), 'archives')
 const removeCache = async (host: string | null, root: string) => {
   if (!ownedCache(host, root, archiveBase())) return // the renderer names these paths: only ours are deleted
   if (host) await sshRun(host, 'rm -rf -- ' + shQuote(root))
-  else await rm(root, { recursive: true, force: true })
+  else {
+    // moved away at once: an open of the same archive while the rm runs must not reuse what is being deleted (sweep clears leftovers)
+    const gone = `${root}.gone-${randomBytes(4).toString('hex')}`
+    try {
+      renameSync(root, gone)
+    } catch {
+      return // already gone
+    }
+    await rm(gone, { recursive: true, force: true })
+  }
 }
-const archives = new ArchiveCaches({ base: archiveBase(), remove: removeCache })
+const archives = new ArchiveCaches({ remove: removeCache })
 const opening = new Map<string, AbortController>() // one open per holder: a new one cancels the previous
 handle('archive:open', async (host: string | null, archive: string, holder: string) => {
   opening.get(holder)?.abort()
@@ -389,7 +402,12 @@ function setMenu(): void {
   )
 }
 
+app.on('second-instance', () => {
+  if (win?.isMinimized()) win.restore()
+  win?.focus()
+})
 app.whenReady().then(() => {
+  if (!single) return
   // the language of menus and messages; a change in Impostazioni applies at the next start
   setLang(resolveLang(loadState(stateFile()).settings?.language, app.getLocale()))
   const root = join(__dirname, '../renderer')
@@ -405,10 +423,11 @@ app.whenReady().then(() => {
   setMenu()
   sweep(archiveBase()).finally(createWindow) // caches of a crashed run are not held by anyone
 })
+app.on('before-quit', () => ptys.killAll())
 let cleaned = false
-app.on('before-quit', e => {
-  ptys.killAll()
-  if (cleaned) return
+// after the windows closed: a window's beforeunload (unsaved editor) may still cancel the quit in before-quit
+app.on('will-quit', e => {
+  if (cleaned || !single) return
   e.preventDefault() // the caches go first (remote ones over ssh), but never keep the user waiting long
   cleaned = true
   Promise.race([archives.releaseAll().then(() => sweep(archiveBase())), new Promise(r => setTimeout(r, 3000))]).finally(() => app.quit())

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="macOS on Apple Silicon" src="https://img.shields.io/badge/macOS-Apple%20Silicon-1d2027?logo=apple&logoColor=white">
+  <img alt="macOS 13+ on Apple Silicon and Intel" src="https://img.shields.io/badge/macOS%2013%2B-Apple%20Silicon%20%7C%20Intel-1d2027?logo=apple&logoColor=white">
   <img alt="Linux AppImage x64" src="https://img.shields.io/badge/Linux-AppImage%20x64-1d2027?logo=linux&logoColor=white">
   <img alt="Built with Electron 45" src="https://img.shields.io/badge/Electron-45-1d2027?logo=electron&logoColor=7daea3">
   <img alt="Interface in English and Italian" src="https://img.shields.io/badge/UI-English%20%C2%B7%20Italian-1d2027">
@@ -126,7 +126,7 @@ Cmd+K lists the hosts of your `~/.ssh/config`. A server's folders open in a tab 
 
 ### macOS
 
-Download the latest `.dmg` from [Releases](https://github.com/mkis78/cassetto/releases/latest) (Apple Silicon) and drag **Cassetto** into **Applications**.
+Download the latest `.dmg` from [Releases](https://github.com/mkis78/cassetto/releases/latest) for your Mac (`arm64` for Apple Silicon, `x64` for Intel) and drag **Cassetto** into **Applications**. It needs macOS 13 Ventura or later.
 
 The app is not yet signed with an Apple Developer ID, so the first time macOS refuses to open it. To allow it:
 
@@ -177,7 +177,7 @@ Node.js LTS.
 npm install      # also rebuilds node-pty for Electron
 npm run dev      # hot reload; main and preload rebuild and the app restarts
 npm test         # vitest
-npm run dist     # dist/Cassetto-<version>-arm64.dmg and dist/mac-arm64/Cassetto.app
+npm run dist     # dist/Cassetto-<version>-arm64.dmg and -x64.dmg, dist/mac-arm64/Cassetto.app
 ```
 
 ### Releasing
@@ -190,7 +190,7 @@ npm run release:minor   # 0.1.0 → 0.2.0, features
 npm run release:major   # 0.1.0 → 1.0.0
 ```
 
-The command runs the tests, bumps the version in `package.json`, commits, tags `vX.Y.Z` and pushes. `.github/workflows/release.yml` then builds the macOS `.dmg` and `.zip` and the Linux `.AppImage` and attaches them to the release, where installed apps find them.
+The command runs the tests, bumps the version in `package.json`, commits, tags `vX.Y.Z` and pushes. `.github/workflows/release.yml` then builds the macOS `.dmg` and `.zip` (Apple Silicon and Intel) and the Linux `.AppImage` and attaches them to the release, where installed apps find them.
 
 ### Languages
 

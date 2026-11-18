@@ -105,7 +105,7 @@
       </a>
       <a class="btn ghost" id="download-linux" href="https://github.com/mkis78/cassetto/releases/latest">Download for Linux</a>
     </div>
-    <p class="meta"><span id="version">Latest release</span> · macOS on Apple Silicon · Linux AppImage x64 · free and open source (MIT)</p>
+    <p class="meta"><span id="version">Latest release</span> · macOS 13+ on Apple Silicon or <a id="download-intel" href="https://github.com/mkis78/cassetto/releases/latest">Intel</a> · Linux AppImage x64 · free and open source (MIT)</p>
   </header>
 
   <img class="shot hero-shot" src="screenshots/overview.png" alt="Cassetto: a folder, a Markdown file with its preview and a photo gallery side by side">
@@ -151,7 +151,7 @@
   <section id="install">
     <h2>Install</h2>
     <h3>macOS</h3>
-    <p>Download the <code>.dmg</code> (Apple Silicon) and drag <strong>Cassetto</strong> into <strong>Applications</strong>. The app is not yet signed with an Apple Developer ID, so the first time macOS refuses to open it. To allow it:</p>
+    <p>Download the <code>.dmg</code> for your Mac (<code>arm64</code> for Apple Silicon, <code>x64</code> for Intel; macOS 13 Ventura or later) and drag <strong>Cassetto</strong> into <strong>Applications</strong>. The app is not yet signed with an Apple Developer ID, so the first time macOS refuses to open it. To allow it:</p>
     <ol>
       <li>Open Cassetto once and dismiss the warning with <strong>Done</strong>.</li>
       <li>Go to <strong>System Settings → Privacy &amp; Security</strong>, scroll down to <em>“Cassetto” was blocked…</em> and click <strong>Open Anyway</strong>.</li>
@@ -181,9 +181,11 @@
   fetch('https://api.github.com/repos/mkis78/cassetto/releases/latest')
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(rel => {
-      const dmg = rel.assets.find(a => a.name.endsWith('.dmg'));
+      const dmg = rel.assets.find(a => a.name.endsWith('-arm64.dmg')) || rel.assets.find(a => a.name.endsWith('.dmg'));
+      const intel = rel.assets.find(a => a.name.endsWith('-x64.dmg'));
       const appImage = rel.assets.find(a => a.name.endsWith('.AppImage'));
       if (dmg) document.getElementById('download').href = dmg.browser_download_url;
+      if (intel) document.getElementById('download-intel').href = intel.browser_download_url;
       if (appImage) document.getElementById('download-linux').href = appImage.browser_download_url;
       document.getElementById('version').textContent = rel.tag_name;
     })

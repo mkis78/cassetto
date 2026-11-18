@@ -90,9 +90,9 @@ export async function copyLocal(spec: JobSpec, p: Progress, signal: AbortSignal,
             } catch (e) {
               if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
               await copyTree(i.src, i.dest, p, signal, modes, claimed)
-              crossed.push(i.src)
             }
           for (const [d, m] of modes.reverse()) await chmod(d, m) // innermost first
+          if (mine && spec.op === 'move') crossed.push(i.src) // copied across volumes: the original goes only once the copy is whole
           done.push(i)
         } catch (e) {
           if (mine) await rm(i.dest, { recursive: true, force: true }).catch(() => {})

@@ -136,6 +136,8 @@ describe('ownedCache', () => {
     expect(ownedCache(null, '/u/archives/abc', '/u/archives')).toBe(true)
     expect(ownedCache(null, '/u/archives', '/u/archives')).toBe(false)
     expect(ownedCache(null, '/home/me', '/u/archives')).toBe(false)
+    expect(ownedCache(null, '/u/archives/..', '/u/archives')).toBe(false)
+    expect(ownedCache(null, '/u/archives/.', '/u/archives')).toBe(false)
     expect(ownedCache(null, '/u/archives/a/b', '/u/archives')).toBe(false)
     expect(ownedCache('h', remoteCacheDir(), '/u/archives')).toBe(true)
     expect(ownedCache('h', '/home/me', '/u/archives')).toBe(false)

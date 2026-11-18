@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { lstat, mkdir, readdir, readlink, rename, rm, stat } from 'node:fs/promises'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { extractCommand } from './fileOps'
 import { shQuote } from './ssh'
@@ -90,7 +90,7 @@ export const remoteCacheDir = (): string => `/tmp/cassetto-archive-${randomBytes
 
 // a root main may delete: its own cache folder locally, a cassetto-archive dir in /tmp on a host
 export const ownedCache = (host: string | null, root: string, base: string): boolean =>
-  host ? /^\/tmp\/cassetto-archive-[A-Za-z0-9]+$/.test(root) : dirname(root) === base
+  host ? /^\/tmp\/cassetto-archive-[A-Za-z0-9]+$/.test(root) : resolve(root) === root && dirname(root) === base // not `<base>/..` or `<base>/.`
 
 // extracts into `d`, prints <links removed>; a failed extraction removes the dir and exits non-zero
 export function remoteOpenScript(archive: string, d: string): string {

@@ -33,6 +33,10 @@
 
 ![Cassetto: a folder, a Markdown file with its preview and a photo gallery side by side](docs/screenshots/overview.png)
 
+> [!WARNING]
+> Cassetto is still under active development and may contain bugs. It moves, copies and deletes files, so keep backups of anything important.
+> The software is provided "as is", without warranty of any kind, and the author is not liable for any damage or data loss arising from its use. See the [LICENSE](LICENSE) for the full terms.
+
 ## Why Cassetto
 
 The file manager that comes with your system is great for browsing. Cassetto is meant for the days when you work with files for hours: moving them between folders, creating new ones, searching inside them, changing a line in a config file, running a command where they live. It brings those steps together in one window, so you don't have to switch between apps.

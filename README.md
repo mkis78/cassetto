@@ -175,14 +175,15 @@ The keys below are for macOS. On Linux, Ctrl takes the place of Cmd; the window-
 
 ## Privacy and security
 
-Cassetto runs on your computer and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. The interface is served from its own `app://` scheme and cannot read files on its own; it runs sandboxed, with no browser permissions (camera, microphone, location…). The packaged app turns off Electron's `RunAsNode`, `NODE_OPTIONS` and `--inspect`, and checks the integrity of its own code at start, so no other program can borrow it, or the permissions you give it, to run code of its own.
+Cassetto runs on your computer and talks to nothing but the servers you open over SSH and, to check for updates, GitHub. The interface is served from its own `app://` scheme and cannot read files on its own: a PDF, video or audio file being previewed reaches it through a `preview://` link that stands for that one file and nothing else; it runs sandboxed, with no browser permissions (camera, microphone, location…). The packaged app turns off Electron's `RunAsNode`, `NODE_OPTIONS` and `--inspect`, and checks the integrity of its own code at start, so no other program can borrow it, or the permissions you give it, to run code of its own.
 
 ## Development
 
 Node.js LTS.
 
 ```sh
-npm install      # also rebuilds node-pty for Electron
+npm install      # also rebuilds node-pty for Electron and copies pdf.js's fonts, CMaps and wasm
+                 # into src/renderer/public/pdfjs (not in git)
 npm run dev      # hot reload; main and preload rebuild and the app restarts
 npm test         # vitest
 npm run dist     # dist/Cassetto-<version>-arm64.dmg and -x64.dmg, dist/mac-arm64/Cassetto.app
@@ -208,10 +209,10 @@ Every visible text goes through `t('…')` from `src/shared/i18n.ts`, with the I
 
 ```
 src/main/      Electron main process: listing, preview, file operations, search, Finder tags, ssh,
-               terminals (node-pty), updates, the app:// scheme, menus, state
+               terminals (node-pty), updates, the app:// and preview:// schemes, menus, state
 src/preload/   IPC bridge between main and the interface
 src/renderer/  React interface: tabs and panels (dockview), files, search, editor (CodeMirror),
-               terminal (xterm.js), action bar, dialogs
+               terminal (xterm.js), PDF preview (pdf.js), action bar, dialogs
 src/shared/    Pure logic shared by both: types, menus, search options, tags format, status texts,
                arrangements, languages
 test/          Vitest
@@ -226,7 +227,7 @@ Cassetto is built at night, fuelled entirely by coffee. Every cup you buy is ano
 
 ## Credits
 
-Designed by Marco Pennisi. Built on [Electron](https://www.electronjs.org/), [React](https://react.dev/), [dockview](https://dockview.dev/), [CodeMirror](https://codemirror.net/), [xterm.js](https://xtermjs.org/) and [node-pty](https://github.com/microsoft/node-pty), [marked](https://marked.js.org/) and [Lucide](https://lucide.dev/) icons.
+Designed by Marco Pennisi. Built on [Electron](https://www.electronjs.org/), [React](https://react.dev/), [dockview](https://dockview.dev/), [CodeMirror](https://codemirror.net/), [xterm.js](https://xtermjs.org/) and [node-pty](https://github.com/microsoft/node-pty), [marked](https://marked.js.org/), [PDF.js](https://mozilla.github.io/pdf.js/) and [Lucide](https://lucide.dev/) icons.
 
 ## License
 

@@ -93,7 +93,7 @@ export type UndoResult = { label: string; failed: { path: string; error: string 
 export type AppInfo = { id: string; name: string; icon?: string } // id: .app bundle path (macOS) or .desktop file (Linux); icon: PNG data URL
 export type Trashed ={ path: string; trashed?: string; error?: string } // trashed: where it is now in the Trash
 
-export type Preview = { kind: 'text'; text: string; truncated: boolean } | { kind: 'image'; src: string } | { kind: 'binary' } | { kind: 'error'; error: string }
+export type Preview = { kind: 'text'; text: string; truncated: boolean } | { kind: 'image'; src: string } | { kind: 'pdf' | 'video' | 'audio'; src: string } | { kind: 'binary' } | { kind: 'error'; error: string }
 
 // a set of tabs and where they were, saved under a name
 export interface SavedLayout {

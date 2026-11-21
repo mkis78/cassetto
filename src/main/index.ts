@@ -26,6 +26,7 @@ import { editTags, folderTags, runTagSearch } from './tags'
 import { canSelfUpdate, checkRelease, installRelease, type Release } from './release'
 import type { Tag } from '../shared/tags'
 import { listLocal, previewLocal, readLocal, writeLocal } from './files'
+import { MediaTokens, serveMedia } from './mediaPreview'
 import { ArchiveCaches, openLocal, ownedCache, remoteCacheDir, remoteOpenScript, sweep } from './archives'
 import { listFiles, runSearch, runSearchRemote } from './search'
 import { imageType } from '../shared/format'
@@ -42,7 +43,12 @@ const single = app.requestSingleInstanceLock()
 if (!single) app.quit()
 let win: BrowserWindow | null = null
 // standard and secure: what module scripts, fetch and the editor's lazy chunk need, as on https
-protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
+// preview: PDFs, videos and audio read in pieces (Range) by <video>, <audio> and pdf.js, one token per previewed file
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: 'preview', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
+])
+const media = new MediaTokens()
 const ptys = new PtyManager(spawnPty)
 const shell = process.env.SHELL ?? (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
 let barShortcut = DEFAULT_BAR // shown in the menu; the renderer listens for the key itself
@@ -155,7 +161,7 @@ handle('files:list', async (host: string | null, path: string | null) => {
 })
 handle('tags:edit', (paths: string[], change: { add?: Tag[]; remove?: string[] }) => editTags(paths, change))
 handle('files:all', (cwd: string) => listFiles(cwd))
-handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path)))
+handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path, media)))
 handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
 handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: t('testo non valido') } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
 // Cmd+Z: the inverse of each successful op, in memory
@@ -470,6 +476,7 @@ app.whenReady().then(() => {
     const file = appFile(root, req.url)
     return file ? net.fetch(pathToFileURL(file).toString()) : new Response('Non trovato', { status: 404 })
   })
+  protocol.handle('preview', req => serveMedia(media, req))
   // the page never needs camera, microphone, location, notifications…: Electron would grant them all by default
   session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(permission === 'fullscreen'))
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'fullscreen')

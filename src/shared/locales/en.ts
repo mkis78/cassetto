@@ -9,6 +9,8 @@ export const EN: Record<string, string> = {
   "Sul server non c'è un Cestino": "The server has no Trash",
   "{error} (esito incerto: aggiorna per vedere cosa è cambiato)": "{error} (outcome uncertain: refresh to see what changed)",
   "Immagine troppo grande per l'anteprima": "Image too large to preview",
+  "Non è un file": "Not a file",
+  "Anteprima di PDF, video e audio non disponibile sui server": "PDF, video and audio previews aren't available on servers",
   "File troppo grande per l'editor (oltre {mb} MB)": "File too large for the editor (over {mb} MB)",
   "testo non valido": "invalid text",
   "Gli aggiornamenti funzionano nell'app installata": "Updates work in the installed app",

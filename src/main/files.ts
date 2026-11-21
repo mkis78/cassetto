@@ -4,6 +4,7 @@ import { sortEntries } from '../shared/sortEntries'
 import { imageType } from '../shared/format'
 import type { ListResult, Preview, ReadResult, WriteResult } from '../shared/types'
 import { t } from '../shared/i18n'
+import { mediaOf, type MediaTokens } from './mediaPreview'
 
 export async function listLocal(path: string): Promise<ListResult> {
   try {
@@ -34,8 +35,13 @@ export function toPreview(path: string, buf: Buffer): Preview {
   return { kind: 'text', text: buf.subarray(0, limit).toString('utf8'), truncated: buf.length > limit }
 }
 
-export async function previewLocal(path: string): Promise<Preview> {
+export async function previewLocal(path: string, tokens: MediaTokens): Promise<Preview> {
   try {
+    const media = mediaOf(path)
+    if (media) {
+      if (!(await stat(path)).isFile()) return { kind: 'error', error: t('Non è un file') }
+      return { kind: media.kind, src: tokens.add(path) } // read by the renderer over preview://, in pieces
+    }
     const f = await open(path)
     try {
       const buf = Buffer.alloc(previewLimit(path) + 1)

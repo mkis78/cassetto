@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { sortEntries } from '../shared/sortEntries'
 import type { Listing, ListResult, Preview, ReadResult, WriteResult } from '../shared/types'
+import { mediaOf } from './mediaPreview'
 import { EDIT_LIMIT, previewLimit, toPreview, toText } from './files'
 import { t } from '../shared/i18n'
 
@@ -147,6 +148,7 @@ export async function listRemote(host: string, path: string | null): Promise<Lis
 }
 
 export async function previewRemote(host: string, path: string): Promise<Preview> {
+  if (mediaOf(path)) return { kind: 'error', error: t('Anteprima di PDF, video e audio non disponibile sui server') } // decided: not worth downloading it all
   const r = await sshRun(host, `head -c ${previewLimit(path) + 1} -- ${shQuote(path)}`, { maxBuffer: previewLimit(path) + 1024 })
   return r.ok ? toPreview(path, r.out) : { kind: 'error', error: r.error }
 }

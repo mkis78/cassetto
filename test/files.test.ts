@@ -3,6 +3,8 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { MediaTokens } from '../src/main/mediaPreview'
+import { previewRemote } from '../src/main/ssh'
 import { EDIT_LIMIT, listLocal, previewLimit, previewLocal, readLocal, toPreview, toText, writeLocal } from '../src/main/files'
 
 test('lists folders first, follows symlinks to folders', async () => {
@@ -37,8 +39,22 @@ test('preview: text, truncated text, binary, image, missing file', async () => {
   expect(toPreview('a.png', Buffer.alloc(previewLimit('a.png') + 1)).kind).toBe('error')
   const d = mkdtempSync(join(tmpdir(), 'tfiles-'))
   writeFileSync(join(d, 'n.md'), '# hi')
-  expect(await previewLocal(join(d, 'n.md'))).toEqual({ kind: 'text', text: '# hi', truncated: false })
-  expect((await previewLocal(join(d, 'nope'))).kind).toBe('error')
+  const tokens = new MediaTokens()
+  expect(await previewLocal(join(d, 'n.md'), tokens)).toEqual({ kind: 'text', text: '# hi', truncated: false })
+  expect((await previewLocal(join(d, 'nope'), tokens)).kind).toBe('error')
+})
+
+test('preview: PDF, video and audio go by preview:// locally, a notice on servers', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'tfiles-'))
+  writeFileSync(join(d, 'a.pdf'), '%PDF')
+  const tokens = new MediaTokens()
+  const p = await previewLocal(join(d, 'a.pdf'), tokens)
+  expect(p.kind).toBe('pdf')
+  expect(p.kind === 'pdf' && tokens.path(p.src)).toBe(join(d, 'a.pdf'))
+  expect((await previewLocal(join(d, 'x.mp4'), tokens)).kind).toBe('error')
+  mkdirSync(join(d, 'dir.mp3'))
+  expect((await previewLocal(join(d, 'dir.mp3'), tokens)).kind).toBe('error') // not a regular file
+  expect(await previewRemote('host', '/a/b.mov')).toEqual({ kind: 'error', error: 'Anteprima di PDF, video e audio non disponibile sui server' })
 })
 
 test('editor: reads text, refuses binary and huge files, writes in place keeping the mode', async () => {

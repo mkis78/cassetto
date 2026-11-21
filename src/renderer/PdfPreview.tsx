@@ -7,8 +7,10 @@ import { fetchRange, pdfErrorText } from './pdfLoad'
 GlobalWorkerOptions.workerSrc = workerUrl
 
 const CHUNK = 65536
-// copied there from pdfjs-dist/wasm by postinstall: JPEG2000 and JBIG2 images (scanned PDFs) and ICC colours
-const wasmUrl = new URL('pdfjs/', document.baseURI).href
+// copied there from pdfjs-dist by postinstall: wasm for JPEG2000/JBIG2 images (scanned PDFs) and ICC colours,
+// the 14 standard fonts for PDFs that don't embed them, and the CMaps for Chinese, Japanese and Korean text
+const pdfjsDir = (sub: string) => new URL(`pdfjs/${sub}`, document.baseURI).href
+const resources = { wasmUrl: pdfjsDir(''), standardFontDataUrl: pdfjsDir('standard_fonts/'), cMapUrl: pdfjsDir('cmaps/'), cMapPacked: true }
 
 // the whole file when it fits in the first piece, else a transport pdf.js asks for further pieces
 async function openRanged(src: string, signal: AbortSignal, fail: (e: unknown) => void): Promise<{ data: Uint8Array } | { range: PDFDataRangeTransport }> {
@@ -21,7 +23,6 @@ async function openRanged(src: string, signal: AbortSignal, fail: (e: unknown) =
 }
 
 // A PDF as a column of pages, panel-wide, each drawn when it scrolls into view. No zoom or search: it is a preview.
-// shortcut: no standard_fonts/cmaps shipped, so PDFs that don't embed their fonts use look-alikes; ship them if it shows
 export default function PdfPreview({ src }: { src: string }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
   const [ratio, setRatio] = useState(1.414) // height / width of page 1, for the placeholders
@@ -35,7 +36,7 @@ export default function PdfPreview({ src }: { src: string }) {
     openRanged(src, ac.signal, fail)
       .then(async source => {
         if (gone) return
-        task = getDocument({ ...source, disableAutoFetch: true, wasmUrl })
+        task = getDocument({ ...source, disableAutoFetch: true, ...resources })
         const d = await task.promise
         const v = (await d.getPage(1)).getViewport({ scale: 1 })
         if (!gone) setRatio(v.height / v.width), setDoc(d)

@@ -12,7 +12,18 @@ test('mediaOf: by extension, any case', () => {
   expect(mediaOf('noext')).toBeUndefined()
 })
 
-test('tokens: only handed-out URLs, last 16 kept', () => {
+test('tokens: one stable URL per path, so a refresh or a long-open preview keeps working', () => {
+  const tokens = new MediaTokens()
+  const url = tokens.add('/x/a.mp4')
+  expect(tokens.add('/x/a.mp4')).toBe(url)
+  for (let i = 0; i < 255; i++) tokens.add(`/x/${i}.pdf`)
+  tokens.add('/x/a.mp4') // used again: now the newest
+  tokens.add('/x/new.pdf')
+  expect(tokens.path(url)).toBe('/x/a.mp4')
+  expect(tokens.path(tokens.add('/x/0.pdf'))).toBe('/x/0.pdf') // evicted, then handed a fresh token
+})
+
+test('tokens: only handed-out URLs, last 256 paths kept', () => {
   const tokens = new MediaTokens()
   const url = tokens.add('/x/a.pdf')
   expect(url.startsWith('preview://media/')).toBe(true)
@@ -21,7 +32,7 @@ test('tokens: only handed-out URLs, last 16 kept', () => {
   expect(tokens.path(url.replace('//media/', '//other/'))).toBeNull()
   expect(tokens.path('file:///etc/passwd')).toBeNull()
   expect(tokens.path('not a url')).toBeNull()
-  for (let i = 0; i < 16; i++) tokens.add(`/x/${i}.mp4`)
+  for (let i = 0; i < 256; i++) tokens.add(`/x/${i}.mp4`)
   expect(tokens.path(url)).toBeNull()
 })
 

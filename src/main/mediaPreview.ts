@@ -21,12 +21,19 @@ export const mediaOf = (name: string): Media | undefined => {
 
 const PREFIX = 'preview://media/'
 export class MediaTokens {
-  // shortcut: last 16 previews only, a panel left open longer re-asks via files:preview
-  private map = new Map<string, string>()
+  // one token per path, so a refreshed listing keeps the same src (a playing video doesn't restart)
+  // shortcut: the 256 most recently previewed paths; a preview left open past 256 others stops loading new pieces
+  private map = new Map<string, string>() // token → path
+  private byPath = new Map<string, string>() // path → token, oldest first
   add(path: string): string {
-    const token = randomUUID()
+    const token = this.byPath.get(path) ?? randomUUID()
+    this.byPath.delete(path)
+    this.byPath.set(path, token)
     this.map.set(token, path)
-    if (this.map.size > 16) this.map.delete(this.map.keys().next().value!)
+    if (this.byPath.size > 256) {
+      const [oldPath, oldToken] = this.byPath.entries().next().value!
+      this.byPath.delete(oldPath), this.map.delete(oldToken)
+    }
     return PREFIX + token
   }
   path(url: string): string | null {

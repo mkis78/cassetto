@@ -59,12 +59,16 @@ function PdfPage({ doc, n, ratio }: { doc: PDFDocumentProxy; n: number; ratio: n
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const canvas = ref.current!
-    let cancel: (() => void) | null = null
+    let cancel: (() => void) | null = null // set while the page is drawn or being drawn
+    // only pages near the view hold a bitmap: a Retina page is several MB, a long PDF read through would fill memory
     const io = new IntersectionObserver(async ([e]) => {
-      if (!e.isIntersecting || cancel) return
-      io.disconnect()
+      if (!e.isIntersecting) {
+        if (cancel) cancel(), (cancel = null), (canvas.width = canvas.height = 0) // freed; the CSS aspect ratio keeps its place
+        return
+      }
+      if (cancel) return
       let stopped = false
-      cancel = () => void (stopped = true)
+      const stop = (cancel = () => void (stopped = true))
       const page = await doc.getPage(n).catch(() => null)
       if (!page || stopped) return
       const scale = (canvas.clientWidth * devicePixelRatio) / page.getViewport({ scale: 1 }).width
@@ -73,8 +77,8 @@ function PdfPage({ doc, n, ratio }: { doc: PDFDocumentProxy; n: number; ratio: n
       canvas.height = viewport.height
       canvas.style.aspectRatio = `${viewport.width} / ${viewport.height}`
       const task = page.render({ canvas, viewport })
-      cancel = () => task.cancel()
-      task.promise.catch(() => {}) // cancelled when the file changes; a broken page stays blank
+      if (cancel === stop) cancel = () => task.cancel()
+      task.promise.catch(() => {}) // cancelled when it scrolls away or the file changes; a broken page stays blank
     }, { rootMargin: '200px' })
     io.observe(canvas)
     return () => (io.disconnect(), cancel?.())

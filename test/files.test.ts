@@ -54,6 +54,9 @@ test('preview: PDF, video and audio go by preview:// locally, a notice on server
   expect((await previewLocal(join(d, 'x.mp4'), tokens)).kind).toBe('error')
   mkdirSync(join(d, 'dir.mp3'))
   expect((await previewLocal(join(d, 'dir.mp3'), tokens)).kind).toBe('error') // not a regular file
+  writeFileSync(join(d, 'chiuso.mp4'), 'x')
+  chmodSync(join(d, 'chiuso.mp4'), 0)
+  expect((await previewLocal(join(d, 'chiuso.mp4'), tokens)).kind).toBe('error') // unreadable: said now, not as a bad format later
   expect(await previewRemote('host', '/a/b.mov')).toEqual({ kind: 'error', error: 'Anteprima di PDF, video e audio non disponibile sui server' })
 })
 

@@ -2,23 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import { getDocument, GlobalWorkerOptions, PDFDataRangeTransport, type PDFDocumentLoadingTask, type PDFDocumentProxy } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { t } from '../shared/i18n'
+import { fetchRange, pdfErrorText } from './pdfLoad'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
 const CHUNK = 65536
-const fetchRange = async (src: string, begin: number, end: number) => {
-  const r = await fetch(src, { headers: { Range: `bytes=${begin}-${end - 1}` } })
-  if (r.status !== 206 && r.status !== 200) throw new Error(`HTTP ${r.status}`)
-  return { r, data: new Uint8Array(await r.arrayBuffer()) }
-}
+// copied there from pdfjs-dist/wasm by postinstall: JPEG2000 and JBIG2 images (scanned PDFs) and ICC colours
+const wasmUrl = new URL('pdfjs/', document.baseURI).href
 
-// pdf.js only reads in pieces over http(s); for preview:// we hand it the pieces ourselves, so a big PDF isn't read whole
-async function openRanged(src: string, fail: (e: unknown) => void): Promise<{ data: Uint8Array } | { range: PDFDataRangeTransport }> {
-  const { r, data } = await fetchRange(src, 0, CHUNK)
-  const total = Number(r.headers.get('Content-Range')?.split('/')[1] ?? data.length)
-  if (total <= data.length) return { data }
-  const range = new PDFDataRangeTransport(total, data)
-  range.requestDataRange = (begin: number, end: number) => void fetchRange(src, begin, end).then(c => range.onDataRange(begin, c.data), fail)
+// the whole file when it fits in the first piece, else a transport pdf.js asks for further pieces
+async function openRanged(src: string, signal: AbortSignal, fail: (e: unknown) => void): Promise<{ data: Uint8Array } | { range: PDFDataRangeTransport }> {
+  const first = await fetchRange(src, 0, CHUNK, { signal })
+  if (first.total <= first.data.length) return { data: first.data }
+  const range = new PDFDataRangeTransport(first.total, first.data)
+  range.requestDataRange = (begin: number, end: number) =>
+    void fetchRange(src, begin, end, { etag: first.etag, signal }).then(c => !signal.aborted && range.onDataRange(begin, c.data), fail)
   return { range }
 }
 
@@ -32,19 +30,20 @@ export default function PdfPreview({ src }: { src: string }) {
     setDoc(null), setError(null)
     let task: PDFDocumentLoadingTask | null = null
     let gone = false
-    const fail = (e: unknown) => !gone && setError((e as Error).message)
-    openRanged(src, fail)
+    const ac = new AbortController() // stops pieces still on their way, here and in main
+    const fail = (e: unknown) => !gone && setError(pdfErrorText(e as Error))
+    openRanged(src, ac.signal, fail)
       .then(async source => {
         if (gone) return
-        task = getDocument({ ...source, disableAutoFetch: true })
+        task = getDocument({ ...source, disableAutoFetch: true, wasmUrl })
         const d = await task.promise
         const v = (await d.getPage(1)).getViewport({ scale: 1 })
         if (!gone) setRatio(v.height / v.width), setDoc(d)
       })
       .catch(fail)
-    return () => void ((gone = true), task?.destroy())
+    return () => void ((gone = true), ac.abort(), task?.destroy())
   }, [src])
-  if (error) return <pre className="files-preview-error">{t('PDF non leggibile: {error}', { error })}</pre>
+  if (error) return <pre className="files-preview-error">{error}</pre>
   if (!doc) return <div className="files-empty">{t('Caricamento…')}</div>
   return (
     <div className="pdf-pages">

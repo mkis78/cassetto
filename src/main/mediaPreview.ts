@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { open, type FileHandle } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 
 // The renderer reads previewed PDFs, videos and audio over preview://media/<token>: each token stands for the one
@@ -59,18 +58,32 @@ export function parseRange(header: string | null, size: number): { start: number
   return start >= size || start > end ? 'invalid' : { start, end }
 }
 
+// the page's origin: app://cassetto, or the dev server on localhost; nobody else reads previews
+const appOrigin = (o: string | null) => (o && (o === 'app://cassetto' || /^http:\/\/localhost:\d+$/.test(o)) ? o : null)
+
 export async function serveMedia(tokens: MediaTokens, req: Request): Promise<Response> {
-  // the page is app://cassetto (http://localhost in dev) and pdf.js fetches cross-origin; the token is the secret
-  const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges' }
+  const origin = appOrigin(req.headers.get('Origin')) // pdf.js fetches cross-origin; <video> and <audio> send none
+  const cors: Record<string, string> = origin ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges, ETag', Vary: 'Origin' } : {}
   const path = tokens.path(req.url)
-  const st = path ? await stat(path).catch(() => null) : null
-  if (!path || !st?.isFile()) return new Response('Non trovato', { status: 404, headers: cors })
+  // opened before answering: an unreadable file is a 403 now, not a broken body after a 200
+  let fh: FileHandle
+  try {
+    if (!path) throw Object.assign(new Error(), { code: 'ENOENT' })
+    fh = await open(path)
+  } catch (e) {
+    const denied = (e as NodeJS.ErrnoException).code === 'EACCES' || (e as NodeJS.ErrnoException).code === 'EPERM'
+    return new Response(denied ? 'Accesso negato' : 'Non trovato', { status: denied ? 403 : 404, headers: cors })
+  }
+  const st = await fh.stat().catch(() => null)
+  if (!st?.isFile()) return await fh.close(), new Response('Non trovato', { status: 404, headers: cors })
   const size = st.size
   const range = parseRange(req.headers.get('Range'), size)
-  if (range === 'invalid') return new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${size}` } })
+  if (range === 'invalid') return await fh.close(), new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${size}` } })
   const { start, end } = range ?? { start: 0, end: size - 1 }
-  const headers: Record<string, string> = { ...cors, 'Accept-Ranges': 'bytes', 'Content-Type': mediaOf(path)?.mime ?? 'application/octet-stream', 'Content-Length': String(end - start + 1) }
+  // the ETag tells pdf.js's pieces apart from a file replaced by another of the same size
+  const headers: Record<string, string> = { ...cors, 'Accept-Ranges': 'bytes', ETag: `"${size}-${Math.round(st.mtimeMs)}"`, 'Content-Type': mediaOf(path!)?.mime ?? 'application/octet-stream', 'Content-Length': String(end - start + 1) }
   if (range) headers['Content-Range'] = `bytes ${start}-${end}/${size}`
-  const body = size ? (Readable.toWeb(createReadStream(path, { start, end })) as ReadableStream) : null // createReadStream with end -1 would read all
+  if (!size) await fh.close() // createReadStream with end -1 would read all
+  const body = size ? (Readable.toWeb(fh.createReadStream({ start, end })) as ReadableStream) : null // closes the file when done or cancelled
   return new Response(body, { status: range ? 206 : 200, headers })
 }

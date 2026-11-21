@@ -2,3 +2,4 @@ node_modules/
 out/
 dist/
 .superpowers/
+src/renderer/public/pdfjs/

@@ -39,7 +39,9 @@ export async function previewLocal(path: string, tokens: MediaTokens): Promise<P
   try {
     const media = mediaOf(path)
     if (media) {
-      if (!(await stat(path)).isFile()) return { kind: 'error', error: t('Non è un file') }
+      const f = await open(path) // throws now if it can't be read, rather than failing later as a bad format
+      const isFile = await f.stat().then(st => st.isFile(), () => false).finally(() => f.close())
+      if (!isFile) return { kind: 'error', error: t('Non è un file') }
       return { kind: media.kind, src: tokens.add(path) } // read by the renderer over preview://, in pieces
     }
     const f = await open(path)

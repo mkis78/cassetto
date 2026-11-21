@@ -10,7 +10,7 @@
     "test": "vitest run",
     "dist": "electron-vite build && electron-builder --mac",
     "dist:linux": "electron-vite build && electron-builder --linux",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && mkdir -p src/renderer/public/pdfjs && cd node_modules/pdfjs-dist/wasm && cp openjpeg.wasm openjpeg_nowasm_fallback.js jbig2.wasm jbig2_nowasm_fallback.js qcms_bg.wasm ../../../src/renderer/public/pdfjs/",
     "release": "npm test && npm version $BUMP -m \"chore: release v%s\" && git push --follow-tags",
     "release:patch": "BUMP=patch npm run release",
     "release:minor": "BUMP=minor npm run release",

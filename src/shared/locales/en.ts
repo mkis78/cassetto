@@ -12,6 +12,8 @@ export const EN: Record<string, string> = {
   "Non è un file": "Not a file",
   "Formato non supportato": "Unsupported format",
   "PDF non leggibile: {error}": "Unreadable PDF: {error}",
+  "PDF protetto da password": "Password-protected PDF",
+  "il file è cambiato": "the file has changed",
   "Anteprima di PDF, video e audio non disponibile sui server": "PDF, video and audio previews aren't available on servers",
   "File troppo grande per l'editor (oltre {mb} MB)": "File too large for the editor (over {mb} MB)",
   "testo non valido": "invalid text",

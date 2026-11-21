@@ -1,4 +1,4 @@
-import { mkdtempSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -81,4 +81,34 @@ test('serve: missing file is 404', async () => {
   const url = tokens.add(path)
   unlinkSync(path)
   expect((await serveMedia(tokens, new Request(url))).status).toBe(404)
+})
+
+test('serve: an unreadable file is 403 before any byte is promised', async () => {
+  const { path } = file()
+  const tokens = new MediaTokens()
+  const url = tokens.add(path)
+  chmodSync(path, 0)
+  expect((await serveMedia(tokens, new Request(url))).status).toBe(403)
+})
+
+test('serve: an ETag that changes with the file, so a reader notices it was replaced', async () => {
+  const { path } = file()
+  const tokens = new MediaTokens()
+  const url = tokens.add(path)
+  const a = (await serveMedia(tokens, new Request(url))).headers.get('ETag')
+  utimesSync(path, new Date(), new Date(Date.now() + 5000))
+  const b = (await serveMedia(tokens, new Request(url))).headers.get('ETag')
+  expect(a).toMatch(/^".+"$/)
+  expect(b).not.toBe(a)
+})
+
+test('serve: CORS only for the app itself', async () => {
+  const { path } = file()
+  const tokens = new MediaTokens()
+  const url = tokens.add(path)
+  const acao = async (origin: string) => (await serveMedia(tokens, new Request(url, { headers: { Origin: origin } }))).headers.get('Access-Control-Allow-Origin')
+  expect(await acao('app://cassetto')).toBe('app://cassetto')
+  expect(await acao('http://localhost:5173')).toBe('http://localhost:5173')
+  expect(await acao('https://evil.example')).toBeNull()
+  expect(await acao('http://localhost.evil.example')).toBeNull()
 })

@@ -232,6 +232,8 @@ button { font: inherit; }
 .files-preview > pre { margin: 0; padding: 8px 10px; white-space: pre; user-select: text; }
 .files-preview > pre.files-preview-error { color: var(--err-fg); white-space: pre-wrap; }
 .files-preview > img { display: block; max-width: calc(100% - 20px); margin: 10px; }
+.pdf-pages { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.pdf-page { display: block; width: 100%; height: auto; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
 .files-preview > .files-media { display: block; width: calc(100% - 20px); margin: 10px; }
 /* views: list (name, size, date), icons (grid), columns (one folder per column) */
 .files-list { container-type: inline-size; }

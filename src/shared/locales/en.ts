@@ -11,6 +11,7 @@ export const EN: Record<string, string> = {
   "Immagine troppo grande per l'anteprima": "Image too large to preview",
   "Non è un file": "Not a file",
   "Formato non supportato": "Unsupported format",
+  "PDF non leggibile: {error}": "Unreadable PDF: {error}",
   "Anteprima di PDF, video e audio non disponibile sui server": "PDF, video and audio previews aren't available on servers",
   "File troppo grande per l'editor (oltre {mb} MB)": "File too large for the editor (over {mb} MB)",
   "testo non valido": "invalid text",

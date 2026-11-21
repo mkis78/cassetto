@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { AppInfo, DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
 import { ArrowUp, ChevronDown, FileCode, Tags as TagsIcon, ScanSearch, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, Star, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
@@ -899,6 +899,9 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   )
 }
 
+// pdf.js stays out of the main bundle until a PDF is previewed
+const PdfPreview = lazy(() => import('./PdfPreview'))
+
 // keyed by src: a new file remounts it, so the old one stops playing
 function MediaPreview({ kind, src }: { kind: 'video' | 'audio'; src: string }) {
   const [failed, setFailed] = useState(false)
@@ -919,7 +922,11 @@ function FilePreview({ path, preview }: { path: string | null; preview: Preview 
     <img src={preview.src} />
   ) : preview.kind === 'video' || preview.kind === 'audio' ? (
     <MediaPreview key={preview.src} kind={preview.kind} src={preview.src} />
-  ) : preview.kind === 'pdf' || preview.kind === 'binary' ? (
+  ) : preview.kind === 'pdf' ? (
+    <Suspense fallback={<div className="files-empty">{t('Caricamento…')}</div>}>
+      <PdfPreview src={preview.src} />
+    </Suspense>
+  ) : preview.kind === 'binary' ? (
     <div className="files-empty">{t('File binario')}</div>
   ) : preview.kind === 'error' ? (
     <pre className="files-preview-error">{preview.error}</pre>

@@ -899,6 +899,13 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   )
 }
 
+// keyed by src: a new file remounts it, so the old one stops playing
+function MediaPreview({ kind, src }: { kind: 'video' | 'audio'; src: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return <div className="files-empty">{t('Formato non supportato')}</div>
+  return kind === 'video' ? <video className="files-media" controls src={src} onError={() => setFailed(true)} /> : <audio className="files-media" controls src={src} onError={() => setFailed(true)} />
+}
+
 function FilePreview({ path, preview }: { path: string | null; preview: Preview | null }) {
   if (!path) return <div className="files-preview files-empty">{t('Seleziona un file')}</div>
   const head = (
@@ -910,7 +917,9 @@ function FilePreview({ path, preview }: { path: string | null; preview: Preview 
     <div className="files-empty">{t('Caricamento…')}</div>
   ) : preview.kind === 'image' ? (
     <img src={preview.src} />
-  ) : preview.kind === 'binary' ? (
+  ) : preview.kind === 'video' || preview.kind === 'audio' ? (
+    <MediaPreview key={preview.src} kind={preview.kind} src={preview.src} />
+  ) : preview.kind === 'pdf' || preview.kind === 'binary' ? (
     <div className="files-empty">{t('File binario')}</div>
   ) : preview.kind === 'error' ? (
     <pre className="files-preview-error">{preview.error}</pre>

@@ -232,6 +232,7 @@ button { font: inherit; }
 .files-preview > pre { margin: 0; padding: 8px 10px; white-space: pre; user-select: text; }
 .files-preview > pre.files-preview-error { color: var(--err-fg); white-space: pre-wrap; }
 .files-preview > img { display: block; max-width: calc(100% - 20px); margin: 10px; }
+.files-preview > .files-media { display: block; width: calc(100% - 20px); margin: 10px; }
 /* views: list (name, size, date), icons (grid), columns (one folder per column) */
 .files-list { container-type: inline-size; }
 .files-entries { min-height: 100%; }
@@ -413,6 +414,7 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .files-gallery { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
 .files-gallery .files-preview { width: auto; flex: 1; min-height: 0; border-left: 0; }
 .files-gallery .files-preview > img { max-height: calc(100% - 50px); margin: 10px auto; }
+.files-gallery .files-preview > video { max-height: calc(100% - 50px); }
 .files-gallery .files-entries { flex: none; min-height: 0; display: flex; gap: 4px; padding: 6px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid var(--line); }
 .files-gallery .file { flex: none; width: 96px; }
 .palette-overlay { padding-top: 80px; }

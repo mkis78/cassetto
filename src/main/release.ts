@@ -25,9 +25,10 @@ export function newerVersion(current: string, tag: string): boolean {
   return false
 }
 
-// the download for this machine: the macOS zip (the dmg needs mounting), or the Linux AppImage
-export function pickAsset(assets: Asset[], platform: string): Asset | null {
-  const suffix = platform === 'darwin' ? '-arm64-mac.zip' : platform === 'linux' ? '.AppImage' : null
+// the download for this machine: the macOS zip for its processor (the dmg needs mounting), or the Linux AppImage.
+// Names follow artifactName in package.json, ${productName}-${version}-${arch}.${ext}: change both together.
+export function pickAsset(assets: Asset[], platform: string, arch: string): Asset | null {
+  const suffix = platform === 'darwin' ? `-${arch}.zip` : platform === 'linux' ? '.AppImage' : null
   return (suffix && assets.find(a => a.name.endsWith(suffix))) || null
 }
 
@@ -41,7 +42,7 @@ export async function checkRelease(current: string): Promise<Release | null> {
     const res = await fetch(LATEST, { signal: AbortSignal.timeout(10_000), headers: { Accept: 'application/vnd.github+json' } })
     if (!res.ok) return null
     const r = (await res.json()) as { tag_name: string; assets: Asset[] }
-    const a = pickAsset(r.assets, process.platform)
+    const a = pickAsset(r.assets, process.platform, process.arch)
     const sha256 = /^sha256:([0-9a-f]{64})$/i.exec(a?.digest ?? '')?.[1]?.toLowerCase() ?? null
     return a && newerVersion(current, r.tag_name) ? { version: r.tag_name.replace(/^v/, ''), url: a.browser_download_url, sha256 } : null
   } catch {

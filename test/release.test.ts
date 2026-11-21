@@ -21,11 +21,14 @@ test('download status: the share downloaded, or megabytes when the size is unkno
   expect(downloadStatus(12.4e6, 0)).toEqual({ label: 'Download della nuova versione: 12 MB', progress: null })
 })
 
-test('picks the asset for the platform', () => {
-  const a = ['Cassetto-0.2.0-arm64.dmg', 'Cassetto-0.2.0-arm64-mac.zip', 'Cassetto-0.2.0-x86_64.AppImage'].map(name => ({ name, browser_download_url: `u/${name}` }))
-  expect(pickAsset(a, 'darwin')?.name).toBe('Cassetto-0.2.0-arm64-mac.zip')
-  expect(pickAsset(a, 'linux')?.name).toBe('Cassetto-0.2.0-x86_64.AppImage')
-  expect(pickAsset([], 'linux')).toBeNull()
+test('picks the asset for the platform and the processor', () => {
+  // the names releases carry since 0.4.0 (artifactName ${productName}-${version}-${arch}.${ext})
+  const a = ['Cassetto-0.5.0-arm64.dmg', 'Cassetto-0.5.0-arm64.zip', 'Cassetto-0.5.0-x64.dmg', 'Cassetto-0.5.0-x64.zip', 'Cassetto-0.5.0.AppImage'].map(name => ({ name, browser_download_url: `u/${name}` }))
+  expect(pickAsset(a, 'darwin', 'arm64')?.name).toBe('Cassetto-0.5.0-arm64.zip')
+  expect(pickAsset(a, 'darwin', 'x64')?.name).toBe('Cassetto-0.5.0-x64.zip')
+  expect(pickAsset(a, 'linux', 'x64')?.name).toBe('Cassetto-0.5.0.AppImage')
+  expect(pickAsset(a.filter(x => !x.name.includes('x64')), 'darwin', 'x64')).toBeNull() // never the other processor's build
+  expect(pickAsset([], 'linux', 'x64')).toBeNull()
 })
 
 test('self-update only for installed builds that can be replaced', () => {
@@ -43,15 +46,23 @@ test('a failed check is just "no update"', async () => {
 
 test('a newer release with a matching asset is reported, with its SHA-256', async () => {
   const sha = 'ab'.repeat(32)
-  const body = { tag_name: 'v0.3.0', assets: [{ name: 'Cassetto-0.3.0-arm64-mac.zip', browser_download_url: 'u/z', digest: `sha256:${sha.toUpperCase()}` }] }
+  const body = {
+    tag_name: 'v0.3.0',
+    assets: [
+      { name: 'Cassetto-0.3.0-x64.zip', browser_download_url: 'u/x', digest: null },
+      { name: 'Cassetto-0.3.0-arm64.zip', browser_download_url: 'u/z', digest: `sha256:${sha.toUpperCase()}` }
+    ]
+  }
   vi.stubGlobal('fetch', async () => new Response(JSON.stringify(body)))
-  const p = process.platform
+  const [p, arch] = [process.platform, process.arch]
   Object.defineProperty(process, 'platform', { value: 'darwin' })
+  Object.defineProperty(process, 'arch', { value: 'arm64' })
   try {
     expect(await checkRelease('0.1.0')).toEqual({ version: '0.3.0', url: 'u/z', sha256: sha })
     expect(await checkRelease('0.3.0')).toBeNull()
   } finally {
     Object.defineProperty(process, 'platform', { value: p })
+    Object.defineProperty(process, 'arch', { value: arch })
   }
 })
 
@@ -71,4 +82,11 @@ test('file hash and the swap script', async () => {
   expect(swapScript(42, "/tmp/it's/Cassetto.app", '/Applications/Cassetto.app')).toBe(
     "while kill -0 42 2>/dev/null; do sleep 0.2; done; rm -rf '/Applications/Cassetto.app.new' && ditto '/tmp/it'\\''s/Cassetto.app' '/Applications/Cassetto.app.new' && rm -rf '/Applications/Cassetto.app' && mv '/Applications/Cassetto.app.new' '/Applications/Cassetto.app'"
   )
+})
+
+test('the mac file names pickAsset looks for are the ones the build publishes', async () => {
+  // 0.4.0 changed artifactName and updates silently stopped finding their zip: keep the two in step
+  const pkg = JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, '../package.json'), 'utf8'))
+  const name = pkg.build.mac.artifactName.replace('${productName}', 'Cassetto').replace('${version}', '1.0.0').replace('${ext}', 'zip')
+  for (const arch of ['arm64', 'x64']) expect(pickAsset([{ name: name.replace('${arch}', arch), browser_download_url: 'u' }], 'darwin', arch)).not.toBeNull()
 })

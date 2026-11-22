@@ -495,5 +495,8 @@ export const EN: Record<string, string> = {
   "TUTTO MAIUSCOLO": "ALL UPPERCASE",
   "Iniziali Maiuscole": "Title Case",
   "Includi estensione": "Include extension",
-  "(invariato)": "(unchanged)"
+  "(invariato)": "(unchanged)",
+  "Nome non valido: \"{name}\"": "Invalid name: \"{name}\"",
+  "Nessun file": "No files",
+  "Stash non valido: {i}": "Invalid stash: {i}"
 }

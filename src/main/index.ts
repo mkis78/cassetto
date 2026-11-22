@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process'
 import { mkdir, readFile, rm, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AppState, FileOp, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
+import type { AppState, DiffSpec, FileOp, GitAction, LogView, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
 import { parseOpOutput, runOpLocal, runOpRemote, sshOp } from './fileOps'
 import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
@@ -25,6 +25,7 @@ import { PtyManager, terminalLaunch } from './terminal'
 import { editTags, folderTags, runTagSearch } from './tags'
 import { canSelfUpdate, checkRelease, installRelease, type Release } from './release'
 import type { Tag } from '../shared/tags'
+import { gitChanges, gitCommitInfo, gitDiffTexts, gitLog, gitRefs, gitRun, gitStatus } from './git'
 import { listLocal, previewLocal, readLocal, writeLocal } from './files'
 import { MediaTokens, serveMedia } from './mediaPreview'
 import { ArchiveCaches, openLocal, ownedCache, remoteCacheDir, remoteOpenScript, sweep } from './archives'
@@ -164,6 +165,13 @@ handle('files:all', (cwd: string) => listFiles(cwd))
 handle('files:preview', (host: string | null, path: string) => (host ? previewRemote(host, path) : previewLocal(path, media)))
 handle('files:read', (host: string | null, path: string) => (host ? readRemote(host, path) : readLocal(path)))
 handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: t('testo non valido') } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
+handle('git:log', (cwd: string, v: LogView) => gitLog(cwd, v))
+handle('git:status', (cwd: string) => gitStatus(cwd))
+handle('git:run', (cwd: string, a: GitAction) => gitRun(cwd, a))
+handle('git:changes', (cwd: string) => gitChanges(cwd))
+handle('git:commit', (cwd: string, sha: string) => gitCommitInfo(cwd, sha))
+handle('git:refs', (cwd: string) => gitRefs(cwd))
+handle('git:diff', (cwd: string, d: DiffSpec) => gitDiffTexts(cwd, d))
 // Cmd+Z: the inverse of each successful op, in memory
 const undos = new UndoStack()
 // no trailing newline, to compare equal with what the removal script computes; empty (missing path, or ssh failed): no stamp

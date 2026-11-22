@@ -66,6 +66,115 @@ export interface Settings {
   modules?: { git?: boolean } // optional compartments, off until switched on
 }
 
+// git (the Git tile)
+export interface Ref {
+  name: string
+  kind: 'head' | 'branch' | 'remote' | 'tag' // head = branch currently checked out
+}
+
+export interface Commit {
+  sha: string
+  parents: string[]
+  author: string
+  time: number // unix seconds
+  subject: string
+  refs: Ref[]
+}
+
+// what the git graph loads: one ref alone, or all but the hidden ones (full refnames), newest `limit` commits
+export type LogView = { solo: string | null; hidden: string[]; limit: number }
+
+export interface GitStatus {
+  repo: boolean
+  branch: string | null // null when detached
+  upstream: string | null
+  remote: string | null // where pushes go: the upstream's remote, else origin, else the only remote
+  ahead: number
+  behind: number
+  changes: number
+  operation: GitOperation | null // a merge, rebase, cherry-pick or revert stopped halfway (conflicts)
+  conflicts: string[]
+  error?: 'not-repo' | 'no-git' // why repo is false, for the tile to say
+}
+
+export type GitOperation = 'merge' | 'rebase' | 'cherry-pick' | 'revert'
+
+// a changed file: status is git's letter (M A D R C T U, ? = untracked); oldPath for renames and copies
+export interface FileChange {
+  path: string
+  status: string
+  oldPath?: string
+  from?: string // the commit holding this file when it is not the one shown: a stash's untracked files
+}
+
+export interface Changes {
+  staged: FileChange[]
+  unstaged: FileChange[] // conflicts (U) and untracked (?) included
+}
+
+export interface CommitInfo {
+  sha: string
+  author: string
+  email: string
+  time: number
+  message: string
+  files: FileChange[] // against the first parent
+}
+
+export interface GitRefs {
+  branches: { name: string; sha: string; upstream: string | null; track: string }[] // track: "[ahead 1, behind 2]" or ""
+  remoteBranches: { name: string; sha: string }[] // "origin/main"
+  tags: { name: string; sha: string }[]
+  remotes: string[]
+  stashes: { index: number; sha: string; message: string }[]
+  worktrees: Worktree[] // other checkouts of this repository, the main one excluded
+}
+
+export interface Worktree {
+  path: string
+  branch: string | null // null when detached
+  sha: string
+}
+
+// the two sides of a file's diff: a commit against its parent, the index against HEAD, the working file against the index
+export type DiffSpec =
+  | { kind: 'commit'; sha: string; path: string; oldPath?: string }
+  | { kind: 'staged'; path: string; oldPath?: string }
+  | { kind: 'unstaged'; path: string }
+export type DiffTexts = { ok: true; original: string; modified: string } | { ok: false; error: string }
+
+export type GitAction =
+  | { op: 'fetch' }
+  | { op: 'pull' }
+  | { op: 'push'; setUpstream: boolean; remote: string }
+  | { op: 'checkout'; branch: string }
+  | { op: 'merge'; ref: string }
+  | { op: 'rebase'; onto: string }
+  | { op: 'abort'; what: GitOperation }
+  | { op: 'continue'; what: GitOperation }
+  | { op: 'pushBranch'; branch: string; remote: string }
+  | { op: 'branch'; name: string; sha: string; checkout: boolean }
+  | { op: 'deleteBranch'; name: string; force: boolean }
+  | { op: 'deleteRemoteBranch'; remote: string; name: string }
+  | { op: 'renameBranch'; from: string; to: string }
+  | { op: 'cherryPick'; sha: string }
+  | { op: 'revert'; sha: string }
+  | { op: 'reset'; sha: string; mode: 'soft' | 'mixed' | 'hard' }
+  | { op: 'stage'; paths: string[] }
+  | { op: 'unstage'; paths: string[] }
+  | { op: 'discard'; paths: string[]; untracked: boolean }
+  | { op: 'commit'; message: string; amend: boolean }
+  | { op: 'stash'; message: string | null }
+  | { op: 'stashPop' | 'stashApply' | 'stashDrop'; index: number }
+  | { op: 'worktreeRemove'; path: string; force: boolean }
+  | { op: 'tag'; name: string; sha: string; message: string | null }
+  | { op: 'pushTag'; name: string; remote: string }
+
+export interface GitResult {
+  ok: boolean
+  output: string
+}
+
 export interface DirEntry {
   name: string
   dir: boolean

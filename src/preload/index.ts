@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppInfo, AppState, FileOp, ListResult, OpResult, Place, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, Volume, WriteResult } from '../shared/types'
+import type { AppInfo, AppState, Changes, Commit, CommitInfo, DiffSpec, DiffTexts, FileOp, GitAction, GitRefs, GitResult, GitStatus, LogView, ListResult, OpResult, Place, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, Volume, WriteResult } from '../shared/types'
 import type { MenuItem } from '../shared/menus'
 import type { Disk } from '../shared/status'
 import type { Tag } from '../shared/tags'
@@ -50,6 +50,13 @@ const api = {
   folderSize: (host: string | null, path: string): Promise<number | null> => ipcRenderer.invoke('files:du', host, path),
   readFile: (host: string | null, path: string): Promise<ReadResult> => ipcRenderer.invoke('files:read', host, path),
   writeFile: (host: string | null, path: string, text: string): Promise<WriteResult> => ipcRenderer.invoke('files:write', host, path, text),
+  gitLog: (cwd: string, v: LogView): Promise<Commit[]> => ipcRenderer.invoke('git:log', cwd, v),
+  gitStatus: (cwd: string): Promise<GitStatus> => ipcRenderer.invoke('git:status', cwd),
+  gitRun: (cwd: string, a: GitAction): Promise<GitResult> => ipcRenderer.invoke('git:run', cwd, a),
+  gitChanges: (cwd: string): Promise<Changes> => ipcRenderer.invoke('git:changes', cwd),
+  gitCommit: (cwd: string, sha: string): Promise<CommitInfo | null> => ipcRenderer.invoke('git:commit', cwd, sha),
+  gitRefs: (cwd: string): Promise<GitRefs> => ipcRenderer.invoke('git:refs', cwd),
+  gitDiff: (cwd: string, d: DiffSpec): Promise<DiffTexts> => ipcRenderer.invoke('git:diff', cwd, d),
   quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
   relaunch: (): Promise<void> => ipcRenderer.invoke('app:relaunch'),
   checkUpdate: (): Promise<{ version: string } | null> => ipcRenderer.invoke('update:check'),

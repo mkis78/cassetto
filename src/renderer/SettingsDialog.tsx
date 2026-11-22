@@ -101,7 +101,7 @@ export default function SettingsDialog({ settings, onChange, onClose }: { settin
             <label>
               <input type="checkbox" checked={moduleOn(settings, m.id)} onChange={e => set({ modules: { ...settings.modules, [m.id]: e.target.checked } })} /> {m.name}
             </label>
-            <div className="path">{m.description}</div>
+            <div className="module-desc">{m.description}</div>
           </div>
         ))}
         <div className="actions">

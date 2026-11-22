@@ -11,7 +11,8 @@ import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
 import { listKey, typeAhead } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { addToFavourites, CHANGED, changed, runUndo, startJob, NAVIGATE, openEditor, openFolder, openTerminal, PLACE_DND, setTileActions } from './tiles'
+import { addToFavourites, CHANGED, changed, runUndo, startJob, NAVIGATE, openEditor, openFolder, openGit, openTerminal, PLACE_DND, setTileActions } from './tiles'
+import { useModule } from './modules'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
 import StatusBar from './StatusBar'
@@ -222,6 +223,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const here = error ? target : (listing?.path ?? null)
   // inside an archive nothing changes it: menus, drops, keys and the action bar all ask this
   const readOnly = !!here && insideArchive(here, archives)
+  const gitOn = useModule('git') && !host // repositories are local only
   // the path as the user sees it, archive boundary included (for Copia percorso)
   const shownPath = (p: string) => (host ? `${host}:` : '') + displayPath(p, archives)
   // a remote folder has no recursive search: the box filters what is listed
@@ -605,7 +607,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const tags = entry && !host && !readOnly ? tagsMenu({ known, has: tagState(items), dots: TAG_HEX.map((h, i) => h || (i ? '' : '#8e8e93')) }) : undefined
     const apps = entry && !entry.dir && !host ? await window.api.appsFor(items) : undefined
     const choice = await popup(
-      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: !!clip, tags, openWith: apps, archive: !!entry && !entry.dir && items.length === 1 && isArchive(entry.name), readOnly })
+      filesMenu({ target: entry ? (entry.dir ? 'dir' : 'file') : 'background', remote: !!host, count: items.length, paste: !!clip, tags, openWith: apps, archive: !!entry && !entry.dir && items.length === 1 && isArchive(entry.name), readOnly, git: gitOn })
     )
     if (!choice) return
     if (choice === 'openWith:other') return void window.api.pickApp(items).then(err => err && setNotice(err))
@@ -624,6 +626,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'favourite') return addToFavourites(host, full)
     if (choice === 'refresh') return refresh()
     if (choice === 'terminal') return openTerminal(containerApi, { cwd: full, host }, api.id)
+    if (choice === 'git') return openGit(containerApi, full, api.id)
     if (choice === 'edit') return openEditor(containerApi, { path: full, host }, api.id)
     if (choice === 'split:right' || choice === 'split:within') openFolder(containerApi, { path: full, host }, api.id, choice === 'split:right' ? 'right' : 'within')
   }
@@ -730,10 +733,11 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const actionChoice = async (e: React.MouseEvent) => {
     const at = below(e)
     const dir = error ? null : (col?.path ?? listing?.path ?? null)
-    const choice = await popup(actionsMenu({ ready: !!dir, paste: !!clip, readOnly }), at)
+    const choice = await popup(actionsMenu({ ready: !!dir, paste: !!clip, readOnly, git: gitOn }), at)
     if ((choice === 'newFile' || choice === 'newFolder') && dir) startCreate(choice, dir)
     if (choice === 'paste' && dir) paste(dir)
     if (choice === 'terminal' && dir) openTerminal(containerApi, { cwd: dir, host }, api.id)
+    if (choice === 'git' && dir) openGit(containerApi, dir, api.id)
     if (choice === 'refresh') refresh()
   }
 

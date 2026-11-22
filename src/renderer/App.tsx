@@ -5,17 +5,17 @@ import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
 import TerminalTile from './TerminalTile'
 import GitTile from './GitTile'
-import { SET_MODULE, type ModuleId } from './modules'
+import { SET_MODULE, useModule, type ModuleId } from './modules'
 import { destroyTerminal } from './terminals'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
 import Sidebar from './Sidebar'
 import Transfers from './Transfers'
-import { ChevronDown, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
+import { ChevronDown, GitBranch, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, FAVOURITE, focusTile, openFolder, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
+import { closeTiles, cycleTile, FAVOURITE, focusTile, openFolder, openGit, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
@@ -39,6 +39,7 @@ export default function App() {
   const [sshDialog, setSshDialog] = useState(false)
   const [palette, setPalette] = useState<{ mode: 'files' | 'commands' | 'bar' } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const gitOn = useModule('git')
   const [undoLabel, setUndoLabel] = useState<string | null>(null) // asked for when the bar opens; paletteActions is synchronous
   const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null)
   // a newer release, offered in the top bar; while it installs, a banner says how far it is
@@ -235,6 +236,11 @@ export default function App() {
   const front = active()?.params as TileParams | undefined
   const activeFiles = front?.kind === 'files' ? whereOf(active()) : null // inside an archive: the folder holding it
 
+  // the repository of the local Files tab in front, else one picked
+  const gitHere = async () => {
+    const path = activeFiles && !activeFiles.host ? activeFiles.path : await window.api.pickFolder()
+    if (path && dv.current) openGit(dv.current, path, active()?.id)
+  }
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }
   const paletteActions = (): Command[] => {
     const p = active()
@@ -245,6 +251,7 @@ export default function App() {
       { label: t('Apri cartella…'), run: pick, icon: FolderOpen },
       { label: t('Nuovo terminale qui'), hint: 'Cmd+Alt+T', run: newTerminal, icon: SquareTerminal },
       { label: t('Connetti a server SSH…'), hint: 'Cmd+K', run: () => setSshDialog(true), icon: Server },
+      ...(gitOn ? [{ label: t('Apri Git qui'), run: gitHere, icon: GitBranch }] : []),
       ...(p && dv.current ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(dv.current!, whereOf(p), p.id, 'right'), icon: Columns2 }] : []),
       { label: t('Tab successivo'), hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1), icon: SquareArrowRight },
       { label: t('Tab precedente'), hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1), icon: SquareArrowLeft },

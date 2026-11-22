@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { actionsMenu, favouriteMenu, tagsMenu, terminalMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
+import { actionsMenu, changeMenu, commitMenu, dropMenu, favouriteMenu, fileRefMenu, refMenu, stashMenu, worktreeMenu, tagsMenu, terminalMenu, filesMenu, layoutsMenu, putLayout, searchMenu, viewMenu, shortcut, tabColor, tabMenu, type MenuItem } from '../src/shared/menus'
 
 const ids = (items: MenuItem[]): string[] => items.flatMap(i => (i.submenu ? [i.id ?? i.label, ...ids(i.submenu)] : i.id ? [i.id] : []))
 const find = (items: MenuItem[], id: string): MenuItem | undefined => items.flatMap(i => [i, ...(i.submenu ?? [])]).find(i => i.id === id)
@@ -107,4 +107,46 @@ test('tag submenu: ticked when every item has the tag, marked when only some do;
 test('Estrai qui only for an archive file', () => {
   expect(ids(filesMenu({ target: 'file', remote: false, archive: true }))).toContain('extract')
   expect(ids(filesMenu({ target: 'file', remote: false }))).not.toContain('extract')
+})
+
+test('git here: in local files menus right after the terminal, only when the compartment is on', () => {
+  const at = (m: MenuItem[]) => ids(m).indexOf('git') - ids(m).indexOf('terminal')
+  expect(at(filesMenu({ target: 'background', remote: false, git: true }))).toBe(1)
+  expect(at(filesMenu({ target: 'dir', remote: false, git: true }))).toBe(1)
+  expect(at(actionsMenu({ ready: true, paste: false, git: true }))).toBe(1)
+  expect(ids(filesMenu({ target: 'background', remote: true, git: true }))).not.toContain('git')
+  expect(ids(filesMenu({ target: 'background', remote: false }))).not.toContain('git')
+  expect(ids(filesMenu({ target: 'dir', remote: false, git: true, readOnly: true }))).not.toContain('git') // inside an archive
+  expect(ids(actionsMenu({ ready: true, paste: false }))).not.toContain('git')
+})
+
+test('commit menu: branches on the commit, nothing to merge into when detached, no cherry-pick of a merge', () => {
+  const m = commitMenu({ current: 'main', branches: ['main', 'feat', 'origin/feat'], merge: false })
+  expect(ids(m)).toEqual(['branch', 'tag', 'checkout:feat', 'checkout:origin/feat', 'merge:feat', 'rebase:feat', 'merge:origin/feat', 'rebase:origin/feat', 'cherryPick', 'revert', 'Reset main qui', 'reset:soft', 'reset:mixed', 'reset:hard', 'copySha'])
+  const detached = commitMenu({ current: null, branches: ['feat'], merge: true })
+  expect(ids(detached)).not.toContain('merge:feat')
+  expect(find(detached, 'cherryPick')?.enabled).toBe(false)
+})
+
+test('git ref, stash, file and worktree menus', () => {
+  expect(ids(refMenu({ name: 'feat', kind: 'branch', current: 'main', remotes: ['origin'] }))).toEqual(['checkout', 'merge', 'rebase', 'push:origin', 'rename', 'delete', 'solo', 'hide', 'copy'])
+  expect(ids(refMenu({ name: 'feat', kind: 'branch', current: 'main', remotes: [], hidden: true }))).toContain('show')
+  const self = refMenu({ name: 'main', kind: 'branch', current: 'main', remotes: [] })
+  expect(ids(self)).toEqual(['checkout', 'rename', 'delete', 'solo', 'hide', 'copy'])
+  expect(find(self, 'delete')?.enabled).toBe(false)
+  expect(ids(refMenu({ name: 'origin/x', kind: 'remote', current: 'main', remotes: ['origin'] }))).toEqual(['checkout', 'merge', 'rebase', 'deleteRemote', 'solo', 'hide', 'copy'])
+  expect(ids(refMenu({ name: 'v1', kind: 'tag', current: 'main', remotes: [] }))).toEqual(['copy'])
+  expect(ids(stashMenu())).toEqual(['apply', 'pop', 'drop'])
+  expect(ids(changeMenu({ staged: false, untracked: true }))).toEqual(['stage', 'discard', 'open', 'copyPath'])
+  expect(ids(changeMenu({ staged: true, untracked: false }))).toEqual(['unstage', 'open', 'copyPath'])
+  expect(ids(fileRefMenu())).toEqual(['open', 'copyPath'])
+  expect(ids(worktreeMenu())).toEqual(['folder', 'copyPath', 'removeWorktree'])
+})
+
+test('drop menu: what dragging a branch onto something offers', () => {
+  expect(ids(dropMenu({ source: 'feat', sourceRemote: false, target: 'main', targetKind: 'branch' }))).toEqual(['merge', 'rebase'])
+  expect(ids(dropMenu({ source: 'origin/feat', sourceRemote: true, target: 'main', targetKind: 'branch' }))).toEqual(['merge'])
+  expect(ids(dropMenu({ source: 'feat', sourceRemote: false, target: 'origin/main', targetKind: 'remote' }))).toEqual(['mergeInto:source', 'rebase'])
+  expect(ids(dropMenu({ source: 'feat', sourceRemote: false, target: 'origin', targetKind: 'remoteName' }))).toEqual(['push'])
+  expect(dropMenu({ source: 'origin/feat', sourceRemote: true, target: 'origin', targetKind: 'remoteName' })).toEqual([])
 })

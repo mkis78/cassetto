@@ -152,6 +152,7 @@ button { font: inherit; }
 .dialog button.primary { background: var(--primary); border-color: var(--accent); color: #fff; }
 .dialog button:disabled { opacity: .4; cursor: default; }
 .dialog .hint { color: var(--fg3); font-size: 11px; }
+.dialog .module-desc { color: var(--fg3); font-size: 11px; margin-left: 20px; }
 .dialog .error { color: var(--red); }
 .dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .tile-tab { display: flex; align-items: center; gap: 6px; padding: 0 4px 0 8px; height: 100%; white-space: nowrap; }
@@ -413,6 +414,8 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .git-diff-head .what { color: var(--fg3); }
 .git-diff-head button { background: none; border: 0; color: var(--fg); cursor: pointer; display: inline-flex; }
 .git-diff-box { flex: 1; min-height: 0; }
+pre.git-diff-box { margin: 0; padding: 8px; overflow: auto; color: var(--fg); font: 12px Menlo, monospace; }
+.git-empty-path { margin-top: 6px; color: var(--dim); font: 11px Menlo, monospace; word-break: break-all; }
 .files-gallery { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
 .files-gallery .files-preview { width: auto; flex: 1; min-height: 0; border-left: 0; }
 .files-gallery .files-preview > img { max-height: calc(100% - 50px); margin: 10px auto; }

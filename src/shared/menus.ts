@@ -39,8 +39,8 @@ export function tagsMenu(c: { known: { name: string; color: number }[]; has: (na
 }
 
 // count: entries selected; paste: the internal clipboard holds something (any host: a paste across hosts is a transfer);
-// tags: the Tag submenu, for local files; openWith: the apps for the selected local files (undefined: no submenu)
-export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; readOnly?: boolean }): MenuItem[] {
+// tags: the Tag submenu, for local files; git: "Apri Git qui" (the compartment is on); openWith: the apps for the selected local files (undefined: no submenu)
+export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; readOnly?: boolean; git?: boolean }): MenuItem[] {
   const all = filesMenuAll(c)
   return c.readOnly ? keepOnly(all, id => ['open', 'copy', 'copyPath', 'terminal', 'refresh'].includes(id) || id.startsWith('openWith:')) : all
 }
@@ -55,7 +55,7 @@ function keepOnly(items: MenuItem[], ok: (id: string) => boolean): MenuItem[] {
   return kept.filter((i, n) => !i.separator || (n > 0 && n < kept.length - 1 && !kept[n - 1].separator))
 }
 
-function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean }): MenuItem[] {
+function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; git?: boolean }): MenuItem[] {
   const create = [
     sep,
     { id: 'newFile', label: t('Nuovo file') },
@@ -72,12 +72,13 @@ function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolea
     sep,
     { id: 'delete', label: c.remote ? t('Elimina definitivamente…') : t('Sposta nel Cestino') }
   ]
-  const split = [sep, { id: 'split:right', label: t('Apri in un pannello a destra') }, { id: 'split:within', label: t('Apri in un nuovo tab') }, { id: 'terminal', label: t('Apri terminale qui') }]
+  const git = c.git && !c.remote ? [{ id: 'git', label: t('Apri Git qui') }] : []
+  const split = [sep, { id: 'split:right', label: t('Apri in un pannello a destra') }, { id: 'split:within', label: t('Apri in un nuovo tab') }, { id: 'terminal', label: t('Apri terminale qui') }, ...git]
   const tag = c.tags ? [sep, c.tags] : []
   const apps: MenuItem[] = c.openWith && !c.remote ? [{ label: t('Apri con'), submenu: [...c.openWith.map((a, i) => ({ id: `openWith:${i}`, label: a.name, image: a.icon })), ...(c.openWith.length ? [sep] : []), { id: 'openWith:other', label: t('Altra app…') }] }] : []
   if (c.target === 'file') return [{ id: 'open', label: c.remote ? t('Apri nell\'editor') : t('Apri') }, ...apps, ...(c.archive ? [{ id: 'extract', label: t('Estrai qui') }] : []), ...(c.remote ? [] : [{ id: 'edit', label: t('Modifica nell\'editor') }]), { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...edit]
   if (c.target === 'dir') return [{ id: 'open', label: t('Apri') }, ...split, { id: 'copyPath', label: t('Copia percorso') }, { id: 'favourite', label: t('Aggiungi ai preferiti') }, ...tag, ...create, ...edit]
-  return [{ id: 'refresh', label: t('Aggiorna') }, { id: 'terminal', label: t('Apri terminale qui') }, ...create]
+  return [{ id: 'refresh', label: t('Aggiorna') }, { id: 'terminal', label: t('Apri terminale qui') }, ...git, ...create]
 }
 
 // a terminal tab
@@ -107,11 +108,12 @@ export function viewMenu(c: { view: 'list' | 'icons' | 'columns' | 'gallery'; hi
 }
 
 // the files tile's "Azioni" button: on the folder shown
-export function actionsMenu(c: { ready: boolean; paste: boolean; readOnly?: boolean }): MenuItem[] {
+export function actionsMenu(c: { ready: boolean; paste: boolean; readOnly?: boolean; git?: boolean }): MenuItem[] {
   const all: MenuItem[] = [
     { id: 'newFile', label: t('Nuovo file'), enabled: c.ready },
     { id: 'newFolder', label: t('Nuova cartella'), enabled: c.ready },
     { id: 'terminal', label: t('Apri terminale qui'), enabled: c.ready },
+    ...(c.git ? [{ id: 'git', label: t('Apri Git qui'), enabled: c.ready }] : []),
     { id: 'paste', label: t('Incolla'), enabled: c.ready && c.paste },
     sep,
     { id: 'refresh', label: t('Aggiorna') }
@@ -179,3 +181,91 @@ export function putLayout<T extends { name: string }>(list: T[] | undefined, ite
   const all = list ?? []
   return all.some(l => l.name === item.name) ? all.map(l => (l.name === item.name ? item : l)) : [...all, item]
 }
+
+// Git tab. Ids carry what they act on ("merge:feat"), so one handler can read them.
+
+// a commit in the graph; `branches` are the local and remote branches pointing at it, `current` the checked-out branch
+export function commitMenu(c: { current: string | null; branches: string[]; merge: boolean }): MenuItem[] {
+  const others = c.branches.filter(b => b !== c.current)
+  const cur = c.current
+  return [
+    { id: 'branch', label: t('Crea ramo qui…') },
+    { id: 'tag', label: t('Crea tag qui…') },
+    ...(others.length ? [sep, ...others.map(b => ({ id: `checkout:${b}`, label: t('Checkout {name}', { name: b }) }))] : []),
+    // in detached HEAD there is no branch to merge into or rebase
+    ...(cur && others.length ? [sep, ...others.flatMap(b => [{ id: `merge:${b}`, label: t('Merge {source} in {target}', { source: b, target: cur }) }, { id: `rebase:${b}`, label: t('Rebase {branch} su {onto}', { branch: cur, onto: b }) }])] : []),
+    sep,
+    { id: 'cherryPick', label: t('Cherry-pick'), enabled: !c.merge },
+    { id: 'revert', label: t('Revert'), enabled: !c.merge },
+    {
+      label: cur ? t('Reset {name} qui', { name: cur }) : t('Reset qui'),
+      submenu: [
+        { id: 'reset:soft', label: t('Soft: tieni le modifiche in stage') },
+        { id: 'reset:mixed', label: t('Mixed: tieni le modifiche fuori stage') },
+        { id: 'reset:hard', label: t('Hard: scarta tutte le modifiche') }
+      ]
+    },
+    sep,
+    { id: 'copySha', label: t('Copia SHA') }
+  ]
+}
+
+// a branch or tag in the sidebar or a badge in the graph
+export function refMenu(c: { name: string; kind: 'branch' | 'remote' | 'tag'; current: string | null; remotes: string[]; hidden?: boolean }): MenuItem[] {
+  const copy = { id: 'copy', label: t('Copia nome') }
+  if (c.kind === 'tag') return [copy]
+  const isCurrent = c.kind === 'branch' && c.name === c.current
+  const join = c.current && !isCurrent ? [{ id: 'merge', label: t('Merge {source} in {target}', { source: c.name, target: c.current }) }, { id: 'rebase', label: t('Rebase {branch} su {onto}', { branch: c.current, onto: c.name }) }] : []
+  // narrowing the graph: this branch alone, or everything but it
+  const view = [sep, { id: 'solo', label: t('Mostra solo questo') }, c.hidden ? { id: 'show', label: t('Mostra nel grafo') } : { id: 'hide', label: t('Nascondi dal grafo') }]
+  if (c.kind === 'remote') return [{ id: 'checkout', label: t('Checkout') }, ...join, sep, { id: 'deleteRemote', label: t('Elimina dal remoto…') }, ...view, copy]
+  return [
+    { id: 'checkout', label: t('Checkout'), enabled: !isCurrent },
+    ...join,
+    sep,
+    ...c.remotes.map(r => ({ id: `push:${r}`, label: t('Push su {remote}', { remote: r }) })),
+    { id: 'rename', label: t('Rinomina…') },
+    { id: 'delete', label: t('Elimina…'), enabled: !isCurrent },
+    ...view,
+    copy
+  ]
+}
+
+export const stashMenu = (): MenuItem[] => [
+  { id: 'apply', label: t('Applica') },
+  { id: 'pop', label: t('Applica ed elimina (pop)') },
+  sep,
+  { id: 'drop', label: t('Elimina…') }
+]
+
+// a file in the changes panel
+export function changeMenu(c: { staged: boolean; untracked: boolean }): MenuItem[] {
+  return [
+    c.staged ? { id: 'unstage', label: t('Togli dallo stage') } : { id: 'stage', label: t('Metti in stage') },
+    ...(c.staged ? [] : [{ id: 'discard', label: c.untracked ? t('Elimina il file…') : t('Scarta le modifiche…') }]),
+    sep,
+    ...fileRefMenu()
+  ]
+}
+
+// a file named in a commit or in the working tree
+export const fileRefMenu = (): MenuItem[] => [
+  { id: 'open', label: t("Apri nell'editor") },
+  { id: 'copyPath', label: t('Copia percorso') }
+]
+
+// dragging branch `source` onto `target`: a branch, a remote branch or a remote (remoteName)
+export function dropMenu(c: { source: string; sourceRemote: boolean; target: string; targetKind: 'branch' | 'remote' | 'remoteName' }): MenuItem[] {
+  const { source, target } = c
+  if (c.targetKind === 'remoteName') return c.sourceRemote ? [] : [{ id: 'push', label: t('Push {branch} su {remote}', { branch: source, remote: target }) }]
+  if (c.targetKind === 'remote') return c.sourceRemote ? [] : [{ id: 'mergeInto:source', label: t('Merge {source} in {target}', { source: target, target: source }) }, { id: 'rebase', label: t('Rebase {branch} su {onto}', { branch: source, onto: target }) }]
+  return [{ id: 'merge', label: t('Merge {source} in {target}', { source, target }) }, ...(c.sourceRemote ? [] : [{ id: 'rebase', label: t('Rebase {branch} su {onto}', { branch: source, onto: target }) }])]
+}
+
+// another checkout of the repository, in the git sidebar
+export const worktreeMenu = (): MenuItem[] => [
+  { id: 'folder', label: t('Apri la cartella in un tab') },
+  sep,
+  { id: 'copyPath', label: t('Copia percorso') },
+  { id: 'removeWorktree', label: t('Rimuovi worktree…') }
+]

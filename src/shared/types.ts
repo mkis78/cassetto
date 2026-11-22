@@ -9,8 +9,9 @@ export type FilesParams = { kind: 'files'; host: string | null; path: string | n
 export type TerminalParams = { kind: 'terminal'; host: string | null; cwd: string; name?: string; color?: TabColor }
 // a text file being edited, here or on `host`; readOnly: a file inside an archive, never saved
 export type EditorParams = { kind: 'editor'; host: string | null; path: string; name?: string; color?: TabColor; wrap?: boolean; whitespace?: boolean; mdPreview?: boolean; readOnly?: boolean }
-// a repository's branches, commits and changes (an optional compartment, see renderer/modules)
-export type GitParams = { kind: 'git'; cwd: string; name?: string; color?: TabColor }
+// a repository's branches, commits and changes (an optional compartment, see renderer/modules);
+// the rest is how the tab was left: sidebar shown, closed sections, the graph narrowed to one ref or without some (full refnames)
+export type GitParams = { kind: 'git'; cwd: string; name?: string; color?: TabColor; sidebar?: boolean; collapsed?: string[]; solo?: string | null; hidden?: string[]; refsWidth?: number }
 export type TileParams = FilesParams | TerminalParams | EditorParams | GitParams
 
 export interface SearchQuery {

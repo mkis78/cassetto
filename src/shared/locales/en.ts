@@ -271,6 +271,7 @@ export const EN: Record<string, string> = {
   "Uno grande e due a destra": "One large and two on the right",
   "Griglia 2×2": "2×2 grid",
   "Esiste già": "Already exists",
+  "Nome doppio": "Duplicate name",
   "Tipo di file non supportato": "Unsupported file type",
   "{name} copia {n}": "{name} copy {n}",
   "{name} copia": "{name} copy",

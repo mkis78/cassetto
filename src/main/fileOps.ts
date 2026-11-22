@@ -261,9 +261,16 @@ export function parseOpOutput(out: string): OpResult {
 const pathsOf = (op: FileOp): string[] => (op.op === 'renameMany' ? op.items.map(i => i.from) : 'items' in op ? op.items.map(i => i.src) : 'paths' in op ? op.paths : 'from' in op ? [op.from] : op.op === 'extract' ? [op.dest] : [op.path])
 
 // A FileOp script goes on stdin, not argv (Linux caps one argv string at 128 KB: ~50 renameMany items). It is read
-// whole before anything runs, so a script cut short runs none of it, and its commands get /dev/null as stdin.
-export const FROM_STDIN = `s=$(cat) && case $s in *'\n# end') eval "$s" </dev/null;; *) exit 1;; esac`
-export const sshOp = (host: string, op: FileOp) => sshRun(host, FROM_STDIN, { input: `${remoteOpScript(op)}\n# end`, timeout: 10 * 60_000 })
+// whole before anything runs, so a script cut short runs none of it (its last line is a random marker no file name can fake),
+// and its commands get /dev/null as stdin.
+export function fromStdin(script: string): { cmd: string; input: string } {
+  const end = `# end ${randomBytes(8).toString('hex')}`
+  return { cmd: `s=$(cat) && case $s in *'\n${end}') eval "$s" </dev/null;; *) exit 1;; esac`, input: `${script}\n${end}` }
+}
+export const sshOp = (host: string, op: FileOp) => {
+  const { cmd, input } = fromStdin(remoteOpScript(op))
+  return sshRun(host, cmd, { input, timeout: 10 * 60_000 })
+}
 
 export async function runOpRemote(host: string, op: FileOp): Promise<OpResult> {
   const r = await sshOp(host, op)

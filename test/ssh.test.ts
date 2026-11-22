@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { assertPrivateDir, isValidHost, onPath, parseRemoteListing, parseSshHosts, remoteListScript, remoteSh, shQuote, sshError, sshOptions } from '../src/main/ssh'
+import { assertPrivateDir, isValidHost, onPath, parseRemoteListing, parseSshHosts, remoteListScript, remoteSh, shQuote, sshError, sshOptions, sshRun } from '../src/main/ssh'
 
 test('hosts: aliases, no wildcards, includes, no duplicates', () => {
   const text = 'Host a b\n  HostName 1.2.3.4\nHost *.x\nHost !c\nInclude ~/.orbstack/ssh/config\nhost a\n'
@@ -108,4 +108,24 @@ test('remote listing: size and date from GNU stat records, none without them', (
       { name: 'broken', dir: false } // stat -L skips a broken link
     ]
   })
+})
+
+test('an ssh that exits before reading its input is a failed run, not a crash', async () => {
+  const bin = mkdtempSync(join(tmpdir(), 'tssh-'))
+  writeFileSync(join(bin, 'ssh'), '#!/bin/sh\nexit 255\n')
+  chmodSync(join(bin, 'ssh'), 0o755)
+  const path = process.env.PATH
+  process.env.PATH = `${bin}:${path}`
+  const crashes: unknown[] = []
+  const catcher = (e: unknown) => crashes.push(e)
+  process.on('uncaughtException', catcher)
+  try {
+    const r = await sshRun('host', 'true', { input: 'x'.repeat(4 * 1024 * 1024) })
+    await new Promise(r => setTimeout(r, 50))
+    expect(r.ok).toBe(false)
+    expect(crashes).toEqual([])
+  } finally {
+    process.env.PATH = path
+    process.off('uncaughtException', catcher)
+  }
 })

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSy
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
-import { extractCommand, FROM_STDIN, parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from '../src/main/fileOps'
+import { extractCommand, fromStdin, parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from '../src/main/fileOps'
 import { remoteSh, sshRun } from '../src/main/ssh'
 import type { FileOp, OpResult } from '../src/shared/types'
 
@@ -292,7 +292,7 @@ test('a large remote batch travels on stdin, not argv, and runs whole', async ()
   expect(await runOpRemote('local', { op: 'renameMany', items })).toEqual({ failed: [] })
   expect(readdirSync(d).sort()).toEqual(names.map(n => `${n}.x`).sort())
   const [, cmd, o] = vi.mocked(sshRun).mock.calls.at(-1)!
-  expect(cmd).toBe(FROM_STDIN)
+  expect(cmd).toMatch(/^s=\$\(cat\) && case \$s in \*'\n# end [0-9a-f]{16}'\)/)
   expect(o?.input).toContain(join(d, 'file 499'))
   expect(remoteSh(cmd).length).toBeLessThan(1000)
 })
@@ -301,9 +301,13 @@ test('a script cut short on stdin runs none of it', () => {
   const d = dir()
   writeFileSync(join(d, 'a'), 'a')
   const script = remoteOpScript({ op: 'renameMany', items: [{ from: join(d, 'a'), to: join(d, 'b') }] })
-  const r = spawnSync('/bin/sh', ['-c', FROM_STDIN], { input: script.slice(0, script.lastIndexOf('else')) })
-  expect(r.status).not.toBe(0)
+  const { cmd, input } = fromStdin(script)
+  // cut short, or ending in a file name that spells a marker: neither is the one this call expects
+  for (const cut of [input.slice(0, input.lastIndexOf('else')), `${script.slice(0, script.lastIndexOf('else'))}\n# end 0123456789abcdef`])
+    expect(spawnSync('/bin/sh', ['-c', cmd], { input: cut }).status).not.toBe(0)
   expect(readdirSync(d)).toEqual(['a'])
+  expect(spawnSync('/bin/sh', ['-c', cmd], { input }).status).toBe(0)
+  expect(readdirSync(d)).toEqual(['b'])
 })
 
 test('the remote renameMany ignores a dropped connection, so its rollback finishes', () => {

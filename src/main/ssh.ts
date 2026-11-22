@@ -138,6 +138,7 @@ export function sshRun(host: string, script: string, o: { input?: string; maxBuf
     const child = execFile('ssh', args, { encoding: 'buffer', timeout: o.timeout ?? 30_000, maxBuffer: o.maxBuffer ?? 20 * 1024 * 1024, signal: o.signal }, (err, stdout, stderr) =>
       resolve(err ? { ok: false, error: sshError(err, stderr.toString(), host) } : { ok: true, out: stdout })
     )
+    child.stdin?.on('error', () => {}) // EPIPE when ssh exits without reading: its exit already reports the failure
     child.stdin?.end(o.input ?? '')
   })
 }

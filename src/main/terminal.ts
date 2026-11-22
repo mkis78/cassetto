@@ -22,15 +22,17 @@ export function terminalLaunch(p: { host: string | null; cwd: string }, ctx: { s
 // Child terminals must not inherit Electron/npm internals (from `npm run dev`) nor look like they run inside Claude Code.
 const INHERITED = /^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_PID$|ELECTRON_|npm_|APPIMAGE$|APPDIR$|ARGV0$|OWD$)/
 
-export function ptyEnv(env: Record<string, string | undefined>): Record<string, string> {
+// what any child process inherits: ours minus the internals above
+export function childEnv(env: Record<string, string | undefined>): Record<string, string> {
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(env)) if (v !== undefined && !INHERITED.test(k)) out[k] = v
   // the AppImage points LD_LIBRARY_PATH at its own libs; the user's own value is left alone
   const dir = env.APPDIR
   if (dir && out.LD_LIBRARY_PATH?.split(':').some(p => p.startsWith(dir))) delete out.LD_LIBRARY_PATH
-  out.TERM_PROGRAM = 'cassetto'
   return out
 }
+
+export const ptyEnv = (env: Record<string, string | undefined>): Record<string, string> => ({ ...childEnv(env), TERM_PROGRAM: 'cassetto' })
 
 export class PtyManager {
   private ptys = new Map<string, IPty>()

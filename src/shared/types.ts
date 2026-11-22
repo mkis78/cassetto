@@ -96,6 +96,7 @@ export interface GitStatus {
   operation: GitOperation | null // a merge, rebase, cherry-pick or revert stopped halfway (conflicts)
   conflicts: string[]
   error?: 'not-repo' | 'no-git' // why repo is false, for the tile to say
+  message?: string // git's own words when it failed for another reason (e.g. dubious ownership)
 }
 
 export type GitOperation = 'merge' | 'rebase' | 'cherry-pick' | 'revert'

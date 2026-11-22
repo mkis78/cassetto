@@ -210,7 +210,7 @@ export function GitSidebar(p: {
       </Section>
       {worktrees.length > 0 && (
         <Section title={t('Worktree')} count={worktrees.length} {...sec('Worktree')}>
-          {worktrees.map(w => row(`wt${w.path}`, w.sha, { worktree: w }, <><FolderGit2 size={12} /><span className="name">{w.branch ?? '(detached)'}</span></>, { title: `${w.path}\n${t('doppio clic: apri la cartella in un tab')}`, onDoubleClick: () => p.onOpenWorktree(w) }))}
+          {worktrees.map(w => row(`wt${w.path}`, w.sha, { worktree: w }, <><FolderGit2 size={12} /><span className="name">{w.branch ?? t('(HEAD staccato)')}</span></>, { title: `${w.path}\n${t('doppio clic: apri la cartella in un tab')}`, onDoubleClick: () => p.onOpenWorktree(w) }))}
         </Section>
       )}
       <Section title={t('Stash')} count={stashes.length} {...sec('Stash')}>
@@ -241,7 +241,7 @@ export function ChangesPanel(p: {
   diff: DiffSpec | null
   lastMessage: () => Promise<string>
   onDiff: (d: DiffSpec) => void
-  onRun: (label: string, ...a: GitAction[]) => Promise<boolean>
+  onRun: (label: string, ...a: GitAction[]) => Promise<boolean | null>
   onMenu: (e: React.MouseEvent, f: FileChange, staged: boolean) => void
 }) {
   const { changes } = p
@@ -359,7 +359,7 @@ export function DiffView({ cwd, spec, tick, onClose }: { cwd: string; spec: Diff
     let live = true
     window.api.gitDiff(cwd, spec).then(r => live && setTexts(r))
     return () => void (live = false)
-  }, [cwd, JSON.stringify(spec), tick])
+  }, [cwd, JSON.stringify(spec), spec.kind === 'commit' ? 0 : tick]) // a commit never changes
   // the diff div takes focus so Esc reaches it (the editors are not editable, so never focused)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => box.current?.focus(), [])

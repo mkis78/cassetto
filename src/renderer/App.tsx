@@ -236,9 +236,9 @@ export default function App() {
   const front = active()?.params as TileParams | undefined
   const activeFiles = front?.kind === 'files' ? whereOf(active()) : null // inside an archive: the folder holding it
 
-  // the repository of the local Files tab in front, else one picked
+  // the repository of the local tab in front (files, terminal, editor, git), else one picked
   const gitHere = async () => {
-    const path = activeFiles && !activeFiles.host ? activeFiles.path : await window.api.pickFolder()
+    const path = tileFolder(active()) ?? (await window.api.pickFolder())
     if (path && dv.current) openGit(dv.current, path, active()?.id)
   }
   const welcome: WelcomeActions = { home, pick, ssh: () => setSshDialog(true) }

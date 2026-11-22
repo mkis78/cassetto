@@ -55,7 +55,7 @@ function RefBadge({ r, onClick, onDoubleClick, onMenu, onDrop }: { r: Ref; onCli
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onMenu && (e => (e.preventDefault(), e.stopPropagation(), onMenu(e)))}
-      title={r.kind === 'tag' ? 'tag' : t('doppio clic: checkout · trascina su un altro ramo: merge o rebase')}
+      title={r.kind === 'tag' ? t('tag') : t('doppio clic: checkout · trascina su un altro ramo: merge o rebase')}
       {...(branch ? dragRef({ name: r.name, remote: r.kind === 'remote' }) : {})}
       {...(branch && onDrop ? dropRef(onDrop) : {})}
     >
@@ -126,10 +126,14 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
 
   const seq = useRef(0)
   const [tick, setTick] = useState(0) // bumps on each refresh, for the open diff
+  const noGit = status?.error === 'no-git'
   const refresh = useCallback(async () => {
     const n = ++seq.current
-    const [l, s, r, c] = await Promise.all([window.api.gitLog(cwd, { solo, hidden, limit }), window.api.gitStatus(cwd), window.api.gitRefs(cwd), window.api.gitChanges(cwd)])
+    const s = await window.api.gitStatus(cwd)
     if (n !== seq.current) return // a newer refresh (e.g. after an action) already started
+    if (!s.repo) return setStatus(s) // the rest would only fail, several git runs every time
+    const [l, r, c] = await Promise.all([window.api.gitLog(cwd, { solo, hidden, limit }), window.api.gitRefs(cwd), window.api.gitChanges(cwd)])
+    if (n !== seq.current) return
     setLog(l)
     setStatus(s)
     setRefs(r)
@@ -149,10 +153,11 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
     })
     if (rootRef.current) io.observe(rootRef.current)
     const tick = () => shown.current && !document.hidden && refresh()
-    const timer = setInterval(tick, 10_000)
+    // without git, every run of the macOS stub asks again to install the tools: coming back to the window is enough
+    const timer = noGit ? undefined : setInterval(tick, 10_000)
     window.addEventListener('focus', tick)
     return () => (io.disconnect(), clearInterval(timer), window.removeEventListener('focus', tick))
-  }, [refresh, !!status?.repo])
+  }, [refresh, !!status?.repo, noGit])
 
   // the selected commit's details; a stash is a commit too, though not in the graph
   useEffect(() => {
@@ -164,8 +169,9 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
   }, [selected, cwd])
 
   const busyRef = useRef(false) // menus, drops and double clicks must not start a second git command
-  const run = async (label: string, ...actions: GitAction[]): Promise<boolean> => {
-    if (busyRef.current) return false
+  // null: another command is running and this one did not start
+  const run = async (label: string, ...actions: GitAction[]): Promise<boolean | null> => {
+    if (busyRef.current) return null
     busyRef.current = true
     setBusy(label)
     setOutput(null)
@@ -251,7 +257,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
       if (choice === 'copyPath') return window.api.clipboardWrite(w.path)
       if (choice === 'removeWorktree') {
         if (!confirm(t('Rimuovere il worktree {path}? Il ramo {branch} resta: per portarne i commit altrove, trascinalo su un altro ramo.', { path: w.path, branch: w.branch ?? '' }))) return
-        if (await run('worktree', { op: 'worktreeRemove', path: w.path, force: false })) return
+        if ((await run('worktree', { op: 'worktreeRemove', path: w.path, force: false })) !== false) return
         // git refused: there are changes inside
         if (confirm(t('Il worktree contiene modifiche non committate. Rimuoverlo comunque? Quelle modifiche andranno perse.'))) run('worktree', { op: 'worktreeRemove', path: w.path, force: true })
       }
@@ -278,7 +284,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
     if (choice === 'rename') return setDialog({ kind: 'rename', name })
     if (choice === 'delete') {
       if (!confirm(t('Eliminare il ramo {name}?', { name }))) return
-      if (await run('delete', { op: 'deleteBranch', name, force: false })) return
+      if ((await run('delete', { op: 'deleteBranch', name, force: false })) !== false) return
       // not merged anywhere: git refused, ask once more before losing its commits
       if (confirm(t('{name} contiene commit non uniti ad altri rami. Eliminarlo comunque? Quei commit non saranno più raggiungibili.', { name }))) run('delete', { op: 'deleteBranch', name, force: true })
       return
@@ -300,7 +306,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
     const choice = await popup(changeMenu({ staged, untracked: f.status === '?' }))
     if (choice === 'stage') run('stage', { op: 'stage', paths: [f.path] })
     if (choice === 'unstage') run('unstage', { op: 'unstage', paths: f.oldPath ? [f.oldPath, f.path] : [f.path] })
-    if (choice === 'discard' && confirm(f.status === '?' ? t('Eliminare {path}? Non si potrà recuperare.', { path: f.path }) : t('Scartare le modifiche a {path}? Non si potranno recuperare.', { path: f.path })))
+    if (choice === 'discard' && confirm(f.status === '?' ? t('Eliminare {path}? Il file non è tracciato da git: non si potrà recuperare.', { path: f.path }) : t('Scartare le modifiche a {path}? Non si potranno recuperare.', { path: f.path })))
       run('discard', { op: 'discard', paths: [f.path], untracked: f.status === '?' })
     refAction(choice, f)
   }
@@ -340,7 +346,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
   if (!status.repo)
     return (
       <div className="git-empty">
-        {status.error === 'no-git' ? t('Serve git: su macOS installa gli strumenti da riga di comando (xcode-select --install), su Linux il pacchetto git.') : t('Non è un repository git')}
+        {noGit ? t('Serve git: su macOS installa gli strumenti da riga di comando (xcode-select --install), su Linux il pacchetto git.') : (status.message ?? t('Non è un repository git'))}
         <div className="git-empty-path">{cwd}</div>
       </div>
     )
@@ -354,7 +360,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
           <PanelLeft {...ICON} />
         </button>
         <span className="git-branch">
-          <GitBranch {...ICON} /> {status.branch ?? '(detached)'}
+          <GitBranch {...ICON} /> {status.branch ?? t('(HEAD staccato)')}
         </span>
         {status.upstream && (
           <span className="git-sync" title={status.upstream}>
@@ -398,7 +404,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
             {t('Continua')}
           </button>
           <button disabled={!!busy} onClick={() => run('abort', { op: 'abort', what: op })}>
-            {t('Annulla {op}', { op })}
+            {t('Annulla {op}', { op: opName })}
           </button>
           <button onClick={() => openTerminal(containerApi, { cwd, host: null }, api.id)}>{t('Apri shell qui')}</button>
         </div>

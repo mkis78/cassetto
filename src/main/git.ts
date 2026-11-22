@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 import { isValidRefName } from '../shared/refName'
 import type { Changes, Commit, CommitInfo, DiffSpec, DiffTexts, FileChange, GitAction, GitOperation, GitRefs, GitResult, GitStatus, LogView, Ref, Worktree } from '../shared/types'
 import { readLocal } from './files'
+import { childEnv } from './terminal'
+import { DIFF_LIMIT } from '../shared/diffGuard'
 import { t } from '../shared/i18n'
 
 const FORMAT = '%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s'
@@ -46,6 +48,13 @@ const stash = (i: number) => {
   return `stash@{${i}}`
 }
 
+// values the renderer sends that become git arguments: only the known ones
+function oneOf<T extends string>(v: T, allowed: readonly T[]): T {
+  if (!allowed.includes(v)) throw new Error(t('Nome non valido: "{name}"', { name: String(v) }))
+  return v
+}
+const OPERATIONS = ['merge', 'rebase', 'cherry-pick', 'revert'] as const
+
 export function buildGitArgs(a: GitAction): string[] {
   switch (a.op) {
     case 'fetch':
@@ -61,9 +70,9 @@ export function buildGitArgs(a: GitAction): string[] {
     case 'rebase':
       return ['rebase', ref(a.onto)]
     case 'abort':
-      return [a.what, '--abort']
+      return [oneOf(a.what, OPERATIONS), '--abort']
     case 'continue':
-      return [a.what, '--continue'] // GIT_EDITOR=true (gitEnv) keeps the message git proposes
+      return [oneOf(a.what, OPERATIONS), '--continue'] // GIT_EDITOR=true (gitEnv) keeps the message git proposes
     case 'pushBranch':
       return ['push', '-u', ref(a.remote), ref(a.branch)]
     case 'branch':
@@ -79,7 +88,7 @@ export function buildGitArgs(a: GitAction): string[] {
     case 'revert':
       return ['revert', '--no-edit', ref(a.sha)]
     case 'reset':
-      return ['reset', `--${a.mode}`, ref(a.sha)]
+      return ['reset', `--${oneOf(a.mode, ['soft', 'mixed', 'hard'])}`, ref(a.sha)]
     case 'stage':
       return ['add', ...paths(a.paths)]
     case 'unstage':
@@ -106,10 +115,11 @@ export function buildGitArgs(a: GitAction): string[] {
 }
 
 // git must fail instead of waiting for a password nobody can type (ssh can't prompt either: see `detached` below),
-// and background status must not hold .git/index.lock while a terminal next to us commits
+// and background status must not hold .git/index.lock while a terminal next to us commits;
+// a GIT_DIR or GIT_WORK_TREE we were started with would point every tile at that one repository
 export function gitEnv(env: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(env)) if (v !== undefined) out[k] = v
+  const out = childEnv(env)
+  for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX']) delete out[k]
   out.GIT_TERMINAL_PROMPT = '0'
   out.GIT_OPTIONAL_LOCKS = '0'
   out.GIT_EDITOR = 'true' // a continued rebase or cherry-pick keeps its message instead of waiting for an editor
@@ -124,26 +134,39 @@ interface Out extends GitResult {
   noGit?: boolean // the git binary is not installed
 }
 
-function git(cwd: string, args: string[], timeout = 20_000): Promise<Out> {
+function git(cwd: string, args: string[], timeout = 20_000, env: Record<string, string> = {}): Promise<Out> {
   return new Promise(resolve => {
     // detached = own session without a controlling terminal, so ssh fails instead of asking for a passphrase
     // (execFile ignores `detached`, spawn honours it)
-    const c = spawn('git', args, { cwd, env: gitEnv(process.env), detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    let c: ReturnType<typeof spawn>
+    try {
+      c = spawn('git', args, { cwd, env: { ...gitEnv(process.env), ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    } catch (e) {
+      return resolve({ ok: false, stdout: '', raw: '', output: (e as Error).message })
+    }
     let stdout = ''
     let stderr = ''
     // decode as a stream: a character split across two chunks stays whole
-    c.stdout.setEncoding('utf8')
-    c.stderr.setEncoding('utf8')
-    c.stdout.on('data', d => (stdout += d))
-    c.stderr.on('data', d => (stderr += d))
-    const timer = setTimeout(() => c.kill(), timeout)
+    c.stdout!.setEncoding('utf8')
+    c.stderr!.setEncoding('utf8')
+    c.stdout!.on('data', d => (stdout += d))
+    c.stderr!.on('data', d => (stderr += d))
+    // the whole group: an ssh started by git would otherwise keep stderr open, and the tile busy
+    const timer = setTimeout(() => {
+      try {
+        process.kill(-c.pid!)
+      } catch {
+        c.kill() // no process groups (Windows)
+      }
+    }, timeout)
     const done = (ok: boolean, extra = '', noGit = false) => {
       clearTimeout(timer)
       resolve({ ok, stdout: stdout.trim(), raw: stdout, output: (stdout + stderr + extra).trim(), noGit })
     }
     // ENOENT with an existing cwd: the binary is missing (a missing cwd gives the same code)
     c.on('error', e => done(false, e.message, (e as NodeJS.ErrnoException).code === 'ENOENT' && existsSync(cwd)))
-    c.on('close', code => done(code === 0))
+    // macOS ships a /usr/bin/git stub that only offers to install the developer tools: as good as missing
+    c.on('close', code => done(code === 0, '', code !== 0 && /xcode-select|developer tools/i.test(stderr)))
   })
 }
 
@@ -167,9 +190,10 @@ export async function gitLog(cwd: string, v: LogView): Promise<Commit[]> {
 
 export async function gitStatus(cwd: string): Promise<GitStatus> {
   const none: GitStatus = { repo: false, branch: null, upstream: null, remote: null, ahead: 0, behind: 0, changes: 0, operation: null, conflicts: [] }
-  const inside = await git(cwd, ['rev-parse', '--is-inside-work-tree'])
+  const inside = await git(cwd, ['rev-parse', '--is-inside-work-tree'], undefined, { LC_ALL: 'C' }) // English, to tell the failures apart
   if (inside.noGit) return { ...none, error: 'no-git' }
-  if (inside.stdout !== 'true') return { ...none, error: 'not-repo' } // also bare repos
+  // "false": a bare repository or inside .git; any other failure (dubious ownership...) is git's to explain
+  if (inside.stdout !== 'true') return inside.ok || /not a git repository/i.test(inside.output) ? { ...none, error: 'not-repo' } : { ...none, message: inside.output }
   const [branch, upstream, porcelain, operation, conflicts, remotes] = await Promise.all([
     git(cwd, ['symbolic-ref', '--short', '-q', 'HEAD']),
     git(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
@@ -282,8 +306,12 @@ export async function gitRefs(cwd: string): Promise<GitRefs> {
   return out
 }
 
-// a blob as text, '' when the file is not there on that side (added, deleted, root commit), null when binary
+// a blob as text, '' when the file is not there on that side (added, deleted, root commit), null when binary;
+// its size first, so a huge committed asset is never read
 async function blob(cwd: string, spec: string): Promise<string | null> {
+  const size = await git(cwd, ['cat-file', '-s', spec])
+  if (!size.ok) return ''
+  if (Number(size.stdout) > DIFF_LIMIT) throw new Error(t('File troppo grande per il diff'))
   const r = await git(cwd, ['show', spec])
   if (!r.ok) return ''
   return r.raw.includes('\0') ? null : r.raw
@@ -297,11 +325,12 @@ export async function gitDiffTexts(cwd: string, d: DiffSpec): Promise<DiffTexts>
       ref(d.sha)
       ;[original, modified] = await Promise.all([blob(cwd, `${d.sha}^:${d.oldPath ?? d.path}`), blob(cwd, `${d.sha}:${d.path}`)])
     } else if (d.kind === 'staged') {
-      ;[original, modified] = await Promise.all([blob(cwd, `HEAD:${d.oldPath ?? d.path}`), blob(cwd, `:${d.path}`)])
+      // ":0:" names the stage, so a path like "1:foo" is not read as stage 1 of "foo"
+      ;[original, modified] = await Promise.all([blob(cwd, `HEAD:${d.oldPath ?? d.path}`), blob(cwd, `:0:${d.path}`)])
     } else {
       const work = await readLocal(resolve(cwd, d.path))
       if (!work.ok && work.large) return { ok: false, error: t('File troppo grande per il diff') }
-      ;[original, modified] = [await blob(cwd, `:${d.path}`), work.ok ? work.text : 'binary' in work && work.binary ? null : '']
+      ;[original, modified] = [await blob(cwd, `:0:${d.path}`), work.ok ? work.text : 'binary' in work && work.binary ? null : '']
     }
   } catch (e) {
     return { ok: false, error: (e as Error).message }

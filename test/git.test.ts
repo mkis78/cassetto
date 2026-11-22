@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { t } from '../src/shared/i18n'
@@ -73,6 +73,10 @@ describe('buildGitArgs', () => {
     expect(() => buildGitArgs({ op: 'stage', paths: [] })).toThrow() // "git add --" alone would mean nothing, others "everything"
     expect(() => buildGitArgs({ op: 'stashDrop', index: -1 })).toThrow()
     expect(() => buildGitArgs({ op: 'reset', sha: '--hard', mode: 'soft' })).toThrow()
+    // the renderer's word is not trusted: only the known operations and modes become arguments
+    expect(() => buildGitArgs({ op: 'abort', what: '--exec=x' as 'merge' })).toThrow()
+    expect(() => buildGitArgs({ op: 'continue', what: 'gc' as 'merge' })).toThrow()
+    expect(() => buildGitArgs({ op: 'reset', sha: 'abc', mode: 'keep' as 'hard' })).toThrow()
   })
 })
 
@@ -103,6 +107,7 @@ test('worktree list: main first, branches without refs/heads, detached', () => {
 test('gitEnv never prompts, takes no optional locks and leaves the ssh setup to the user', () => {
   expect(gitEnv({ PATH: '/bin' })).toEqual({ PATH: '/bin', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_EDITOR: 'true' })
   expect(gitEnv({ GIT_SSH_COMMAND: 'ssh -i k' }).GIT_SSH_COMMAND).toBe('ssh -i k')
+  expect(gitEnv({ PATH: '/bin', GIT_DIR: '/x/.git', GIT_WORK_TREE: '/x', GIT_INDEX_FILE: 'i', GIT_PREFIX: 'p', npm_lifecycle_event: 'dev' })).toEqual({ PATH: '/bin', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_EDITOR: 'true' })
 })
 
 describe('logArgs', () => {
@@ -317,6 +322,38 @@ describe('on a real repository', () => {
     expect((await gitRefs(d)).branches.map(b => b.name)).toContain('feat/x')
     expect((await gitRun(d, { op: 'checkout', branch: 'feat/x' })).ok).toBe(true)
     expect((await gitStatus(d)).branch).toBe('feat/x')
+  })
+
+  test('a blob over the diff limit is never read: "too large"', async () => {
+    const d = repo()
+    commit(d, 'big.bin', 'x'.repeat(6 * 1024 * 1024), 'big')
+    const [head] = await gitLog(d, ALL)
+    const large = { ok: false, error: t('File troppo grande per il diff') }
+    expect(await gitDiffTexts(d, { kind: 'commit', sha: head.sha, path: 'big.bin' })).toEqual(large)
+    writeFileSync(join(d, 'big.bin'), 'small\n')
+    g(d, 'add', '.')
+    expect(await gitDiffTexts(d, { kind: 'staged', path: 'big.bin' })).toEqual(large) // HEAD's side
+  })
+
+  test('a staged path that looks like stage syntax is still the path', async () => {
+    const d = repo()
+    commit(d, 'x.txt', 'x\n', 'x')
+    writeFileSync(join(d, '1:foo'), 'staged\n')
+    g(d, 'add', '.')
+    expect(await gitDiffTexts(d, { kind: 'staged', path: '1:foo' })).toEqual({ ok: true, original: '', modified: 'staged\n' })
+  })
+
+  test.skipIf(process.platform === 'win32')('the macOS git stub (no developer tools) counts as git missing', async () => {
+    const bin = mkdtempSync(join(tmpdir(), 'tstub-'))
+    writeFileSync(join(bin, 'git'), '#!/bin/sh\necho "xcode-select: note: No developer tools were found, requesting install." >&2\nexit 1\n')
+    chmodSync(join(bin, 'git'), 0o755)
+    const path = process.env.PATH
+    process.env.PATH = bin
+    try {
+      expect(await gitStatus(tmpdir())).toMatchObject({ repo: false, error: 'no-git' })
+    } finally {
+      process.env.PATH = path
+    }
   })
 
   test('git missing: status resolves to no-git', async () => {

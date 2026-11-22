@@ -333,10 +333,11 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
     e.preventDefault()
   }
 
-  if (!status) return <div ref={rootRef} className="git-empty">{t('Caricamento…')}</div>
+  // no rootRef here: the observer would stay on a replaced div and stop the polling that notices a `git init`
+  if (!status) return <div className="git-empty">{t('Caricamento…')}</div>
   if (!status.repo)
     return (
-      <div ref={rootRef} className="git-empty">
+      <div className="git-empty">
         {status.error === 'no-git' ? t('Serve git: su macOS installa gli strumenti da riga di comando (xcode-select --install), su Linux il pacchetto git.') : t('Non è un repository git')}
         <div className="git-empty-path">{cwd}</div>
       </div>

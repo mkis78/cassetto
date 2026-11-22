@@ -17,4 +17,5 @@ export const look = EditorView.theme({
   '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, var(--yellow) 30%, transparent)' },
   '.cm-tooltip': { backgroundColor: 'var(--panel)', border: '1px solid var(--line2)' }
 })
-export const colours = () => syntaxHighlighting(resolvedTheme() === 'light' ? defaultHighlightStyle : oneDarkHighlightStyle)
+// darkTheme tells widgets with &light/&dark styles (the merge view's changes, bars) which variant to use
+export const colours = () => [EditorView.darkTheme.of(resolvedTheme() !== 'light'), syntaxHighlighting(resolvedTheme() === 'light' ? defaultHighlightStyle : oneDarkHighlightStyle)]

@@ -360,12 +360,13 @@ export function DiffView({ cwd, spec, tick, onClose }: { cwd: string; spec: Diff
     window.api.gitDiff(cwd, spec).then(r => live && setTexts(r))
     return () => void (live = false)
   }, [cwd, JSON.stringify(spec), tick])
-  // another file: forget the old one at once (a refresh keeps it until the new texts arrive)
-  useEffect(() => setTexts(null), [cwd, JSON.stringify(spec)])
+  // the diff div takes focus so Esc reaches it (the editors are not editable, so never focused)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => box.current?.focus(), [])
   const problem = texts?.ok ? diffProblem(texts.original, texts.modified) : null
   const what = spec.kind === 'commit' ? spec.sha.slice(0, 8) : spec.kind === 'staged' ? t('in stage') : t('modifiche')
   return (
-    <div className="git-diff" onKeyDown={e => e.key === 'Escape' && onClose()}>
+    <div className="git-diff" ref={box} tabIndex={-1} onKeyDown={e => e.key === 'Escape' && onClose()}>
       <div className="git-diff-head">
         <span className="name">{spec.path}</span>
         <span className="what">{what}</span>

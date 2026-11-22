@@ -408,7 +408,7 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .git-details-head .body { margin: 0; white-space: pre-wrap; color: var(--fg); font: 12px Menlo, monospace; }
 .git-details-head .meta { color: var(--fg3); }
 .git-details-head .sha { font: 11px Menlo, monospace; color: var(--dim); cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
-.git-diff { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.git-diff { outline: none; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .git-diff-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); background: var(--bar); }
 .git-diff-head .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-strong); direction: rtl; text-align: left; }
 .git-diff-head .what { color: var(--fg3); }

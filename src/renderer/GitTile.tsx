@@ -407,7 +407,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
         <GitSidebar refs={refs} current={current} collapsed={collapsed} onToggle={toggle} hidden={hidden} onToggleHidden={toggleHidden} selected={selected} onPick={sha => (select(sha), setHighlight(sha))} onOpen={checkout} onMenu={sideAction} onDrop={onDrop} onOpenWorktree={w => openFolder(containerApi, { path: w.path, host: null }, api.id)} />
         <div className="git-center">
           {diff ? (
-            <DiffView cwd={cwd} spec={diff} tick={tick} onClose={() => setDiff(null)} />
+            <DiffView key={JSON.stringify(diff)} cwd={cwd} spec={diff} tick={tick} onClose={() => setDiff(null)} />
           ) : (
             <>
               {(solo || hidden.length > 0) && (

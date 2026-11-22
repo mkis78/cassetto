@@ -6,7 +6,7 @@ import { mkdir, readFile, rm, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AppState, FileOp, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
-import { parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from './fileOps'
+import { parseOpOutput, runOpLocal, runOpRemote, sshOp } from './fileOps'
 import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
 import { appsFor, openWith } from './platform/openWith'
@@ -195,7 +195,7 @@ handle('files:op', async (host: string | null, op: FileOp) => {
 })
 // for undo: an ssh failure is thrown (not reported per item), so runUndo can tell it from a lasting refusal
 const remoteUndoOp = async (host: string, op: FileOp) => {
-  const r = await sshRun(host, remoteOpScript(op), { timeout: 10 * 60_000 })
+  const r = await sshOp(host, op)
   if (!r.ok) throw new Error(r.error)
   return parseOpOutput(r.out.toString())
 }

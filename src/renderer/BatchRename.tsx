@@ -29,8 +29,8 @@ export default function BatchRename({ names, existing, fold, onApply, onClose }:
   )
   return (
     <div className="overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
-      <div className="dialog batch-rename" onKeyDown={e => (e.key === 'Escape' ? onClose() : e.key === 'Enter' && !(e.target instanceof HTMLButtonElement) && (e.preventDefault(), apply()))}>
-        {/* Enter applies from any field; a focused button keeps its own Enter */}
+      <div className="dialog batch-rename" onKeyDown={e => (e.key === 'Escape' ? onClose() : e.key === 'Enter' && !e.nativeEvent.isComposing && !(e.target instanceof HTMLButtonElement) && !(e.target instanceof HTMLSelectElement) && (e.preventDefault(), apply()))}>
+        {/* Enter applies from any field; a focused button or select, and an IME composing text, keep their own Enter */}
         <h3>{t('Rinomina {n} elementi', { n: names.length })}</h3>
         <select autoFocus value={kind} onChange={e => setKind(e.target.value as Kind)}>
           {KINDS.map(([k, label]) => (
@@ -86,10 +86,10 @@ export default function BatchRename({ names, existing, fold, onApply, onClose }:
         </label>
         <div className="file-names">
           {pairs.map((p, i) => (
-            <div key={p.from} className="row">
-              <span className="path" title={p.from}>
-                {p.from} → {p.to === p.from ? t('(invariato)') : p.to}
-              </span>
+            <div key={p.from} className="row" title={`${p.from} → ${p.to}`}>
+              <span className="path">{p.from}</span>
+              <span>→</span>
+              <span className="path">{p.to === p.from ? t('(invariato)') : p.to}</span>
               {errors[i] && <span className="error">{errors[i]}</span>}
             </div>
           ))}

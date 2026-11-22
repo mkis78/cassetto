@@ -30,7 +30,7 @@ function apply(s: string, rule: RenameRule, i: number): string {
     case 'case':
       if (rule.to === 'lower') return s.toLowerCase()
       if (rule.to === 'upper') return s.toUpperCase()
-      return s.toLowerCase().replace(/(^|[ _-])(\S)/g, (_, a, b) => a + b.toUpperCase())
+      return s.toLowerCase().replace(/(^|[ _-])([^ _-])/g, (_, a, b) => a + b.toUpperCase())
   }
 }
 
@@ -52,6 +52,7 @@ export function conflicts(pairs: { from: string; to: string }[], existing: strin
     if (p.to === p.from) return null
     const k = fold(p.to)
     return nameError(p.to, new Set())
+      ?? (new TextEncoder().encode(p.to).length > 255 ? t('Nome troppo lungo') : null) // the usual file-system limit, in bytes
       ?? (count.get(k)! > 1 ? t('Nome doppio') : ex.has(k) && !moving.has(k) ? t('Esiste già') : null)
   })
 }

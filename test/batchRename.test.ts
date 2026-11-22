@@ -41,6 +41,9 @@ test('case', () => {
   expect(c('upper', false)).toEqual(['IMG_0001.jpg', 'IMG_0002.JPG', 'NOTA'])
   expect(c('upper', true)).toEqual(['IMG_0001.JPG', 'IMG_0002.JPG', 'NOTA'])
   expect(c('title', false, ['ciao-mondo_bello file.txt'])).toEqual(['Ciao-Mondo_Bello File.txt'])
+  expect(c('title', false, ['a_-b c'])).toEqual(['A_-B C'])
+  expect(c('title', true, ['ciao.TXT'])).toEqual(['Ciao.txt'])
+  expect(c('title', false, ['ciao.TXT'])).toEqual(['Ciao.TXT'])
 })
 
 test('conflicts', () => {
@@ -51,4 +54,8 @@ test('conflicts', () => {
   expect(conflicts([p('a', 'a/b')], ['a'], s => s)[0]).toBe('Nome non valido')
   expect(conflicts([p('Foo', 'foo')], ['Foo'], lower)).toEqual([null])
   expect(conflicts([p('a', 'a'), p('b', 'a')], ['a', 'b'], s => s)).toEqual([null, 'Nome doppio'])
+  expect(conflicts([p('a', 'B')], ['a', 'b'], lower)).toEqual(['Esiste già'])
+  expect(conflicts([p('a', 'x'.repeat(256))], ['a'], s => s)).toEqual(['Nome troppo lungo'])
+  expect(conflicts([p('a', 'è'.repeat(128))], ['a'], s => s)).toEqual(['Nome troppo lungo'])
+  expect(conflicts([p('a', 'x'.repeat(255))], ['a'], s => s)).toEqual([null])
 })

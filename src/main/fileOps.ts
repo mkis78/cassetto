@@ -81,9 +81,15 @@ const temps = (items: { from: string }[], { join, dirname }: typeof path.posix) 
   return items.map((i, n) => join(dirname(i.from), `.cassetto-rename-${tag}-${n}`))
 }
 
+// renameMany is for one folder (temporary names live there): anything else fails whole, at a trust boundary
+const APART = tx('Gli elementi devono essere in una sola cartella')
+const apart = (items: { from: string; to: string }[], { dirname }: typeof path.posix) =>
+  items.some(i => dirname(i.to) !== dirname(i.from) || dirname(i.from) !== dirname(items[0].from))
+
 // On a failure everything goes back: placed items to their temporary names, then those to the originals. That never
 // overwrites either: an item that cannot go back stays where it is, reported at that path.
 async function renameMany(items: { from: string; to: string }[]): Promise<OpResult> {
+  if (apart(items, path)) return { failed: items.map(i => ({ path: i.from, error: t(APART) })) }
   const tmp = temps(items, path)
   let moved = 0 // items 0..moved-1 are at their temporary names (or further)
   let placed = 0 // items 0..placed-1 are at their final names
@@ -204,11 +210,14 @@ export function remoteOpScript(op: FileOp): string {
       // the same two phases and rollback as renameMany above: $m items moved aside, $p placed, $b the one that failed
       // (its error kept in $f), s<n> set when item n could not go back; no items: no script (an empty `else` is a syntax error)
       if (!op.items.length) return ''
+      if (apart(op.items, path.posix)) return op.items.map(i => err(i.from, q(t(APART)))).join('\n')
       const tmp = temps(op.items, path.posix)
       const mv = (src: string, dest: string, done: string, fail: string) =>
         `if ${taken(dest)}; then ${fail}; e=${q(t(EXISTS))}; elif e=$(mv -- ${q(src)} ${q(dest)} 2>&1); then ${done}; else ${fail}; fi`
       const it = op.items.map(({ from, to }, n) => ({ from, to, tmp: tmp[n], n }))
       return [
+        // a dropped ssh must not kill sh halfway through: the renames finish, only the reports are lost
+        "trap '' HUP PIPE",
         `m=0 p=0 b= e= ${it.map(i => `s${i.n}=`).join(' ')}`,
         ...it.map(i => `if [ -z "$b" ]; then ${mv(i.from, i.tmp, `m=${i.n + 1}`, `b=${i.n}`)}; fi`),
         ...it.map(i => `if [ -z "$b" ]; then ${mv(i.tmp, i.to, `p=${i.n + 1}`, `b=${i.n}`)}; fi`),
@@ -251,8 +260,13 @@ export function parseOpOutput(out: string): OpResult {
 // every path the op touches, for when ssh itself fails
 const pathsOf = (op: FileOp): string[] => (op.op === 'renameMany' ? op.items.map(i => i.from) : 'items' in op ? op.items.map(i => i.src) : 'paths' in op ? op.paths : 'from' in op ? [op.from] : op.op === 'extract' ? [op.dest] : [op.path])
 
+// A FileOp script goes on stdin, not argv (Linux caps one argv string at 128 KB: ~50 renameMany items). It is read
+// whole before anything runs, so a script cut short runs none of it, and its commands get /dev/null as stdin.
+export const FROM_STDIN = `s=$(cat) && case $s in *'\n# end') eval "$s" </dev/null;; *) exit 1;; esac`
+export const sshOp = (host: string, op: FileOp) => sshRun(host, FROM_STDIN, { input: `${remoteOpScript(op)}\n# end`, timeout: 10 * 60_000 })
+
 export async function runOpRemote(host: string, op: FileOp): Promise<OpResult> {
-  const r = await sshRun(host, remoteOpScript(op), { timeout: 10 * 60_000 })
+  const r = await sshOp(host, op)
   // ssh may have dropped halfway: some items may be done, so the report says so instead of calling them all failed
   return r.ok ? parseOpOutput(r.out.toString()) : { failed: pathsOf(op).map(path => ({ path, error: t('{error} (esito incerto: aggiorna per vedere cosa è cambiato)', { error: r.error }) })) }
 }

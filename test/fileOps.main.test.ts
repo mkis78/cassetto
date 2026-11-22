@@ -3,8 +3,19 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSy
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
-import { extractCommand, parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from '../src/main/fileOps'
+import { extractCommand, FROM_STDIN, parseOpOutput, remoteOpScript, runOpLocal, runOpRemote } from '../src/main/fileOps'
+import { remoteSh, sshRun } from '../src/main/ssh'
 import type { FileOp, OpResult } from '../src/shared/types'
+
+// host 'local': the command runs under the local sh, wrapped as ssh would send it, with the same stdin
+vi.mock('../src/main/ssh', async orig => {
+  const ssh = await orig<typeof import('../src/main/ssh')>()
+  const local = (cmd: string, input = '') => {
+    const r = spawnSync('/bin/sh', ['-c', ssh.remoteSh(cmd)], { input, maxBuffer: 64 * 1024 * 1024 })
+    return r.status === 0 ? { ok: true as const, out: r.stdout } : { ok: false as const, error: `exit ${r.status}` }
+  }
+  return { ...ssh, sshRun: vi.fn((host: string, cmd: string, o: { input?: string } = {}) => (host === 'local' ? Promise.resolve(local(cmd, o.input)) : ssh.sshRun(host, cmd, o))) }
+})
 
 // another volume, simulated: rename and link fail with EXDEV while `exdev` is on
 let exdev = false
@@ -259,7 +270,46 @@ describe.each([['local', local], ['remote script', sh]] as const)('renameMany, %
   test('no items: nothing to do', async () => {
     expect(await run({ op: 'renameMany', items: [] })).toEqual({ failed: [] })
   })
+  test.each([
+    ['a new name in another folder', [['a', 'x'], ['b', 'sub/y']]],
+    ['items from two folders', [['a', 'x'], ['sub/c', 'sub/z']]]
+  ] as const)('%s: every item fails, nothing moves', async (_, pairs) => {
+    const d = dir()
+    files(d, ['a', 'b'])
+    mkdirSync(join(d, 'sub'))
+    writeFileSync(join(d, 'sub', 'c'), 'c')
+    const r = await run(op(d, pairs as unknown as [string, string][]))
+    expect(r.failed).toEqual(pairs.map(([a]) => ({ path: join(d, a), error: 'Gli elementi devono essere in una sola cartella' })))
+    expect(readdirSync(d).sort()).toEqual(['a', 'b', 'sub'])
+    expect(readdirSync(join(d, 'sub'))).toEqual(['c'])
+  })
 })
+test('a large remote batch travels on stdin, not argv, and runs whole', async () => {
+  const d = dir()
+  const names = Array.from({ length: 500 }, (_, n) => `file ${n}`)
+  for (const n of names) writeFileSync(join(d, n), n)
+  const items = names.map(n => ({ from: join(d, n), to: join(d, `${n}.x`) }))
+  expect(await runOpRemote('local', { op: 'renameMany', items })).toEqual({ failed: [] })
+  expect(readdirSync(d).sort()).toEqual(names.map(n => `${n}.x`).sort())
+  const [, cmd, o] = vi.mocked(sshRun).mock.calls.at(-1)!
+  expect(cmd).toBe(FROM_STDIN)
+  expect(o?.input).toContain(join(d, 'file 499'))
+  expect(remoteSh(cmd).length).toBeLessThan(1000)
+})
+
+test('a script cut short on stdin runs none of it', () => {
+  const d = dir()
+  writeFileSync(join(d, 'a'), 'a')
+  const script = remoteOpScript({ op: 'renameMany', items: [{ from: join(d, 'a'), to: join(d, 'b') }] })
+  const r = spawnSync('/bin/sh', ['-c', FROM_STDIN], { input: script.slice(0, script.lastIndexOf('else')) })
+  expect(r.status).not.toBe(0)
+  expect(readdirSync(d)).toEqual(['a'])
+})
+
+test('the remote renameMany ignores a dropped connection, so its rollback finishes', () => {
+  expect(remoteOpScript({ op: 'renameMany', items: [{ from: '/d/a', to: '/d/b' }] }).split('\n')[0]).toBe("trap '' HUP PIPE")
+})
+
 test('renameMany with no items: an empty remote script', () => expect(remoteOpScript({ op: 'renameMany', items: [] })).toBe(''))
 
 const bsdtar = spawnSync('bsdtar', ['--version']).status === 0

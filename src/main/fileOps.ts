@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { cp, link, lstat, mkdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import * as path from 'node:path'
 import type { FileOp, OpResult, Trashed } from '../shared/types'
 import { shQuote, sshRun } from './ssh'
 import { t, tx } from '../shared/i18n'
@@ -72,6 +74,36 @@ export async function place(src: string, dest: string): Promise<void> {
   return rename(src, dest)
 }
 
+// one batch in its folder: every item first to a temporary name, then to its final one (so swaps and shifts work)
+export const CANCELLED = tx('Annullata la rinomina di tutti gli elementi')
+const temps = (items: { from: string }[], { join, dirname }: typeof path.posix) => {
+  const tag = randomBytes(4).toString('hex')
+  return items.map((i, n) => join(dirname(i.from), `.cassetto-rename-${tag}-${n}`))
+}
+
+// On a failure everything goes back: placed items to their temporary names, then those to the originals. That never
+// overwrites either: an item that cannot go back stays where it is, reported at that path.
+async function renameMany(items: { from: string; to: string }[]): Promise<OpResult> {
+  const tmp = temps(items, path)
+  let moved = 0 // items 0..moved-1 are at their temporary names (or further)
+  let placed = 0 // items 0..placed-1 are at their final names
+  let error: string
+  try {
+    for (; moved < items.length; moved++) await place(items[moved].from, tmp[moved])
+    for (; placed < items.length; placed++) await place(tmp[placed], items[placed].to)
+    return { failed: [] }
+  } catch (e) {
+    error = (e as Error).message
+  }
+  const bad = moved < items.length ? moved : placed
+  const stuck = new Map<number, OpResult['failed'][number]>()
+  const back = (n: number, src: string, dest: string) => place(src, dest).catch(e => void stuck.set(n, { path: src, error: (e as Error).message }))
+  for (let n = 0; n < placed; n++) await back(n, items[n].to, tmp[n])
+  for (let n = 0; n < moved; n++) if (!stuck.has(n)) await back(n, tmp[n], items[n].from)
+  const failed = items.flatMap((i, n) => (n === bad ? [{ path: i.from, error }] : stuck.has(n) ? [] : [{ path: i.from, error: t(CANCELLED) }]))
+  return { failed: [...failed, ...stuck.values()] }
+}
+
 // errorOnExist + force:false: cp itself refuses to write over something that appeared after our check
 const copy = (src: string, dest: string) => cp(src, dest, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true })
 
@@ -95,6 +127,8 @@ async function localOp(op: FileOp, trash: (paths: string[]) => Promise<Trashed[]
       return each([[op.path, () => fresh(op.path).then(() => writeFile(op.path, '', { flag: 'wx' }))]])
     case 'rename':
       return each([[op.from, async () => ((await same(op.from, op.to)) ? rename(op.from, op.to) : place(op.from, op.to))]])
+    case 'renameMany':
+      return renameMany(op.items)
     case 'copy':
     case 'move': {
       // one Trash call per batch, not per item (on macOS each call is an osascript)
@@ -166,6 +200,26 @@ export function remoteOpScript(op: FileOp): string {
       return step(op.path, `set -C; : > ${q(op.path)}`, op.path)
     case 'rename':
       return step(op.from, `mv -- ${q(op.from)} ${q(op.to)}`, op.to)
+    case 'renameMany': {
+      // the same two phases and rollback as renameMany above: $m items moved aside, $p placed, $b the one that failed
+      // (its error kept in $f), s<n> set when item n could not go back
+      const tmp = temps(op.items, path.posix)
+      const mv = (src: string, dest: string, done: string, fail: string) =>
+        `if ${taken(dest)}; then ${fail}; e=${q(t(EXISTS))}; elif e=$(mv -- ${q(src)} ${q(dest)} 2>&1); then ${done}; else ${fail}; fi`
+      const it = op.items.map(({ from, to }, n) => ({ from, to, tmp: tmp[n], n }))
+      return [
+        `m=0 p=0 b= e= ${it.map(i => `s${i.n}=`).join(' ')}`,
+        ...it.map(i => `if [ -z "$b" ]; then ${mv(i.from, i.tmp, `m=${i.n + 1}`, `b=${i.n}`)}; fi`),
+        ...it.map(i => `if [ -z "$b" ]; then ${mv(i.tmp, i.to, `p=${i.n + 1}`, `b=${i.n}`)}; fi`),
+        `if [ -n "$b" ]; then f=$e`,
+        ...it.map(i => `if [ $p -gt ${i.n} ]; then ${mv(i.to, i.tmp, ':', `s${i.n}=1`)}; [ -n "$s${i.n}" ] && ${err(i.to, '"$e"')}; fi`),
+        ...it.map(i => `if [ $m -gt ${i.n} ] && [ -z "$s${i.n}" ]; then ${mv(i.tmp, i.from, ':', `s${i.n}=1`)}; [ -n "$s${i.n}" ] && ${err(i.tmp, '"$e"')}; fi`),
+        ...it.map(i => `if [ "$b" = ${i.n} ]; then ${err(i.from, '"$f"')}; elif [ -z "$s${i.n}" ]; then ${err(i.from, q(t(CANCELLED)))}; fi`),
+        'else',
+        ...it.map(i => ok(i.from)),
+        'fi'
+      ].join('\n')
+    }
     case 'copy':
     case 'move': {
       const cmd = op.op === 'copy' ? 'cp -R --' : 'mv --'
@@ -194,7 +248,7 @@ export function parseOpOutput(out: string): OpResult {
 }
 
 // every path the op touches, for when ssh itself fails
-const pathsOf = (op: FileOp): string[] => ('items' in op ? op.items.map(i => i.src) : 'paths' in op ? op.paths : 'from' in op ? [op.from] : op.op === 'extract' ? [op.dest] : [op.path])
+const pathsOf = (op: FileOp): string[] => (op.op === 'renameMany' ? op.items.map(i => i.from) : 'items' in op ? op.items.map(i => i.src) : 'paths' in op ? op.paths : 'from' in op ? [op.from] : op.op === 'extract' ? [op.dest] : [op.path])
 
 export async function runOpRemote(host: string, op: FileOp): Promise<OpResult> {
   const r = await sshRun(host, remoteOpScript(op), { timeout: 10 * 60_000 })

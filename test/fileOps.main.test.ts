@@ -204,6 +204,60 @@ test('replaced destinations go to the Trash in one call, before their items are 
   expect(names.map(n => readFileSync(join(d, 'to', n), 'utf8'))).toEqual(['a', 'old', 'c'])
 })
 
+describe.each([['local', local], ['remote script', sh]] as const)('renameMany, %s', (_, run) => {
+  const files = (d: string, names: string[]) => names.forEach(n => writeFileSync(join(d, n), n))
+  const read = (d: string) => Object.fromEntries(readdirSync(d).sort().map(n => [n, readFileSync(join(d, n), 'utf8')]))
+  const op = (d: string, pairs: [string, string][]): FileOp => ({ op: 'renameMany', items: pairs.map(([a, b]) => ({ from: join(d, a), to: join(d, b) })) })
+  const off = 'Annullata la rinomina di tutti gli elementi'
+
+  test('renames a batch', async () => {
+    const d = dir()
+    files(d, ['a', 'b'])
+    expect(await run(op(d, [['a', 'x'], ['b', 'y']]))).toEqual({ failed: [] })
+    expect(read(d)).toEqual({ x: 'a', y: 'b' })
+  })
+  test('swaps two names', async () => {
+    const d = dir()
+    files(d, ['a', 'b'])
+    expect(await run(op(d, [['a', 'b'], ['b', 'a']]))).toEqual({ failed: [] })
+    expect(read(d)).toEqual({ a: 'b', b: 'a' })
+  })
+  test('shifts a sequence', async () => {
+    const d = dir()
+    files(d, ['f1', 'f2', 'f3'])
+    expect(await run(op(d, [['f1', 'f2'], ['f2', 'f3'], ['f3', 'f4']]))).toEqual({ failed: [] })
+    expect(read(d)).toEqual({ f2: 'f1', f3: 'f2', f4: 'f3' })
+  })
+  test('a case-only rename, of a file and of a folder', async () => {
+    const d = dir()
+    files(d, ['a.txt'])
+    mkdirSync(join(d, 'dir'))
+    expect(await run(op(d, [['a.txt', 'A.txt'], ['dir', 'DIR']]))).toEqual({ failed: [] })
+    expect(readdirSync(d).sort()).toEqual(['A.txt', 'DIR'])
+  })
+  test('a name taken outside the batch rolls everything back', async () => {
+    const d = dir()
+    files(d, ['a', 'b', 'c'])
+    const o = op(d, [['a', 'b'], ['b', 'a'], ['c', 'z']])
+    writeFileSync(join(d, 'z'), 'other')
+    expect((await run(o)).failed).toEqual([
+      { path: join(d, 'a'), error: off },
+      { path: join(d, 'b'), error: off },
+      { path: join(d, 'c'), error: 'Esiste già' }
+    ])
+    expect(read(d)).toEqual({ a: 'a', b: 'b', c: 'c', z: 'other' })
+  })
+  test('a missing item rolls back the ones already moved aside', async () => {
+    const d = dir()
+    files(d, ['a', 'c'])
+    const r = await run(op(d, [['a', 'x'], ['b', 'y'], ['c', 'z']]))
+    expect(r.failed.map(f => f.path)).toEqual([join(d, 'a'), join(d, 'b'), join(d, 'c')])
+    expect(r.failed[0].error).toBe(off)
+    expect(r.failed[1].error).not.toBe(off)
+    expect(read(d)).toEqual({ a: 'a', c: 'c' })
+  })
+})
+
 const bsdtar = spawnSync('bsdtar', ['--version']).status === 0
 describe('extract', () => {
   // an archive with a/b.txt inside, made with the system tools

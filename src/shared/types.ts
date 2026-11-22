@@ -85,6 +85,7 @@ export type WriteResult = { ok: true } | { ok: false; error: string }
 export type FileOp =
   | { op: 'mkdir' | 'touch'; path: string }
   | { op: 'rename'; from: string; to: string }
+  | { op: 'renameMany'; items: { from: string; to: string }[] } // all in one folder
   | { op: 'copy' | 'move'; items: { src: string; dest: string; replace: boolean }[] }
   | { op: 'trash' | 'delete'; paths: string[] }
   | { op: 'extract'; archive: string; dest: string }

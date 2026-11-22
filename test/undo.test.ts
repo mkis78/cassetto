@@ -30,6 +30,12 @@ describe('inverseOf', () => {
   test('rename', () => {
     expect(inv(null, { op: 'rename', from: '/d/a', to: '/d/b' })).toEqual({ host: null, label: 'Rinominato «a»', steps: [{ kind: 'move', from: '/d/b', to: '/d/a' }] })
   })
+  test('renameMany: the pairs reversed, only when nothing failed', () => {
+    const items = [{ from: '/d/a', to: '/d/b' }, { from: '/d/b', to: '/d/a' }]
+    expect(inv(null, { op: 'renameMany', items })).toEqual({ host: null, label: 'Rinominati 2 elementi', steps: [{ kind: 'renameMany', items: [{ from: '/d/b', to: '/d/a' }, { from: '/d/a', to: '/d/b' }] }] })
+    expect(inv('h', { op: 'renameMany', items: items.slice(0, 1) })!.label).toBe('Rinominato «a»')
+    expect(inv(null, { op: 'renameMany', items }, ['/d/a'])).toBeNull()
+  })
   test('move skips failed items and counts the rest', () => {
     const items = ['a', 'b', 'c'].map(n => ({ src: `/s/${n}`, dest: `/d/${n}`, replace: false }))
     const r = inv(null, { op: 'move', items }, ['/s/b'])!
@@ -87,6 +93,16 @@ describe('runUndo', () => {
     const res = await local(op)
     return inverseOf(null, op, new Set(res.failed.map(f => f.path)), res.trashed, new Map())!
   }
+  test('undo of a swap restores both names', async () => {
+    const d = dir()
+    const [a, b] = [join(d, 'a'), join(d, 'b')]
+    writeFileSync(a, 'A')
+    writeFileSync(b, 'B')
+    const rec = await undoOf({ op: 'renameMany', items: [{ from: a, to: b }, { from: b, to: a }] })
+    expect(readFileSync(a, 'utf8')).toBe('B')
+    expect(await runUndo(rec, deps)).toEqual({ label: 'Rinominati 2 elementi', failed: [], retry: false, dirs: [d] })
+    expect([readFileSync(a, 'utf8'), readFileSync(b, 'utf8')]).toEqual(['A', 'B'])
+  })
   test('undo trash refuses when name is taken', async () => {
     const d = dir()
     const x = join(d, 'x')

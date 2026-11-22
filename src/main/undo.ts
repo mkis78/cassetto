@@ -6,7 +6,7 @@ import { t } from '../shared/i18n'
 
 // fromTrash: the source is an item in the Trash, so a missing one is reported as such
 // trash: sent to the Trash only once the move has succeeded (the copy left by a cross-volume move)
-export type Step = { kind: 'move'; from: string; to: string; fromTrash?: boolean; trash?: string } | { kind: 'trash'; path: string } | { kind: 'rmdir'; path: string } | { kind: 'removeIfSame'; path: string; stamp: string }
+export type Step = { kind: 'move'; from: string; to: string; fromTrash?: boolean; trash?: string } | { kind: 'trash'; path: string } | { kind: 'rmdir'; path: string } | { kind: 'removeIfSame'; path: string; stamp: string } | { kind: 'renameMany'; items: { from: string; to: string }[] }
 export type UndoRecord = { host: string | null; label: string; steps: Step[] }
 
 // what a remote copy looks like, to tell later whether anyone touched it: a checksum, so it stays small
@@ -39,6 +39,9 @@ export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, 
       return null
     case 'rename':
       return failed.has(op.from) ? null : rec(t('Rinominato «{name}»', { name: basename(op.from) }), [{ kind: 'move', from: op.to, to: op.from }])
+    case 'renameMany':
+      // a failed batch was rolled back, so there is nothing to undo
+      return failed.size ? null : rec(named(op.items.length, basename(op.items[0]?.from ?? ''), 'Rinominato «{name}»', 'Rinominati {n} elementi'), [{ kind: 'renameMany', items: op.items.map(i => ({ from: i.to, to: i.from })) }])
     case 'mkdir':
     case 'touch':
       return failed.has(op.path) ? null : rec(t('Creato «{name}»', { name: basename(op.path) }), created(op.path))
@@ -135,6 +138,14 @@ export async function runUndo(r: UndoRecord, deps: UndoDeps): Promise<NonNullabl
         else if (out !== 'removed') fail(s.path, out)
       } catch (e) {
         sshFailed(s.path, e)
+      }
+    } else if (s.kind === 'renameMany') {
+      touched.push(...s.items.map(i => i.to))
+      const op: FileOp = { op: 'renameMany', items: s.items }
+      try {
+        failed.push(...(r.host ? await deps.remote(r.host, op) : await deps.local(op)).failed)
+      } catch (e) {
+        sshFailed(s.items[0]?.to ?? '', e)
       }
     } else await move(s)
   }

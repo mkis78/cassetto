@@ -412,6 +412,8 @@ export const EN: Record<string, string> = {
   "Arancione": "Orange",
   "Grigio": "Gray",
   "Rinominato «{name}»": "Renamed “{name}”",
+  "Rinominati {n} elementi": "Renamed {n} items",
+  "Annullata la rinomina di tutti gli elementi": "Rename cancelled for all items",
   "Creato «{name}»": "Created “{name}”",
   "Estratto «{name}»": "Extracted “{name}”",
   "Estrai qui": "Extract Here",

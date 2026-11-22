@@ -4,6 +4,8 @@ import type { AppState, Favourite, TileParams } from '../shared/types'
 import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
 import TerminalTile from './TerminalTile'
+import GitTile from './GitTile'
+import { SET_MODULE, type ModuleId } from './modules'
 import { destroyTerminal } from './terminals'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
@@ -30,7 +32,7 @@ const EditorTile = (props: React.ComponentProps<typeof Editor>) => (
     <Editor {...props} />
   </Suspense>
 )
-const components = { files: FilesTile, terminal: TerminalTile, editor: EditorTile }
+const components = { files: FilesTile, terminal: TerminalTile, editor: EditorTile, git: GitTile }
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null)
@@ -64,6 +66,15 @@ export default function App() {
   // caches held by a renderer that reloaded go first: the restored tabs open their archives again
   useEffect(() => void Promise.all([window.api.loadState(), window.api.archiveReleaseAll()]).then(([s]) => (setLang(resolveLang(s.settings?.language, navigator.language)), setState(s))), [])
   useEffect(() => applySettings(state?.settings), [state?.settings])
+  // a compartment switched on from a tile (modules.setModule) is saved like one switched in the dialog
+  useEffect(() => {
+    const h = (e: Event) => {
+      const { id, on } = (e as CustomEvent<{ id: ModuleId; on: boolean }>).detail
+      update(s => ({ ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings, modules: { ...s.settings?.modules, [id]: on } } }))
+    }
+    window.addEventListener(SET_MODULE, h)
+    return () => window.removeEventListener(SET_MODULE, h)
+  }, [])
   // at start and after each change: warn when macOS (or Raycast) keeps the bar's shortcut for itself
   useEffect(() => {
     if (palette?.mode === 'bar') window.api.undoLabel().then(setUndoLabel)

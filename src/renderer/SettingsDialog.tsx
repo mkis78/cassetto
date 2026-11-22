@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Settings } from '../shared/types'
 import { leaveAsking } from './tiles'
+import { MODULES, moduleOn } from './modules'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { t, getLang, LANG_NAMES, resolveLang, type Lang, type LangSetting } from '../shared/i18n'
 
@@ -94,6 +95,15 @@ export default function SettingsDialog({ settings, onChange, onClose }: { settin
           <button onClick={() => window.api.pickFolder(settings.filesHome).then(p => p && set({ filesHome: p }))}>{t('Scegli…')}</button>
           {settings.filesHome && <button onClick={() => set({ filesHome: undefined })}>{t('Ripristina')}</button>}
         </div>
+        <label>{t('Scomparti')}</label>
+        {MODULES.map(m => (
+          <div key={m.id}>
+            <label>
+              <input type="checkbox" checked={moduleOn(settings, m.id)} onChange={e => set({ modules: { ...settings.modules, [m.id]: e.target.checked } })} /> {m.name}
+            </label>
+            <div className="path">{m.description}</div>
+          </div>
+        ))}
         <div className="actions">
           <button className="primary" onClick={onClose}>
             {t('Fatto')}

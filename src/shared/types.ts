@@ -9,7 +9,9 @@ export type FilesParams = { kind: 'files'; host: string | null; path: string | n
 export type TerminalParams = { kind: 'terminal'; host: string | null; cwd: string; name?: string; color?: TabColor }
 // a text file being edited, here or on `host`; readOnly: a file inside an archive, never saved
 export type EditorParams = { kind: 'editor'; host: string | null; path: string; name?: string; color?: TabColor; wrap?: boolean; whitespace?: boolean; mdPreview?: boolean; readOnly?: boolean }
-export type TileParams = FilesParams | TerminalParams | EditorParams
+// a repository's branches, commits and changes (an optional compartment, see renderer/modules)
+export type GitParams = { kind: 'git'; cwd: string; name?: string; color?: TabColor }
+export type TileParams = FilesParams | TerminalParams | EditorParams | GitParams
 
 export interface SearchQuery {
   text: string
@@ -61,6 +63,7 @@ export interface Settings {
   barShortcut?: string // the action bar's, an accelerator (shared/shortcuts); unset: DEFAULT_BAR
   ignoredConflict?: string // the shortcut whose clash with the system the user chose to keep
   favStyle?: 'list' | 'tiles' // the sidebar's Favourites and Places; unset: list
+  modules?: { git?: boolean } // optional compartments, off until switched on
 }
 
 export interface DirEntry {

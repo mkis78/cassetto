@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
-import { FileCode, Folder, Plus, Server, SquareTerminal, X } from 'lucide-react'
+import { FileCode, Folder, GitBranch, Plus, Server, SquareTerminal, X } from 'lucide-react'
 import type { TileParams } from '../shared/types'
 import { TAB_COLORS, tabColor, tabMenu, type TabColor } from '../shared/menus'
 import { ICON } from './icons'
@@ -42,7 +42,7 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
     if (v !== null) save({ name: v.trim() || undefined }) // an empty name goes back to the folder's
     focusTile(containerApi.getPanel(api.id))
   }
-  const Icon = params.kind === 'terminal' ? SquareTerminal : params.kind === 'editor' ? FileCode : params.host ? Server : Folder
+  const Icon = params.kind === 'terminal' ? SquareTerminal : params.kind === 'editor' ? FileCode : params.kind === 'git' ? GitBranch : params.host ? Server : Folder
   const unsaved = useSyncExternalStore(onDirty, () => isDirty(api.id))
   return (
     <div

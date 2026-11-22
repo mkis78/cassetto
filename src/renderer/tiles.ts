@@ -118,6 +118,7 @@ export function openEditor(api: DockviewApi, where: { path: string; host: string
 export function whereOf(p: IDockviewPanel | undefined): { path: string | null; host: string | null } {
   const q = p?.params as TileParams | undefined
   if (!q) return { path: null, host: null }
+  if (q.kind === 'git') return { path: q.cwd, host: null }
   if (q.kind === 'editor') return { path: q.path.slice(0, q.path.lastIndexOf('/')) || '/', host: q.host }
   if (q.kind === 'files' && q.archives?.length) return { path: q.archives[0].archive.slice(0, q.archives[0].archive.lastIndexOf('/')) || '/', host: q.host }
   return { path: q.kind === 'terminal' ? q.cwd : q.path, host: q.host }
@@ -140,6 +141,13 @@ export function openTerminal(api: DockviewApi, where: { cwd: string; host: strin
     params,
     position: ref ? { referencePanel: ref, direction: 'within' } : undefined
   })
+}
+
+// a repository in its own tab, next to `nextTo`
+export function openGit(api: DockviewApi, cwd: string, nextTo?: string): void {
+  const ref = nextTo ?? api.activePanel?.id
+  const params: TileParams = { kind: 'git', cwd }
+  api.addPanel({ id: crypto.randomUUID(), component: 'git', title: baseName(cwd) || '/', params, position: ref ? { referencePanel: ref, direction: 'within' } : undefined })
 }
 
 // through the tabs in layout order, group by group, wrapping around

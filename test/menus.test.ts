@@ -9,7 +9,9 @@ test('files menu depends on what was clicked', () => {
   expect(ids(filesMenu({ target: 'dir', remote: false }))).toEqual(['open', 'split:right', 'split:within', 'terminal', 'copyPath', 'favourite', 'newFile', 'newFolder', 'paste', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
   expect(ids(filesMenu({ target: 'background', remote: false }))).toEqual(['refresh', 'terminal', 'newFile', 'newFolder', 'paste'])
   expect(find(filesMenu({ target: 'file', remote: true }), 'delete')?.label).toBe('Elimina definitivamente…') // no trash over ssh
-  expect(find(filesMenu({ target: 'file', remote: false, count: 2 }), 'rename')?.enabled).toBe(false)
+  expect(find(filesMenu({ target: 'file', remote: false, count: 2 }), 'rename')).toMatchObject({ label: 'Rinomina 2 elementi…', enabled: true })
+  expect(find(filesMenu({ target: 'file', remote: false, count: 1 }), 'rename')).toMatchObject({ label: 'Rinomina', enabled: true })
+  expect(find(filesMenu({ target: 'file', remote: false, count: 0 }), 'rename')?.enabled).toBe(false)
   expect(find(filesMenu({ target: 'background', remote: false, paste: false }), 'paste')?.enabled).toBe(false)
 })
 

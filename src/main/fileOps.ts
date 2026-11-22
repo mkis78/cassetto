@@ -202,7 +202,8 @@ export function remoteOpScript(op: FileOp): string {
       return step(op.from, `mv -- ${q(op.from)} ${q(op.to)}`, op.to)
     case 'renameMany': {
       // the same two phases and rollback as renameMany above: $m items moved aside, $p placed, $b the one that failed
-      // (its error kept in $f), s<n> set when item n could not go back
+      // (its error kept in $f), s<n> set when item n could not go back; no items: no script (an empty `else` is a syntax error)
+      if (!op.items.length) return ''
       const tmp = temps(op.items, path.posix)
       const mv = (src: string, dest: string, done: string, fail: string) =>
         `if ${taken(dest)}; then ${fail}; e=${q(t(EXISTS))}; elif e=$(mv -- ${q(src)} ${q(dest)} 2>&1); then ${done}; else ${fail}; fi`

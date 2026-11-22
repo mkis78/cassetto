@@ -63,6 +63,7 @@ Cassetto works alongside the Finder or your Linux file manager rather than repla
 - **Four views**: list (sortable by name, size, date), icons, columns and gallery, with thumbnails.
 - **Create** an empty file or a folder right where you are, from the **⋯** menu, the right-click menu or the action bar.
 - **Move and copy by dragging**, within a panel or from one panel to another (hold Option to copy). Cut, copy and paste with Cmd+X/C/V; duplicate; rename with F2. Name clashes ask what to do: replace, skip or keep both.
+- **Batch rename**: select several items and press F2 to rename them all at once (replace text, add text, numbered format, change case) with a live preview; swapping names works, and one Cmd+Z undoes the whole batch.
 - **Trash** for local files, with a clear warning when something can only be deleted for good.
 - **Preview** text, Markdown, images, PDFs, video and audio with the space bar. PDFs, video and audio preview on your own computer only, not on SSH servers.
 - **Status bar** at the foot of each panel: what the folder holds and how much it weighs, the selected file's kind, size and date, the total of a folder on request, and the free space on the disk.

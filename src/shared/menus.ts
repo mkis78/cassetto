@@ -62,9 +62,10 @@ function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolea
     { id: 'newFolder', label: t('Nuova cartella') },
     { id: 'paste', label: t('Incolla'), enabled: !!c.paste }
   ]
+  const n = c.count ?? 1
   const edit = [
     sep,
-    { id: 'rename', label: t('Rinomina'), enabled: (c.count ?? 1) === 1 },
+    { id: 'rename', label: n > 1 ? t('Rinomina {n} elementi…', { n }) : t('Rinomina'), enabled: n >= 1 },
     { id: 'duplicate', label: t('Duplica') },
     { id: 'copy', label: t('Copia') },
     { id: 'cut', label: t('Taglia') },

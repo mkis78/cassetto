@@ -21,6 +21,7 @@ import { getSettings } from './settings'
 import { archiveStem, copyName, isArchive, isInside, nameError, okPrefix, rangeSelect } from '../shared/fileOps'
 import type { FileOp, OpResult } from '../shared/types'
 import { ConfirmDelete, ConflictDialog, type Choice } from './FileDialogs'
+import BatchRename from './BatchRename'
 import { popup } from './menuIcons'
 import { displayPath, insideArchive, parentOf, type ArchiveLevel } from '../shared/archives'
 
@@ -456,6 +457,28 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const ended = useRef(false)
   const close = () => ((ended.current = true), setEditing(null))
   const startRename = (full: string) => (ended.current = false, setEditing({ dir: dirOf(full), kind: 'rename', name: nameOf(full), from: full }))
+  // several at once: the dialog gets the names in list order and every name in the folder
+  const [batch, setBatch] = useState<{ dir: string; names: string[]; existing: string[] } | null>(null)
+  const startBatch = (paths: string[]) => {
+    const dir = dirOf(paths[0])
+    const c = columns.find(x => x.path === dir)
+    const order = c ? visible(c).map(e => child(dir, e.name)) : []
+    const at = (p: string) => (order.indexOf(p) + 1 || Infinity)
+    setBatch({ dir, names: [...paths].sort((a, b) => at(a) - at(b)).map(nameOf), existing: c?.entries.map(e => e.name) ?? [] })
+  }
+  const rename = (paths: string[]) => (paths.length > 1 ? startBatch(paths) : paths.length && startRename(paths[0]))
+  const applyBatch = async (pairs: { from: string; to: string }[]) => {
+    const { dir } = batch!
+    setBatch(null)
+    const items = pairs.map(p => ({ from: child(dir, p.from), to: child(dir, p.to) }))
+    const r = await window.api.fileOp(host, { op: 'renameMany', items })
+    report(r)
+    changed(api.id, [dir])
+    // done: the renamed items selected (the last one current); rolled back: the selection stays
+    if (!r.failed.length) (setPicked(new Set(items.map(i => i.to))), (anchor.current = items[items.length - 1].to))
+    await refreshTo(r.failed.length ? undefined : items[items.length - 1].to)
+    listRef.current?.focus()
+  }
   const busy = useRef(false) // a second Enter while the first is still on its way
   // from a blur nothing is left to type in: a refused name becomes a notice instead of a box nobody looks at
   const commitEdit = async (blur = false) => {
@@ -546,7 +569,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const keys = (e: React.KeyboardEvent) => {
     const { key } = e
     const cmd = e.metaKey || e.ctrlKey
-    if (key === 'F2' && sel) return void (e.preventDefault(), !readOnly && startRename(sel.path))
+    if (key === 'F2' && sel) return void (e.preventDefault(), !readOnly && rename(chosen()))
     if ((cmd && key === 'Backspace') || key === 'Delete') return void (e.preventDefault(), !readOnly && askDelete(chosen()))
     if (cmd && !e.shiftKey && key.toLowerCase() === 'z') return void (e.preventDefault(), !readOnly && runUndo())
     if (cmd && key.toLowerCase() === 'a') return void (e.preventDefault(), selectAll())
@@ -590,7 +613,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     if (choice === 'extract') return void extract(full)
     if (choice === 'newFile' || choice === 'newFolder') return startCreate(choice, full)
     if (choice === 'paste') return paste(full)
-    if (choice === 'rename') return startRename(full)
+    if (choice === 'rename') return rename(items)
     if (choice === 'duplicate') return transfer('copy', items, dir, { keepAll: true })
     if (choice === 'copy' || choice === 'cut') return void setClip({ host, paths: items, cut: choice === 'cut', ...(readOnly && { root: archives[archives.length - 1].root }) })
     if (choice === 'delete') return askDelete(items)
@@ -731,7 +754,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             ...(one && oneDir ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(containerApi, { path: one, host }, api.id, 'right'), icon: Columns2 }] : []),
             ...(one && oneDir ? [{ label: t('Aggiungi ai preferiti'), run: () => addToFavourites(host, one), icon: Star }] : []),
             ...(one && !oneDir ? [{ label: t('Modifica nell\'editor'), run: () => openEditor(containerApi, { path: one, host }, api.id), icon: FileCode }] : []),
-            ...(one ? [{ label: t('Rinomina'), hint: 'F2', run: () => startRename(one), icon: Pencil }] : []),
+            { label: one ? t('Rinomina') : t('Rinomina {n} elementi…', { n: items.length }), hint: 'F2', run: () => rename(items), icon: Pencil },
             { label: t('Duplica'), run: () => void transfer('copy', items, dirOf(items[0]), { keepAll: true }), icon: CopyPlus }
           ]),
           { label: t('Copia'), hint: 'Cmd+C', run: () => take(false), icon: Copy },
@@ -847,6 +870,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           onClose={() => (setTagging(null), listRef.current?.focus())}
         />
       )}
+      {batch && <BatchRename names={batch.names} existing={batch.existing} fold={fold} onApply={p => void applyBatch(p)} onClose={() => (setBatch(null), listRef.current?.focus())} />}
       {conflict && <ConflictDialog names={conflict.names} remote={!!host} onDone={conflict.done} />}
       {error ? (
         <div className="files-error">

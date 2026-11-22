@@ -35,6 +35,7 @@ describe('inverseOf', () => {
     expect(inv(null, { op: 'renameMany', items })).toEqual({ host: null, label: 'Rinominati 2 elementi', steps: [{ kind: 'renameMany', items: [{ from: '/d/b', to: '/d/a' }, { from: '/d/a', to: '/d/b' }] }] })
     expect(inv('h', { op: 'renameMany', items: items.slice(0, 1) })!.label).toBe('Rinominato «a»')
     expect(inv(null, { op: 'renameMany', items }, ['/d/a'])).toBeNull()
+    expect(inv(null, { op: 'renameMany', items: [] })).toBeNull()
   })
   test('move skips failed items and counts the rest', () => {
     const items = ['a', 'b', 'c'].map(n => ({ src: `/s/${n}`, dest: `/d/${n}`, replace: false }))

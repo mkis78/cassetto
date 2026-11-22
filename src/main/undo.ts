@@ -41,7 +41,7 @@ export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, 
       return failed.has(op.from) ? null : rec(t('Rinominato «{name}»', { name: basename(op.from) }), [{ kind: 'move', from: op.to, to: op.from }])
     case 'renameMany':
       // a failed batch was rolled back, so there is nothing to undo
-      return failed.size ? null : rec(named(op.items.length, basename(op.items[0]?.from ?? ''), 'Rinominato «{name}»', 'Rinominati {n} elementi'), [{ kind: 'renameMany', items: op.items.map(i => ({ from: i.to, to: i.from })) }])
+      return failed.size || !op.items.length ? null : rec(named(op.items.length, basename(op.items[0]?.from ?? ''), 'Rinominato «{name}»', 'Rinominati {n} elementi'), [{ kind: 'renameMany', items: op.items.map(i => ({ from: i.to, to: i.from })) }])
     case 'mkdir':
     case 'touch':
       return failed.has(op.path) ? null : rec(t('Creato «{name}»', { name: basename(op.path) }), created(op.path))

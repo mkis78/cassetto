@@ -256,7 +256,11 @@ describe.each([['local', local], ['remote script', sh]] as const)('renameMany, %
     expect(r.failed[1].error).not.toBe(off)
     expect(read(d)).toEqual({ a: 'a', c: 'c' })
   })
+  test('no items: nothing to do', async () => {
+    expect(await run({ op: 'renameMany', items: [] })).toEqual({ failed: [] })
+  })
 })
+test('renameMany with no items: an empty remote script', () => expect(remoteOpScript({ op: 'renameMany', items: [] })).toBe(''))
 
 const bsdtar = spawnSync('bsdtar', ['--version']).status === 0
 describe('extract', () => {

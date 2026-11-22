@@ -4,7 +4,7 @@ import { basicSetup } from 'codemirror'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, highlightTrailingWhitespace, highlightWhitespace, keymap } from '@codemirror/view'
 import { copyLineDown, deleteLine, indentWithTab, moveLineDown, moveLineUp, toggleComment } from '@codemirror/commands'
-import { defaultHighlightStyle, foldAll, indentUnit, LanguageDescription, syntaxHighlighting, unfoldAll } from '@codemirror/language'
+import { foldAll, indentUnit, LanguageDescription, unfoldAll } from '@codemirror/language'
 import { gotoLine, openSearchPanel, selectSelectionMatches } from '@codemirror/search'
 import { completeAnyWord } from '@codemirror/autocomplete'
 import { Bold, Code, Columns2, Heading1, Heading2, Heading3, Italic, Link as LinkIcon, List, ListChecks, ListOrdered, Quote, SquareCode, SquareCheck, Table, ArrowDownUp, CaseLower, CaseSensitive, CaseUpper, Eraser, FoldVertical, Hash, MessageSquareCode, Pilcrow, Save, Search, SquareSplitVertical, TextCursorInput, UnfoldVertical, WrapText } from 'lucide-react'
@@ -13,27 +13,11 @@ import { mdCodeBlock, mdLines, mdLink, mdTable, mdTask, mdWrap, insertLineAbove,
 import { detectIndent } from '../shared/textOps'
 import { renderMarkdown } from '../shared/markdown'
 import { languages } from '@codemirror/language-data'
-import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark'
+import { colours, look } from './cmTheme'
 import type { EditorParams } from '../shared/types'
-import { onSettings, resolvedTheme } from './settings'
+import { onSettings } from './settings'
 import { setDirty, setTileActions } from './tiles'
 import { t } from '../shared/i18n'
-
-// the editor's look from the app's colours, so it follows the light and dark themes by itself
-const look = EditorView.theme({
-  '&': { height: '100%', backgroundColor: 'var(--bg)', color: 'var(--fg)', fontSize: '13px' },
-  '.cm-scroller': { fontFamily: "'FiraCode Nerd Font', Menlo, monospace", lineHeight: '1.5' },
-  '.cm-gutters': { backgroundColor: 'var(--bar)', color: 'var(--muted)', borderRight: '1px solid var(--line)' },
-  '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--fg) 5%, transparent)' },
-  '.cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--fg) 8%, transparent)', color: 'var(--fg)' },
-  '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--fg-strong)' },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'color-mix(in srgb, var(--accent) 35%, transparent) !important' },
-  '.cm-panels': { backgroundColor: 'var(--panel)', color: 'var(--fg)', borderColor: 'var(--line2)' },
-  '.cm-panel input, .cm-panel button, .cm-textfield': { font: 'inherit', fontSize: '12px' },
-  '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, var(--yellow) 30%, transparent)' },
-  '.cm-tooltip': { backgroundColor: 'var(--panel)', border: '1px solid var(--line2)' }
-})
-const colours = () => syntaxHighlighting(resolvedTheme() === 'light' ? defaultHighlightStyle : oneDarkHighlightStyle)
 
 type Status = { line: number; col: number; cursors: number; selected: number }
 

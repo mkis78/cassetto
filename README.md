@@ -116,6 +116,16 @@ Colour and name your files with the **Finder's own tags**: they are stored in th
 
 Open any text file in a tab: an editor built on [CodeMirror 6](https://codemirror.net/), light and quick, with syntax highlighting for dozens of languages, find and replace, and Sublime Text's keys: Cmd+D next occurrence, Cmd+Ctrl+G all occurrences, Cmd+Shift+L one cursor per line, Cmd+Ctrl+↑↓ move lines, Cmd+Shift+D duplicate, Cmd+J join, F5 sort, Cmd+R go to a function or heading. Markdown files get a live preview beside the text and formatting keys (Cmd+B, Cmd+I, Cmd+E…). A dot on the tab marks unsaved changes; Cassetto asks before losing them and before overwriting a file changed on disk.
 
+### Compartments
+
+Optional parts of Cassetto, off by default so the app stays small. Turn them on in **Settings → Compartments** (Impostazioni → Scomparti); turning one off removes its menu entries and palette commands, and a tab already open shows a notice until you turn it back on.
+
+**Git** shows a repository in a tab, opened with **Open Git Here** from a folder or the command palette. It runs the `git` command on your machine (it must be installed), on local folders only; nothing is sent anywhere.
+
+- Branches, tags, remotes and stashes in a sidebar, and the commit graph beside it.
+- Stage, unstage, commit and amend; fetch, pull and push; stash, rebase and merge by dragging a branch onto another.
+- Side-by-side diffs of a changed file, in the working tree, in the stage or in a commit.
+
 ### Terminal
 
 **Open Terminal Here** (Cmd+Alt+T) opens your own shell in a tab, in the folder you are looking at. In a panel on an SSH server, the terminal opens on that server, in the same folder.

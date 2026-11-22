@@ -413,8 +413,8 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .git-diff-head .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-strong); direction: rtl; text-align: left; }
 .git-diff-head .what { color: var(--fg3); }
 .git-diff-head button { background: none; border: 0; color: var(--fg); cursor: pointer; display: inline-flex; }
-.git-diff-box { flex: 1; min-height: 0; }
-pre.git-diff-box { margin: 0; padding: 8px; overflow: auto; color: var(--fg); font: 12px Menlo, monospace; }
+.git-diff-box { flex: 1; min-height: 0; overflow: auto; }
+.git-diff-box .cm-editor { height: auto; }
 .git-empty-path { margin-top: 6px; color: var(--dim); font: 11px Menlo, monospace; word-break: break-all; }
 .files-gallery { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
 .files-gallery .files-preview { width: auto; flex: 1; min-height: 0; border-left: 0; }

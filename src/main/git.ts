@@ -300,6 +300,7 @@ export async function gitDiffTexts(cwd: string, d: DiffSpec): Promise<DiffTexts>
       ;[original, modified] = await Promise.all([blob(cwd, `HEAD:${d.oldPath ?? d.path}`), blob(cwd, `:${d.path}`)])
     } else {
       const work = await readLocal(resolve(cwd, d.path))
+      if (!work.ok && work.large) return { ok: false, error: t('File troppo grande per il diff') }
       ;[original, modified] = [await blob(cwd, `:${d.path}`), work.ok ? work.text : 'binary' in work && work.binary ? null : '']
     }
   } catch (e) {

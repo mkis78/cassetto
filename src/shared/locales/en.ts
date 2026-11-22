@@ -154,6 +154,8 @@ export const EN: Record<string, string> = {
   "solo i primi: restringi la ricerca": "only the first ones: narrow the search",
   "Nessun risultato per «{text}»": "No results for “{text}”",
   "File binario": "Binary file",
+  "File binario: nessun diff": "Binary file: no diff",
+  "File troppo grande per il diff": "File too large for a diff",
   "Vista": "View",
   "Nome": "Name",
   "Nascondi anteprima": "Hide Preview",

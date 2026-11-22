@@ -125,6 +125,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
   const toggle = (key: string) => setCollapsed(c => (c.includes(key) ? c.filter(k => k !== key) : [...c, key]))
 
   const seq = useRef(0)
+  const [tick, setTick] = useState(0) // bumps on each refresh, for the open diff
   const refresh = useCallback(async () => {
     const n = ++seq.current
     const [l, s, r, c] = await Promise.all([window.api.gitLog(cwd, { solo, hidden, limit }), window.api.gitStatus(cwd), window.api.gitRefs(cwd), window.api.gitChanges(cwd)])
@@ -133,6 +134,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
     setStatus(s)
     setRefs(r)
     setChanges(c)
+    setTick(n => n + 1)
   }, [cwd, solo, hidden, limit])
 
   // git runs only while the tab is on screen: a background tab costs nothing, and coming back shows the news at once
@@ -405,7 +407,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
         <GitSidebar refs={refs} current={current} collapsed={collapsed} onToggle={toggle} hidden={hidden} onToggleHidden={toggleHidden} selected={selected} onPick={sha => (select(sha), setHighlight(sha))} onOpen={checkout} onMenu={sideAction} onDrop={onDrop} onOpenWorktree={w => openFolder(containerApi, { path: w.path, host: null }, api.id)} />
         <div className="git-center">
           {diff ? (
-            <DiffView cwd={cwd} spec={diff} onClose={() => setDiff(null)} />
+            <DiffView cwd={cwd} spec={diff} tick={tick} onClose={() => setDiff(null)} />
           ) : (
             <>
               {(solo || hidden.length > 0) && (

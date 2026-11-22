@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { Changes, CommitInfo, DiffSpec, DiffTexts, FileChange, GitAction, GitRefs, Worktree } from '../shared/types'
 import { Archive, ChevronDown, ChevronRight, Cloud, Eye, EyeOff, Folder, FolderGit2, GitBranch, Minus, Plus, Search, Tag, Undo2, X } from 'lucide-react'
 import { filterTree, refTree, type RefNode } from '../shared/gitView'
 import { ICON } from './icons'
 import { isValidRefName } from '../shared/refName'
 import { locale, t } from '../shared/i18n'
+import { diffProblem } from '../shared/diffGuard'
+
+const DiffMerge = lazy(() => import('./DiffMerge'))
 
 // Branches are dragged around as JSON under our own type, so nothing else (files, text) is mistaken for one
 export const REF_MIME = 'application/x-cassetto-ref'
@@ -349,15 +352,17 @@ export function CommitDetails({ info, diff, onDiff, onCopy, onMenu }: { info: Co
 }
 
 // a file's two sides, read-only; it takes the graph's place until closed
-// ponytail: plain text of both sides, a real side-by-side diff replaces this body
-export function DiffView({ cwd, spec, onClose }: { cwd: string; spec: DiffSpec; onClose: () => void }) {
+// tick: the tile's refresh counter, so a working-tree diff follows the file; unchanged texts keep the editor as it is
+export function DiffView({ cwd, spec, tick, onClose }: { cwd: string; spec: DiffSpec; tick: number; onClose: () => void }) {
   const [texts, setTexts] = useState<DiffTexts | null>(null)
   useEffect(() => {
     let live = true
-    setTexts(null)
     window.api.gitDiff(cwd, spec).then(r => live && setTexts(r))
     return () => void (live = false)
-  }, [cwd, JSON.stringify(spec)])
+  }, [cwd, JSON.stringify(spec), tick])
+  // another file: forget the old one at once (a refresh keeps it until the new texts arrive)
+  useEffect(() => setTexts(null), [cwd, JSON.stringify(spec)])
+  const problem = texts?.ok ? diffProblem(texts.original, texts.modified) : null
   const what = spec.kind === 'commit' ? spec.sha.slice(0, 8) : spec.kind === 'staged' ? t('in stage') : t('modifiche')
   return (
     <div className="git-diff" onKeyDown={e => e.key === 'Escape' && onClose()}>
@@ -372,8 +377,12 @@ export function DiffView({ cwd, spec, onClose }: { cwd: string; spec: DiffSpec; 
         <div className="git-empty">{t('Caricamento…')}</div>
       ) : !texts.ok ? (
         <div className="git-empty">{texts.error}</div>
+      ) : problem ? (
+        <div className="git-empty">{problem === 'binary' ? t('File binario: nessun diff') : t('File troppo grande per il diff')}</div>
       ) : (
-        <pre className="git-diff-box">{`--- a/${spec.path}\n${texts.original}\n+++ b/${spec.path}\n${texts.modified}`}</pre>
+        <Suspense fallback={<div className="git-empty">{t('Caricamento…')}</div>}>
+          <DiffMerge name={spec.path.slice(spec.path.lastIndexOf('/') + 1)} original={texts.original} modified={texts.modified} />
+        </Suspense>
       )}
     </div>
   )

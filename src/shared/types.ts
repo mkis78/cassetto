@@ -191,7 +191,7 @@ export interface Listing {
 
 export type ListResult = { ok: true; listing: Listing } | { ok: false; error: string }
 
-export type ReadResult = { ok: true; text: string } | { ok: false; error: string; binary?: boolean }
+export type ReadResult = { ok: true; text: string } | { ok: false; error: string; binary?: boolean; large?: boolean }
 export type WriteResult = { ok: true } | { ok: false; error: string }
 
 // what the Files tile asks main to do; copy/move items carry their final destination path

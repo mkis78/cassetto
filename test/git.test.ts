@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { t } from '../src/shared/i18n'
 import { describe, expect, test } from 'vitest'
 import { buildGitArgs, logArgs, gitWorktrees, parseWorktrees, gitChanges, gitCommitInfo, gitDiffTexts, gitEnv, gitLog, gitRefs, gitRun, gitStatus, parseLog, parseNameStatus, parsePorcelain } from '../src/main/git'
 
@@ -243,6 +244,9 @@ describe('on a real repository', () => {
     expect(await gitChanges(d)).toEqual({ staged: [], unstaged: [{ path: 'a.txt', status: 'M' }, { path: 'new.txt', status: '?' }] })
     expect(await gitDiffTexts(d, { kind: 'unstaged', path: 'a.txt' })).toEqual({ ok: true, original: 'uno\n', modified: 'uno\ndue è\n' })
 
+    writeFileSync(join(d, 'big.txt'), Buffer.alloc(21 * 1024 * 1024, 97)) // over the editor limit: "too large", not "binary"
+    expect(await gitDiffTexts(d, { kind: 'unstaged', path: 'big.txt' })).toEqual({ ok: false, error: t('File troppo grande per il diff') })
+    rmSync(join(d, 'big.txt'))
     expect((await gitRun(d, { op: 'stage', paths: ['a.txt', 'new.txt'] })).ok).toBe(true)
     expect((await gitChanges(d)).staged.map(f => f.path)).toEqual(['a.txt', 'new.txt'])
     expect(await gitDiffTexts(d, { kind: 'staged', path: 'new.txt' })).toEqual({ ok: true, original: '', modified: 'nuovo\n' })

@@ -62,7 +62,7 @@ export const EDIT_LIMIT = 20 * 1024 * 1024
 
 // the first EDIT_LIMIT + 1 bytes of a file, as text for the editor
 export function toText(buf: Buffer): ReadResult {
-  if (buf.length > EDIT_LIMIT) return { ok: false, error: t("File troppo grande per l'editor (oltre {mb} MB)", { mb: EDIT_LIMIT / 1024 / 1024 }) }
+  if (buf.length > EDIT_LIMIT) return { ok: false, error: t("File troppo grande per l'editor (oltre {mb} MB)", { mb: EDIT_LIMIT / 1024 / 1024 }), large: true }
   if (buf.subarray(0, 8000).includes(0)) return { ok: false, error: t('File binario'), binary: true }
   return { ok: true, text: buf.toString('utf8') }
 }

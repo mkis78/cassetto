@@ -153,8 +153,9 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
     })
     if (rootRef.current) io.observe(rootRef.current)
     const tick = () => shown.current && !document.hidden && refresh()
-    // without git, every run of the macOS stub asks again to install the tools: coming back to the window is enough
-    const timer = noGit ? undefined : setInterval(tick, 10_000)
+    // without git, every run of the macOS stub asks again to install the tools (and cancelling refocuses us): only Riprova checks again
+    if (noGit) return () => io.disconnect()
+    const timer = setInterval(tick, 10_000)
     window.addEventListener('focus', tick)
     return () => (io.disconnect(), clearInterval(timer), window.removeEventListener('focus', tick))
   }, [refresh, !!status?.repo, noGit])
@@ -346,8 +347,9 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
   if (!status.repo)
     return (
       <div className="git-empty">
-        {noGit ? t('Serve git: su macOS installa gli strumenti da riga di comando (xcode-select --install), su Linux il pacchetto git.') : (status.message ?? t('Non è un repository git'))}
+        {noGit ? t('Serve git: su macOS installa gli strumenti da riga di comando (xcode-select --install), su Linux il pacchetto git.') : (status.message || t('Non è un repository git'))}
         <div className="git-empty-path">{cwd}</div>
+        {noGit && <button onClick={refresh}>{t('Riprova')}</button>}
       </div>
     )
 

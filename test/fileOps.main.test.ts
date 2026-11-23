@@ -295,7 +295,7 @@ test('a large remote batch travels on stdin, not argv, and runs whole', async ()
   expect(cmd).toMatch(/^s=\$\(cat\) && case \$s in \*'\n# end [0-9a-f]{16}'\)/)
   expect(o?.input).toContain(join(d, 'file 499'))
   expect(remoteSh(cmd).length).toBeLessThan(1000)
-})
+}, 30_000) // 500 files through sh: seconds on a slow CI runner
 
 test('a script cut short on stdin runs none of it', () => {
   const d = dir()

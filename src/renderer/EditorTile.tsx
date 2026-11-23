@@ -7,7 +7,7 @@ import { copyLineDown, deleteLine, indentWithTab, moveLineDown, moveLineUp, togg
 import { foldAll, indentUnit, LanguageDescription, unfoldAll } from '@codemirror/language'
 import { gotoLine, openSearchPanel, selectSelectionMatches } from '@codemirror/search'
 import { completeAnyWord } from '@codemirror/autocomplete'
-import { Bold, Code, Columns2, Heading1, Heading2, Heading3, Italic, Link as LinkIcon, List, ListChecks, ListOrdered, Quote, SquareCode, SquareCheck, Table, ArrowDownUp, CaseLower, CaseSensitive, CaseUpper, Eraser, FoldVertical, Hash, MessageSquareCode, Pilcrow, Save, Search, SquareSplitVertical, TextCursorInput, UnfoldVertical, WrapText } from 'lucide-react'
+import { Bold, Code, Columns2, Heading1, Heading2, Heading3, Italic, Link as LinkIcon, List, ListChecks, ListOrdered, Quote, SquareCode, SquareCheck, Table, ArrowDownUp, CaseLower, CaseSensitive, CaseUpper, Eraser, FoldVertical, Hash, MessageSquareCode, Pilcrow, Save, Search, Send, SquareSplitVertical, TextCursorInput, UnfoldVertical, WrapText } from 'lucide-react'
 import type { Command as PaletteCommand } from './Palette'
 import { mdCodeBlock, mdLines, mdLink, mdTable, mdTask, mdWrap, insertLineAbove, joinSelectedLines, lowerCase, sortSelectedLines, splitSelectionByLine, symbols, titleCaseWords, trimTrailingSpaces, upperCase } from './editorCommands'
 import { detectIndent } from '../shared/textOps'
@@ -16,7 +16,7 @@ import { languages } from '@codemirror/language-data'
 import { colours, look } from './cmTheme'
 import type { EditorParams } from '../shared/types'
 import { onSettings } from './settings'
-import { setDirty, setTileActions } from './tiles'
+import { claudeTarget, GOTO_LINE, sendToClaude, setDirty, setTileActions, takeLine } from './tiles'
 import { t } from '../shared/i18n'
 
 type Status = { line: number; col: number; cursors: number; selected: number }
@@ -66,7 +66,7 @@ const kindLabel = (kind: string) => {
 const openBar = () => window.dispatchEvent(new CustomEvent('cassetto:palette', { detail: 'bar' }))
 
 // a text file in its own tab: CodeMirror, Cmd+S saves, a dot on the tab while unsaved
-export default function EditorTile({ api, params }: IDockviewPanelProps<EditorParams>) {
+export default function EditorTile({ api, containerApi, params }: IDockviewPanelProps<EditorParams>) {
   const { host, path } = params
   const name = path.slice(path.lastIndexOf('/') + 1)
   const ref = useRef<HTMLDivElement>(null)
@@ -117,6 +117,26 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
   const saveRef = useRef(save)
   saveRef.current = save
 
+  // the file and the selected lines (or the cursor's), typed at a Claude's prompt; a remote or archive-cache path means nothing to it
+  const canSend = () => !host && !params.readOnly && !!claudeTarget(containerApi)
+  const sendClaude = () => {
+    const v = view.current
+    if (!v || !canSend()) return false
+    const { from, to } = v.state.selection.main
+    const [a, b] = [v.state.doc.lineAt(from).number, v.state.doc.lineAt(to).number]
+    sendToClaude(containerApi, path, b !== a ? `:${a}-${b}` : `:${a}`)
+    return true
+  }
+  const sendRef = useRef(sendClaude)
+  sendRef.current = sendClaude
+
+  // the cursor on a line asked for (a path clicked in a terminal), in the middle of the view
+  const goToLine = (v: EditorView, n: number) => {
+    const pos = v.state.doc.line(Math.min(Math.max(n, 1), v.state.doc.lines)).from
+    v.dispatch({ selection: EditorSelection.cursor(pos), effects: EditorView.scrollIntoView(pos, { y: 'center' }) })
+    v.focus()
+  }
+
   useEffect(() => {
     let live = true
     const theme = new Compartment()
@@ -137,7 +157,7 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
             EditorState.readOnly.of(!!params.readOnly), // a file inside an archive: Cassetto never writes into a cache
             sublime(() => void saveRef.current(), openBar),
             md ? markdownKeys(() => toggleRef.current.preview()) : [],
-            keymap.of([{ key: 'Alt-z', run: () => (toggleRef.current.wrap(), true) }]),
+            keymap.of([{ key: 'Alt-z', run: () => (toggleRef.current.wrap(), true) }, { key: 'Mod-Alt-c', run: () => sendRef.current() }]),
             indentUnit.of(ind.tabs ? '\t' : ' '.repeat(ind.size)),
             EditorState.tabSize.of(ind.size),
             // completions from the words already in the file too, in any language
@@ -161,6 +181,8 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
         })
       })
       view.current.focus()
+      const line = takeLine(api.id)
+      if (line) goToLine(view.current, line)
       if (md) setHtml(renderMarkdown(r.text))
       // the language by file name, loaded only now (each is its own small chunk)
       const desc = LanguageDescription.matchFilename(languages, name)
@@ -203,7 +225,8 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
       { label: t('Comprimi tutto'), run: run(foldAll), icon: FoldVertical },
       { label: t('Espandi tutto'), run: run(unfoldAll), icon: UnfoldVertical },
       { label: wrap ? t('Disattiva a capo automatico') : t('A capo automatico'), hint: 'Alt+Z', run: toggleWrap, icon: WrapText },
-      { label: whitespace ? t('Nascondi spazi') : t('Mostra spazi'), run: toggleSpace, icon: Pilcrow }
+      { label: whitespace ? t('Nascondi spazi') : t('Mostra spazi'), run: toggleSpace, icon: Pilcrow },
+      ...(canSend() ? [{ label: t('Invia a Claude'), hint: k('Cmd+Alt+C', 'Ctrl+Alt+C'), run: () => void sendClaude(), icon: Send }] : [])
     ].map(c => ({ ...c, group }))
     const mdCmds: PaletteCommand[] = !md
       ? []
@@ -236,6 +259,18 @@ export default function EditorTile({ api, params }: IDockviewPanelProps<EditorPa
   const actionsRef = useRef(editorActions)
   actionsRef.current = editorActions
   useEffect(() => setTileActions(api.id, () => actionsRef.current()), [api.id])
+
+  // a line asked for while the tab is open
+  useEffect(() => {
+    const on = (e: Event) => {
+      const v = view.current
+      if ((e as CustomEvent<string>).detail !== api.id || !v) return // not loaded yet: the load takes the line
+      const line = takeLine(api.id)
+      if (line) goToLine(v, line)
+    }
+    window.addEventListener(GOTO_LINE, on)
+    return () => window.removeEventListener(GOTO_LINE, on)
+  }, [api.id])
 
   // back to the tab: a file changed on disk while nothing here is unsaved comes in by itself
   useEffect(() => {

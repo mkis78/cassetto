@@ -126,6 +126,16 @@ Optional parts of Cassetto, off by default so the app stays small. Turn them on 
 - Stage, unstage, commit and amend; fetch, pull and push; stash, rebase and merge by dragging a branch onto another.
 - Side-by-side diffs of a changed file, in the working tree, in the stage or in a commit.
 
+**Claude Code** runs [Claude Code](https://claude.com/claude-code) sessions in tabs, opened with **Open Claude Here** from a local folder or **New Claude…** from the command palette. It needs the `claude` command installed (`curl -fsSL https://claude.ai/install.sh | bash`); local folders only. Cassetto never touches your Claude configuration: its status hooks are passed to each session on the command line.
+
+- **One tab per conversation**, resumed where it was when you reopen the app.
+- **Live status**: a dot on the tab while Claude waits for you or has finished, and a system notification when the window is in the background; click it to go to that tab. **Claude overview** lists every open Claude, the ones waiting first.
+- **Worktrees**: a new Claude can start on a new branch in its own folder, so several Claudes work on one repository without touching each other's files; double-click a worktree in the Git tab to open a Claude there.
+- **Accounts** (optional): with [claude-swap](https://github.com/realiti4/claude-swap) (`cswap`, `uv tool install claude-swap`) installed and its accounts set up, each tab can run on its own account, and the top bar shows each account's 5-hour and 7-day usage.
+- **Send to Claude**: right-click a file in a Files tab, a search result or a file in the Git tab, or press Cmd+Alt+C in the editor (with the selected lines), to type its path at the prompt of the Claude you used last.
+
+**Cmd+click a path** printed in any terminal (`src/app.ts:42`, `./notes.md`, an absolute path) to open it in the editor at that line; in a terminal on an SSH server it opens on that server. Paths are taken from the folder the terminal was opened in.
+
 ### Terminal
 
 **Open Terminal Here** (Cmd+Alt+T) opens your own shell in a tab, in the folder you are looking at. In a panel on an SSH server, the terminal opens on that server, in the same folder.
@@ -180,9 +190,9 @@ The keys below are for macOS. On Linux, Ctrl takes the place of Cmd; the window-
 |---|---|
 | Anywhere | Ctrl+Space action bar · Cmd+P go to a file · Cmd+Shift+P commands · Cmd+T new tab · Cmd+W close tab · Cmd+] / Cmd+[ next / previous tab · Cmd+Alt+T terminal here · Cmd+K SSH server · Cmd+, settings · Cmd+Alt+S sidebar: full / icons |
 | Files | ↑↓ (←→ in icons, gallery and columns) select · Return or Cmd+↓ open · Backspace or Cmd+↑ enclosing folder · Space preview · F2 rename · Cmd+C/X/V copy, cut, paste · Cmd+Backspace move to Trash · Cmd+Z undo · Cmd+A select all · Cmd+F search · a letter jumps to the next name |
-| Editor | Cmd+S save · Cmd+F find · Cmd+D next occurrence · Cmd+Ctrl+G all occurrences · Cmd+Shift+L split into lines · Cmd+Ctrl+↑↓ move line · Cmd+Shift+D duplicate line · Cmd+Shift+K delete line · Cmd+J join lines · F5 sort lines · Cmd+/ comment · Cmd+K Cmd+U/L upper / lower case · Ctrl+G go to line · Cmd+R go to symbol · Alt+Z word wrap |
+| Editor | Cmd+S save · Cmd+F find · Cmd+D next occurrence · Cmd+Ctrl+G all occurrences · Cmd+Shift+L split into lines · Cmd+Ctrl+↑↓ move line · Cmd+Shift+D duplicate line · Cmd+Shift+K delete line · Cmd+J join lines · F5 sort lines · Cmd+/ comment · Cmd+K Cmd+U/L upper / lower case · Ctrl+G go to line · Cmd+R go to symbol · Alt+Z word wrap · Cmd+Alt+C send to Claude |
 | Markdown | Cmd+Shift+V preview · Cmd+B bold · Cmd+I italic · Cmd+E code · Cmd+Alt+K link · Cmd+Alt+1/2/3 headings |
-| Terminal | Cmd+F search the output · Cmd+C/V copy, paste |
+| Terminal | Cmd+F search the output · Cmd+C/V copy, paste · Cmd+click a path: open it in the editor |
 
 ## Privacy and security
 

@@ -162,6 +162,7 @@ button { font: inherit; }
 .dot.working { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
 .dot.waiting { background: var(--yellow); }
 .dot.done { background: var(--accent); }
+.dot.idle { background: var(--muted); }
 @keyframes pulse { 50% { opacity: .3; } }
 .terminal-tile.attention { box-shadow: inset 0 0 0 2px var(--yellow); }
 .version { color: var(--dim); margin-right: 8px; font-size: 11px; }

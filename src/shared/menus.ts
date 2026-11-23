@@ -24,6 +24,8 @@ export const tabColor = (v: unknown): TabColor | undefined => (TAB_COLORS.includ
 export const shortcut = (key: string, platform: string): string => (platform === 'darwin' ? `CmdOrCtrl+${key}` : `Ctrl+Shift+${key}`)
 
 const sep: MenuItem = { label: '', separator: true }
+// "Invia a Claude": the path typed at the prompt of a Claude tab (renderer/tiles sendToClaude)
+const sendClaude = (on: boolean): MenuItem[] => (on ? [{ id: 'sendClaude', label: t('Invia a Claude') }] : [])
 
 // The "Tag" submenu: each known tag ticked when every selected item has it; ids "tag:<index in known>".
 // dots: each colour's hex (index 0, no colour, is a ring)
@@ -39,8 +41,9 @@ export function tagsMenu(c: { known: { name: string; color: number }[]; has: (na
 }
 
 // count: entries selected; paste: the internal clipboard holds something (any host: a paste across hosts is a transfer);
-// tags: the Tag submenu, for local files; git: "Apri Git qui" (the compartment is on); openWith: the apps for the selected local files (undefined: no submenu)
-export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; readOnly?: boolean; git?: boolean }): MenuItem[] {
+// tags: the Tag submenu, for local files; git: "Apri Git qui", claude: "Apri Claude qui" (their compartment is on); openWith: the apps for the selected local files (undefined: no submenu);
+// sendClaude: "Invia a Claude", a Claude tab can take the path
+export function filesMenu(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; readOnly?: boolean; git?: boolean; claude?: boolean; sendClaude?: boolean }): MenuItem[] {
   const all = filesMenuAll(c)
   return c.readOnly ? keepOnly(all, id => ['open', 'copy', 'copyPath', 'terminal', 'refresh'].includes(id) || id.startsWith('openWith:')) : all
 }
@@ -55,7 +58,7 @@ function keepOnly(items: MenuItem[], ok: (id: string) => boolean): MenuItem[] {
   return kept.filter((i, n) => !i.separator || (n > 0 && n < kept.length - 1 && !kept[n - 1].separator))
 }
 
-function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; git?: boolean }): MenuItem[] {
+function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolean; count?: number; paste?: boolean; tags?: MenuItem; openWith?: AppInfo[]; archive?: boolean; git?: boolean; claude?: boolean; sendClaude?: boolean }): MenuItem[] {
   const create = [
     sep,
     { id: 'newFile', label: t('Nuovo file') },
@@ -72,13 +75,14 @@ function filesMenuAll(c: { target: 'file' | 'dir' | 'background'; remote: boolea
     sep,
     { id: 'delete', label: c.remote ? t('Elimina definitivamente…') : t('Sposta nel Cestino') }
   ]
-  const git = c.git && !c.remote ? [{ id: 'git', label: t('Apri Git qui') }] : []
-  const split = [sep, { id: 'split:right', label: t('Apri in un pannello a destra') }, { id: 'split:within', label: t('Apri in un nuovo tab') }, { id: 'terminal', label: t('Apri terminale qui') }, ...git]
+  const here = [...(c.git && !c.remote ? [{ id: 'git', label: t('Apri Git qui') }] : []), ...(c.claude && !c.remote ? [{ id: 'claude', label: t('Apri Claude qui') }] : [])]
+  const split = [sep, { id: 'split:right', label: t('Apri in un pannello a destra') }, { id: 'split:within', label: t('Apri in un nuovo tab') }, { id: 'terminal', label: t('Apri terminale qui') }, ...here]
   const tag = c.tags ? [sep, c.tags] : []
+  const copyPath = [{ id: 'copyPath', label: t('Copia percorso') }, ...sendClaude(!!c.sendClaude && !c.remote)]
   const apps: MenuItem[] = c.openWith && !c.remote ? [{ label: t('Apri con'), submenu: [...c.openWith.map((a, i) => ({ id: `openWith:${i}`, label: a.name, image: a.icon })), ...(c.openWith.length ? [sep] : []), { id: 'openWith:other', label: t('Altra app…') }] }] : []
-  if (c.target === 'file') return [{ id: 'open', label: c.remote ? t('Apri nell\'editor') : t('Apri') }, ...apps, ...(c.archive ? [{ id: 'extract', label: t('Estrai qui') }] : []), ...(c.remote ? [] : [{ id: 'edit', label: t('Modifica nell\'editor') }]), { id: 'copyPath', label: t('Copia percorso') }, ...tag, ...edit]
-  if (c.target === 'dir') return [{ id: 'open', label: t('Apri') }, ...split, { id: 'copyPath', label: t('Copia percorso') }, { id: 'favourite', label: t('Aggiungi ai preferiti') }, ...tag, ...create, ...edit]
-  return [{ id: 'refresh', label: t('Aggiorna') }, { id: 'terminal', label: t('Apri terminale qui') }, ...git, ...create]
+  if (c.target === 'file') return [{ id: 'open', label: c.remote ? t('Apri nell\'editor') : t('Apri') }, ...apps, ...(c.archive ? [{ id: 'extract', label: t('Estrai qui') }] : []), ...(c.remote ? [] : [{ id: 'edit', label: t('Modifica nell\'editor') }]), ...copyPath, ...tag, ...edit]
+  if (c.target === 'dir') return [{ id: 'open', label: t('Apri') }, ...split, ...copyPath, { id: 'favourite', label: t('Aggiungi ai preferiti') }, ...tag, ...create, ...edit]
+  return [{ id: 'refresh', label: t('Aggiorna') }, { id: 'terminal', label: t('Apri terminale qui') }, ...here, ...create]
 }
 
 // a terminal tab
@@ -108,12 +112,13 @@ export function viewMenu(c: { view: 'list' | 'icons' | 'columns' | 'gallery'; hi
 }
 
 // the files tile's "Azioni" button: on the folder shown
-export function actionsMenu(c: { ready: boolean; paste: boolean; readOnly?: boolean; git?: boolean }): MenuItem[] {
+export function actionsMenu(c: { ready: boolean; paste: boolean; readOnly?: boolean; git?: boolean; claude?: boolean }): MenuItem[] {
   const all: MenuItem[] = [
     { id: 'newFile', label: t('Nuovo file'), enabled: c.ready },
     { id: 'newFolder', label: t('Nuova cartella'), enabled: c.ready },
     { id: 'terminal', label: t('Apri terminale qui'), enabled: c.ready },
     ...(c.git ? [{ id: 'git', label: t('Apri Git qui'), enabled: c.ready }] : []),
+    ...(c.claude ? [{ id: 'claude', label: t('Apri Claude qui'), enabled: c.ready }] : []),
     { id: 'paste', label: t('Incolla'), enabled: c.ready && c.paste },
     sep,
     { id: 'refresh', label: t('Aggiorna') }
@@ -122,10 +127,11 @@ export function actionsMenu(c: { ready: boolean; paste: boolean; readOnly?: bool
 }
 
 // a search hit: `line` when it comes from a content search
-export function searchMenu(c: { line: boolean }): MenuItem[] {
+export function searchMenu(c: { line: boolean; sendClaude?: boolean }): MenuItem[] {
   return [
     { id: 'open', label: t('Apri') },
     { id: 'copyPath', label: c.line ? t('Copia percorso:riga') : t('Copia percorso') },
+    ...sendClaude(!!c.sendClaude),
     sep,
     { id: 'folder', label: t('Apri cartella') }
   ]
@@ -239,19 +245,20 @@ export const stashMenu = (): MenuItem[] => [
 ]
 
 // a file in the changes panel
-export function changeMenu(c: { staged: boolean; untracked: boolean }): MenuItem[] {
+export function changeMenu(c: { staged: boolean; untracked: boolean; sendClaude?: boolean }): MenuItem[] {
   return [
     c.staged ? { id: 'unstage', label: t('Togli dallo stage') } : { id: 'stage', label: t('Metti in stage') },
     ...(c.staged ? [] : [{ id: 'discard', label: c.untracked ? t('Elimina il file…') : t('Scarta le modifiche…') }]),
     sep,
-    ...fileRefMenu()
+    ...fileRefMenu(c)
   ]
 }
 
 // a file named in a commit or in the working tree
-export const fileRefMenu = (): MenuItem[] => [
+export const fileRefMenu = (c: { sendClaude?: boolean } = {}): MenuItem[] => [
   { id: 'open', label: t("Apri nell'editor") },
-  { id: 'copyPath', label: t('Copia percorso') }
+  { id: 'copyPath', label: t('Copia percorso') },
+  ...sendClaude(!!c.sendClaude)
 ]
 
 // dragging branch `source` onto `target`: a branch, a remote branch or a remote (remoteName)

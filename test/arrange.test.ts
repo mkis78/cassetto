@@ -52,3 +52,12 @@ test('one panel gathers every tab', () => {
   const one = arrange(two, 'one', 'c', newId)
   expect(one.grid.root).toEqual({ type: 'branch', size: 800, data: [{ type: 'leaf', size: 1200, data: { views: ['a', 'b', 'c'], activeView: 'c', id: '1' } }] })
 })
+
+test('a Claude tab copied into a new cell starts its own conversation', () => {
+  const l = three()
+  l.panels.b = { id: 'b', contentComponent: 'claude', title: 'b', params: { kind: 'claude', cwd: '/b', sessionId: 's1', started: true } }
+  const out = arrange(l, 'grid', 'b', () => 'new')
+  expect(out.panels.new.params).toMatchObject({ kind: 'claude', cwd: '/b', started: false })
+  expect(out.panels.new.params?.sessionId).not.toBe('s1')
+  expect(out.panels.b.params).toMatchObject({ sessionId: 's1', started: true })
+})

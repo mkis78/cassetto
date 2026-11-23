@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
-import { FileCode, Folder, GitBranch, Plus, Server, SquareTerminal, X } from 'lucide-react'
+import { Asterisk, FileCode, Folder, GitBranch, Plus, Server, SquareTerminal, X } from 'lucide-react'
 import type { TileParams } from '../shared/types'
 import { TAB_COLORS, tabColor, tabMenu, type TabColor } from '../shared/menus'
 import { ICON } from './icons'
-import { closeTiles, focusTile, isDirty, onDirty, openFolder, whereOf } from './tiles'
+import { closeTiles, focusTile, isDirty, markClaudeSeen, onDirty, openFolder, whereOf } from './tiles'
+import { claudeStore, useClaudeState } from './claudeStore'
 import { popup } from './menuIcons'
 import { t } from '../shared/i18n'
 
@@ -42,7 +43,17 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
     if (v !== null) save({ name: v.trim() || undefined }) // an empty name goes back to the folder's
     focusTile(containerApi.getPanel(api.id))
   }
-  const Icon = params.kind === 'terminal' ? SquareTerminal : params.kind === 'editor' ? FileCode : params.kind === 'git' ? GitBranch : params.host ? Server : Folder
+  // a Claude's finished turn is seen once its tab is in front with the window focused
+  const claude = params.kind === 'claude'
+  useEffect(() => {
+    if (!claude) return
+    const seen = () => api.isActive && document.hasFocus() && (claudeStore.dispatch(api.id, 'focus'), markClaudeSeen(api.id))
+    const d = api.onDidActiveChange(seen)
+    window.addEventListener('focus', seen)
+    return () => (d.dispose(), window.removeEventListener('focus', seen))
+  }, [api])
+  const state = useClaudeState(api.id)
+  const Icon = params.kind === 'claude' ? Asterisk : params.kind === 'terminal' ? SquareTerminal : params.kind === 'editor' ? FileCode : params.kind === 'git' ? GitBranch : params.host ? Server : Folder
   const unsaved = useSyncExternalStore(onDirty, () => isDirty(api.id))
   return (
     <div
@@ -61,7 +72,8 @@ export default function Tab({ api, params, containerApi }: IDockviewPanelHeaderP
         if (choice === 'closeOthers') closeTiles(others)
       }}
     >
-      <Icon {...ICON} className="tile-icon files" />
+      {claude && (state === 'waiting' || state === 'done') && <span className={'dot ' + state} title={state === 'waiting' ? t('ti aspetta') : t('finito')} />}
+      <Icon {...ICON} className={'tile-icon ' + (claude ? 'claude' : 'files')} />
       {renaming ? (
         <input
           className="tab-rename"

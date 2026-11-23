@@ -6,7 +6,7 @@ import { Archive, ArchiveRestore, Search, ArrowDown, ArrowDownToLine, ArrowUp, A
 import { TagDialog } from './GitDialogs'
 import { ChangesPanel, CommitDetails, DiffView, dragRef, dropRef, GitSidebar, NameDialog, type DragRef, type DropTarget, type SideItem } from './GitPanels'
 import { ICON } from './icons'
-import { openEditor, openFolder, openTerminal } from './tiles'
+import { claudeTarget, openClaude, openEditor, openFolder, openTerminal, sendToClaude } from './tiles'
 import { listKey } from '../shared/listNav'
 import { matchCommit, nextMatch } from '../shared/gitView'
 import { changeMenu, commitMenu, dropMenu, fileRefMenu, refMenu, stashMenu, worktreeMenu } from '../shared/menus'
@@ -84,6 +84,7 @@ export default function GitTile(props: IDockviewPanelProps<GitParams>) {
 
 function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
   const { cwd } = params
+  const claudeOn = useModule('claude') // a worktree's double click opens a Claude there
   const [log, setLog] = useState<Commit[]>([])
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [refs, setRefs] = useState<GitRefs>({ branches: [], remoteBranches: [], tags: [], remotes: [], stashes: [], worktrees: [] })
@@ -302,16 +303,17 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
   const refAction = (choice: string | null, f: FileChange) => {
     if (choice === 'open') edit(f.path)
     if (choice === 'copyPath') window.api.clipboardWrite(inRepo(f.path))
+    if (choice === 'sendClaude') sendToClaude(containerApi, inRepo(f.path))
   }
   const fileAction = async (_e: React.MouseEvent, f: FileChange, staged: boolean) => {
-    const choice = await popup(changeMenu({ staged, untracked: f.status === '?' }))
+    const choice = await popup(changeMenu({ staged, untracked: f.status === '?', sendClaude: !!claudeTarget(containerApi) }))
     if (choice === 'stage') run('stage', { op: 'stage', paths: [f.path] })
     if (choice === 'unstage') run('unstage', { op: 'unstage', paths: f.oldPath ? [f.oldPath, f.path] : [f.path] })
     if (choice === 'discard' && confirm(f.status === '?' ? t('Eliminare {path}? Il file non è tracciato da git: non si potrà recuperare.', { path: f.path }) : t('Scartare le modifiche a {path}? Non si potranno recuperare.', { path: f.path })))
       run('discard', { op: 'discard', paths: [f.path], untracked: f.status === '?' })
     refAction(choice, f)
   }
-  const commitFileAction = async (_e: React.MouseEvent, f: FileChange) => refAction(await popup(fileRefMenu()), f)
+  const commitFileAction = async (_e: React.MouseEvent, f: FileChange) => refAction(await popup(fileRefMenu({ sendClaude: !!claudeTarget(containerApi) })), f)
 
   const logRef = useRef<HTMLDivElement>(null)
   useEffect(() => void logRef.current?.querySelector('.git-row.sel')?.scrollIntoView({ block: 'nearest' }), [selected])
@@ -412,7 +414,7 @@ function Repo({ params, api, containerApi }: IDockviewPanelProps<GitParams>) {
         </div>
       )}
       <div className="git-body">
-        <GitSidebar refs={refs} current={current} collapsed={collapsed} onToggle={toggle} hidden={hidden} onToggleHidden={toggleHidden} selected={selected} onPick={sha => (select(sha), setHighlight(sha))} onOpen={checkout} onMenu={sideAction} onDrop={onDrop} onOpenWorktree={w => openFolder(containerApi, { path: w.path, host: null }, api.id)} />
+        <GitSidebar refs={refs} current={current} collapsed={collapsed} onToggle={toggle} hidden={hidden} onToggleHidden={toggleHidden} selected={selected} onPick={sha => (select(sha), setHighlight(sha))} onOpen={checkout} onMenu={sideAction} onDrop={onDrop} claude={claudeOn} onOpenWorktree={w => (claudeOn ? openClaude(containerApi, { cwd: w.path }, api.id) : openFolder(containerApi, { path: w.path, host: null }, api.id))} />
         <div className="git-center">
           {diff ? (
             <DiffView key={JSON.stringify(diff)} cwd={cwd} spec={diff} tick={tick} onClose={() => setDiff(null)} />

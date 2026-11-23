@@ -1,0 +1,11 @@
+Accounts:
+  1: a@example.com [Acme] (active)
+     ├ 5h:  14%   resets 20:19         in 1h 10m
+     └ 7d:   4%   resets Nov 3 03:59   in 6d 8h
+
+  2: team@example.com [Acme]
+     ├ 5h:   0%
+     └ 7d:  25%   resets Nov 2 07:00   in 5d 11h · 8m ago
+
+Running instances:
+  ● CLI   ~/PROGETTI_PERSONALI/terminale  (1 session)

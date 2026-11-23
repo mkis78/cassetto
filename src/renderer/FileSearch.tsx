@@ -18,12 +18,13 @@ type Props = {
   onFolder: (dir: string) => void // "Apri cartella": the files tile goes there
   onOpen: (full: string) => void
   shownPath: (full: string) => string // Copia percorso: the path as the user sees it (host, archive boundary)
+  toClaude: () => ((full: string, line?: number) => void) | null // Invia a Claude, when a Claude tab can take it now
 }
 
 export const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/')) || '/'
 
 // recursive search below `cwd`, here or on an ssh host: results of the files tile while its search box has text
-export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, onOpen, shownPath }: Props) {
+export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, onOpen, shownPath, toClaude }: Props) {
   // a result with the query and the run it answers; it grows while hits stream in
   const [answer, setAnswer] = useState<{ n: number; q: SearchQuery; r: SearchResult } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -55,8 +56,9 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
 
 
   const fullOf = (hit: SearchHit) => `${cwd.replace(/\/$/, '')}/${hit.path}`
-  const act = (choice: string, hit: SearchHit) => {
+  const act = (choice: string, hit: SearchHit, send?: ReturnType<typeof toClaude>) => {
     const full = fullOf(hit)
+    if (choice === 'sendClaude') return send?.(full, hit.line)
     if (choice === 'open') return onOpen(full)
     if (choice === 'copyPath') return void window.api.clipboardWrite(shownPath(full) + (hit.line ? `:${hit.line}` : ''))
     if (choice === 'folder') return onFolder(dirOf(full))
@@ -64,8 +66,9 @@ export default function FileSearch({ tileId, host, cwd, q, onSelect, onFolder, o
   const menu = async (e: React.SyntheticEvent, hit: SearchHit) => {
     e.preventDefault()
     e.stopPropagation()
-    const choice = await popup(searchMenu({ line: !!hit.line }))
-    if (choice) act(choice, hit)
+    const send = toClaude()
+    const choice = await popup(searchMenu({ line: !!hit.line, sendClaude: !!send }))
+    if (choice) act(choice, hit, send)
   }
   const more = (hit: SearchHit) => (
     <button className="search-more" title={t('Azioni')} onClick={e => menu(e, hit)}>

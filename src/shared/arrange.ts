@@ -41,6 +41,8 @@ export function arrange(layout: Layout, preset: Preset, active: string | undefin
     const id = newId()
     // a fresh tab on the same folder and view; not the copied tab's own name or colour
     const { name: _n, color: _c, ...params } = model.params ?? {}
+    // a Claude copy is a new conversation: two tabs resuming one session would fight over it
+    if (params.kind === 'claude') Object.assign(params, { sessionId: crypto.randomUUID(), started: false })
     panels[id] = { ...model, id, params, title: model.title }
     ids.push(id)
   }

@@ -120,6 +120,19 @@ test('git here: in local files menus right after the terminal, only when the com
   expect(ids(actionsMenu({ ready: true, paste: false }))).not.toContain('git')
 })
 
+test('claude here: in local files menus right after git (or the terminal), only when the compartment is on', () => {
+  const after = (m: MenuItem[], prev: string) => ids(m).indexOf('claude') - ids(m).indexOf(prev)
+  expect(ids(filesMenu({ target: 'background', remote: false, claude: true }))).toContain('claude')
+  expect(ids(filesMenu({ target: 'background', remote: true, claude: true }))).not.toContain('claude')
+  expect(ids(filesMenu({ target: 'background', remote: false }))).not.toContain('claude')
+  expect(after(filesMenu({ target: 'background', remote: false, claude: true }), 'terminal')).toBe(1)
+  expect(after(filesMenu({ target: 'background', remote: false, git: true, claude: true }), 'git')).toBe(1)
+  expect(after(filesMenu({ target: 'dir', remote: false, git: true, claude: true }), 'git')).toBe(1)
+  expect(after(actionsMenu({ ready: true, paste: false, git: true, claude: true }), 'git')).toBe(1)
+  expect(after(actionsMenu({ ready: true, paste: false, claude: true }), 'terminal')).toBe(1)
+  expect(ids(filesMenu({ target: 'dir', remote: false, claude: true, readOnly: true }))).not.toContain('claude') // inside an archive
+})
+
 test('commit menu: branches on the commit, nothing to merge into when detached, no cherry-pick of a merge', () => {
   const m = commitMenu({ current: 'main', branches: ['main', 'feat', 'origin/feat'], merge: false })
   expect(ids(m)).toEqual(['branch', 'tag', 'checkout:feat', 'checkout:origin/feat', 'merge:feat', 'rebase:feat', 'merge:origin/feat', 'rebase:origin/feat', 'cherryPick', 'revert', 'Reset main qui', 'reset:soft', 'reset:mixed', 'reset:hard', 'copySha'])
@@ -141,6 +154,19 @@ test('git ref, stash, file and worktree menus', () => {
   expect(ids(changeMenu({ staged: true, untracked: false }))).toEqual(['unstage', 'open', 'copyPath'])
   expect(ids(fileRefMenu())).toEqual(['open', 'copyPath'])
   expect(ids(worktreeMenu())).toEqual(['folder', 'copyPath', 'removeWorktree'])
+})
+
+test('send to Claude: after Copia percorso on local files, search hits and git files, only when a Claude can take it', () => {
+  expect(ids(filesMenu({ target: 'file', remote: false, sendClaude: true }))).toEqual(['open', 'edit', 'copyPath', 'sendClaude', 'rename', 'duplicate', 'copy', 'cut', 'delete'])
+  expect(ids(filesMenu({ target: 'dir', remote: false, sendClaude: true }))).toContain('sendClaude')
+  expect(ids(filesMenu({ target: 'background', remote: false, sendClaude: true }))).not.toContain('sendClaude')
+  expect(ids(filesMenu({ target: 'file', remote: true, sendClaude: true }))).not.toContain('sendClaude')
+  expect(ids(filesMenu({ target: 'file', remote: false, sendClaude: true, readOnly: true }))).not.toContain('sendClaude') // inside an archive
+  expect(find(filesMenu({ target: 'file', remote: false, sendClaude: true }), 'sendClaude')?.label).toBe('Invia a Claude')
+  expect(ids(searchMenu({ line: true, sendClaude: true }))).toEqual(['open', 'copyPath', 'sendClaude', 'folder'])
+  expect(ids(changeMenu({ staged: true, untracked: false, sendClaude: true }))).toEqual(['unstage', 'open', 'copyPath', 'sendClaude'])
+  expect(ids(fileRefMenu({ sendClaude: true }))).toEqual(['open', 'copyPath', 'sendClaude'])
+  expect(ids(fileRefMenu({ sendClaude: false }))).toEqual(['open', 'copyPath'])
 })
 
 test('drop menu: what dragging a branch onto something offers', () => {

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppInfo, AppState, Changes, Commit, CommitInfo, DiffSpec, DiffTexts, FileOp, GitAction, GitRefs, GitResult, GitStatus, LogView, ListResult, OpResult, Place, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, Volume, WriteResult } from '../shared/types'
+import type { Account, AppInfo, AppState, Changes, ClaudeEvent, ClaudeParams, Commit, CommitInfo, DiffSpec, DiffTexts, FileOp, GitAction, GitRefs, GitResult, GitStatus, LogView, ListResult, OpResult, Place, Preview, ReadResult, SearchHit, SearchQuery, SearchResult, UndoResult, Volume, WriteResult } from '../shared/types'
 import type { MenuItem } from '../shared/menus'
 import type { Disk } from '../shared/status'
 import type { Tag } from '../shared/tags'
@@ -23,12 +23,20 @@ function router<A extends unknown[]>(ch: string) {
 }
 
 const api = {
-  ptyCreate: (id: string, p: { host: string | null; cwd: string }, cols: number, rows: number): Promise<void> => ipcRenderer.invoke('pty:create', id, p, cols, rows),
+  ptyCreate: (id: string, p: { host: string | null; cwd: string } | ClaudeParams, cols: number, rows: number): Promise<void> => ipcRenderer.invoke('pty:create', id, p, cols, rows),
   ptyWrite: (id: string, d: string) => ipcRenderer.send('pty:write', id, d),
+  ptyCwd: (id: string): Promise<string | null> => ipcRenderer.invoke('pty:cwd', id),
   ptyResize: (id: string, cols: number, rows: number) => ipcRenderer.send('pty:resize', id, cols, rows),
   ptyKill: (id: string) => ipcRenderer.send('pty:kill', id),
   onPtyData: router<[string]>('pty:data'),
-  onPtyExit: router<[number]>('pty:exit'),
+  // the 2nd argument: a resumed Claude session was not found, start a new one (claude tabs only)
+  onPtyExit: router<[number, boolean?]>('pty:exit'),
+  claudeAccounts: (): Promise<{ accounts: Account[]; error: string | null }> => ipcRenderer.invoke('claude:accounts'),
+  claudeTools: (fresh?: boolean): Promise<{ claude: boolean; cswap: boolean }> => ipcRenderer.invoke('claude:tools', fresh),
+  onClaudeEvent: (cb: (tileId: string, e: ClaudeEvent) => void) => listen<[string, ClaudeEvent]>('claude:event')(cb),
+  onClaudeReveal: (cb: (tileId: string) => void) => listen<[string]>('claude:reveal')(cb),
+  notify: (title: string, body: string, tileId: string) => ipcRenderer.send('notify', title, body, tileId),
+  gitWorktreeAdd: (cwd: string, branch: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> => ipcRenderer.invoke('git:worktreeAdd', cwd, branch),
   clipboardRead: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
   platform: process.platform,
   pickFolder: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('pickFolder', defaultPath),

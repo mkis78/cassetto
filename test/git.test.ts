@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { t } from '../src/shared/i18n'
 import { describe, expect, test } from 'vitest'
-import { buildGitArgs, logArgs, gitWorktrees, parseWorktrees, gitChanges, gitCommitInfo, gitDiffTexts, gitEnv, gitLog, gitRefs, gitRun, gitStatus, parseLog, parseNameStatus, parsePorcelain } from '../src/main/git'
+import { buildGitArgs, logArgs, gitWorktreeAdd, gitWorktrees, parseWorktrees, gitChanges, gitCommitInfo, gitDiffTexts, gitEnv, gitLog, gitRefs, gitRun, gitStatus, parseLog, parseNameStatus, parsePorcelain } from '../src/main/git'
 
 const US = '\x1f'
 const ALL = { solo: null, hidden: [], limit: 500 }
@@ -313,6 +313,23 @@ describe('on a real repository', () => {
     expect((await gitRun(d, { op: 'worktreeRemove', path: wt, force: false })).ok).toBe(false)
     expect((await gitRun(d, { op: 'worktreeRemove', path: wt, force: true })).ok).toBe(true)
     expect((await gitWorktrees(d)).map(w => w.branch)).toEqual(['main'])
+  })
+
+  test('worktreeAdd: a new branch in its own folder next to the repository', async () => {
+    const d = realpathSync(repo())
+    commit(d, 'a.txt', 'a\n', 'first')
+    const r = await gitWorktreeAdd(d, 'claude/task-1')
+    expect(r).toEqual({ ok: true, path: `${d}-worktrees/claude-task-1` })
+    if (!r.ok) return
+    expect((await gitStatus(r.path)).branch).toBe('claude/task-1')
+    expect((await gitRefs(d)).worktrees).toMatchObject([{ path: r.path, branch: 'claude/task-1' }])
+    // asked again from inside the worktree: still next to the main checkout
+    expect(await gitWorktreeAdd(r.path, 'claude/task-2')).toEqual({ ok: true, path: `${d}-worktrees/claude-task-2` })
+    expect((await gitWorktreeAdd(d, 'claude/task-1')).ok).toBe(false) // the branch exists
+    expect((await gitWorktreeAdd(d, '-x')).ok).toBe(false)
+    expect((await gitWorktreeAdd(tmpdir(), 'x')).ok).toBe(false) // not a repository
+    for (const w of (await gitWorktrees(d)).slice(1)) rmSync(w.path, { recursive: true, force: true })
+    rmSync(`${d}-worktrees`, { recursive: true, force: true })
   })
 
   test('a branch with a slash is listed and can be checked out', async () => {

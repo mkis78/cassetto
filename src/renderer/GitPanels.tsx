@@ -101,6 +101,7 @@ export function GitSidebar(p: {
   onMenu: (e: React.MouseEvent, item: SideItem) => void
   onDrop: (source: DragRef, target: DropTarget) => void
   onOpenWorktree: (w: Worktree) => void
+  claude?: boolean // double click on a worktree opens Claude there, not a Files tab
 }) {
   const { refs, current } = p
   const [q, setQ] = useState('')
@@ -210,7 +211,7 @@ export function GitSidebar(p: {
       </Section>
       {worktrees.length > 0 && (
         <Section title={t('Worktree')} count={worktrees.length} {...sec('Worktree')}>
-          {worktrees.map(w => row(`wt${w.path}`, w.sha, { worktree: w }, <><FolderGit2 size={12} /><span className="name">{w.branch ?? t('(HEAD staccato)')}</span></>, { title: `${w.path}\n${t('doppio clic: apri la cartella in un tab')}`, onDoubleClick: () => p.onOpenWorktree(w) }))}
+          {worktrees.map(w => row(`wt${w.path}`, w.sha, { worktree: w }, <><FolderGit2 size={12} /><span className="name">{w.branch ?? t('(HEAD staccato)')}</span></>, { title: `${w.path}\n${p.claude ? t('doppio clic: apri Claude qui') : t('doppio clic: apri la cartella in un tab')}`, onDoubleClick: () => p.onOpenWorktree(w) }))}
         </Section>
       )}
       <Section title={t('Stash')} count={stashes.length} {...sec('Stash')}>

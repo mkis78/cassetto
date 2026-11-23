@@ -1,11 +1,11 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, session, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, protocol, session, shell as electronShell, type MenuItemConstructorOptions } from 'electron'
 import { pathToFileURL } from 'node:url'
 import { APP_ORIGIN, appFile } from './appProtocol'
 import { execFile } from 'node:child_process'
 import { mkdir, readFile, rm, stat, statfs } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AppState, DiffSpec, FileOp, GitAction, LogView, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
+import type { AppState, ClaudeEvent, ClaudeParams, DiffSpec, FileOp, GitAction, LogView, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
 import { parseOpOutput, runOpLocal, runOpRemote, sshOp } from './fileOps'
 import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
 import { trashItems } from './platform/trash'
@@ -17,15 +17,19 @@ import { copyRemote, sshRunner } from './copyRemote'
 import { spawnSide, transfer } from './transfer'
 import type { JobItem, JobSpec } from '../shared/jobs'
 import { isInside } from '../shared/fileOps'
-import { isValidHost, listRemote, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
+import { isValidHost, listRemote, onPath, listSshHosts, previewRemote, readRemote, shQuote, sshOptions, sshRun, writeRemote } from './ssh'
 import { spawn as spawnPty } from 'node-pty'
-import { existsSync, renameSync } from 'node:fs'
+import { existsSync, readdirSync, renameSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { PtyManager, terminalLaunch } from './terminal'
 import { editTags, folderTags, runTagSearch } from './tags'
 import { canSelfUpdate, checkRelease, installRelease, type Release } from './release'
 import type { Tag } from '../shared/tags'
-import { gitChanges, gitCommitInfo, gitDiffTexts, gitLog, gitRefs, gitRun, gitStatus } from './git'
+import { gitChanges, gitCommitInfo, gitDiffTexts, gitLog, gitRefs, gitRun, gitStatus, gitWorktreeAdd } from './git'
+import { claudeLaunch, claudePath, forgetClaudePath, shouldFallbackToNewSession, useCswap } from './claude'
+import { procCwd } from './platform/procCwd'
+import { pidAlive, staleSockets, startEventServer, tryRm } from './claudeEvents'
+import { listAccounts } from './cswap'
 import { listLocal, previewLocal, readLocal, writeLocal } from './files'
 import { MediaTokens, serveMedia } from './mediaPreview'
 import { ArchiveCaches, openLocal, ownedCache, remoteCacheDir, remoteOpenScript, sweep } from './archives'
@@ -136,21 +140,81 @@ handle(
 handle('clipboard:write', (text: string) => clipboard.writeText(text))
 handle('clipboard:read', () => clipboard.readText())
 
-// terminal tabs: one pty each, its output and exit sent to the window
-handle('pty:create', (id: string, p: { host: string | null; cwd: string }, cols: number, rows: number) => {
-  if (!p.host && !existsSync(p.cwd)) throw new Error(t('Cartella non trovata: {path}', { path: p.cwd })) // node-pty would report only "exit 1"
+// the hooks of the Claudes we launch report here; short path on purpose: unix socket paths are limited to 104 chars on macOS
+// per-user dir where there is one (Linux /run/user/<uid>; macOS's tmpdir already is): /tmp is shared
+const sockDir = process.env.XDG_RUNTIME_DIR ?? tmpdir()
+const sock = join(sockDir, `cassetto-${process.pid}.sock`)
+let events: Promise<() => void> | null = null // started with the first Claude, not for those who never use one
+const startEvents = () =>
+  (events ??= (async () => {
+    for (const f of staleSockets(readdirSync(sockDir), pidAlive)) tryRm(join(sockDir, f))
+    return startEventServer(sock, (id: string, e: ClaudeEvent) => win?.webContents.send('claude:event', id, e))
+  })().catch(err => {
+    events = null
+    console.error('event server not started: no Claude status', err) // the terminal still works
+    return () => {}
+  }))
+const toolsPath = () => claudePath(shell, homedir())
+const starting = new Set<string>() // Claude tiles waiting for the account list: a kill meanwhile cancels the spawn
+const notifications = new Set<Notification>()
+
+// where a local terminal's process is now (follows the user's cd), for the paths it prints
+handle('pty:cwd', (id: string) => {
+  const pid = ptys.pid(id)
+  return pid ? procCwd(pid) : null
+})
+
+// terminal tabs and Claude tabs: one pty each, its output and exit sent to the window
+handle('pty:create', async (id: string, p: { host: string | null; cwd: string } | ClaudeParams, cols: number, rows: number) => {
+  const claude = 'kind' in p && p.kind === 'claude'
+  if ((claude || !(p as { host: string | null }).host) && !existsSync(p.cwd)) throw new Error(t('Cartella non trovata: {path}', { path: p.cwd })) // node-pty would report only "exit 1"
+  let launch
+  let tail = '' // last output, to recognise why claude exited
+  if (claude) {
+    starting.add(id)
+    await startEvents()
+    const path = await toolsPath()
+    const has = onPath('cswap', path)
+    const cswap = useCswap(has, has ? await listAccounts(path) : { accounts: [], error: null })
+    if (!starting.delete(id)) return // killed while listing accounts
+    launch = claudeLaunch(p, { sock, tileId: id, cswap, path })
+  } else launch = terminalLaunch(p as { host: string | null; cwd: string }, { shell, home: homedir(), sshOptions })
   ptys.create(
     id,
-    terminalLaunch(p, { shell, home: homedir(), sshOptions }),
+    launch,
     cols,
     rows,
-    d => win?.webContents.send('pty:data', id, d),
-    code => win?.webContents.send('pty:exit', id, code)
+    d => {
+      if (claude) tail = (tail + d).slice(-2000)
+      win?.webContents.send('pty:data', id, d)
+    },
+    code => win?.webContents.send('pty:exit', id, code, claude && shouldFallbackToNewSession(p, code, tail))
   )
 })
 on('pty:write', (id: string, d: string) => ptys.write(id, d))
 on('pty:resize', (id: string, c: number, r: number) => ptys.resize(id, c, r))
-on('pty:kill', (id: string) => ptys.kill(id))
+on('pty:kill', (id: string) => (starting.delete(id), ptys.kill(id)))
+handle('claude:accounts', async () => listAccounts(await toolsPath()))
+// fresh: the PATH is read again from the login shell (Riprova, the new-Claude dialog), for a tool installed since
+handle('claude:tools', async (fresh?: boolean) => {
+  if (fresh === true) forgetClaudePath()
+  const path = await toolsPath()
+  return { claude: onPath('claude', path), cswap: onPath('cswap', path) }
+})
+// a Notification is not kept alive by Electron: hold it, or macOS may collect it and the click does nothing
+on('notify', (title: string, body: string, tileId: string) => {
+  if (typeof title !== 'string' || typeof body !== 'string' || typeof tileId !== 'string' || !Notification.isSupported()) return
+  const n = new Notification({ title, body })
+  notifications.add(n)
+  n.on('click', () => {
+    win?.show()
+    win?.focus()
+    win?.webContents.send('claude:reveal', tileId)
+    notifications.delete(n)
+  })
+  n.on('close', () => notifications.delete(n))
+  n.show()
+})
 // a local listing carries the Finder tags of what it holds
 handle('files:list', async (host: string | null, path: string | null) => {
   if (host) return listRemote(host, path)
@@ -167,6 +231,7 @@ handle('files:read', (host: string | null, path: string) => (host ? readRemote(h
 handle('files:write', (host: string | null, path: string, text: string) => (typeof text !== 'string' ? { ok: false, error: t('testo non valido') } : host ? writeRemote(host, path, text) : writeLocal(path, text)))
 handle('git:log', (cwd: string, v: LogView) => gitLog(cwd, v))
 handle('git:status', (cwd: string) => gitStatus(cwd))
+handle('git:worktreeAdd', (cwd: string, branch: string) => gitWorktreeAdd(cwd, branch))
 handle('git:run', (cwd: string, a: GitAction) => gitRun(cwd, a))
 handle('git:changes', (cwd: string) => gitChanges(cwd))
 handle('git:commit', (cwd: string, sha: string) => gitCommitInfo(cwd, sha))
@@ -513,6 +578,8 @@ app.on('before-quit', e => {
     return
   }
   ptys.killAll()
+  events?.then(stop => stop())
+  events = null
 })
 let cleaned = false
 // after the windows closed: a window's beforeunload (unsaved editor) may still cancel the quit in before-quit

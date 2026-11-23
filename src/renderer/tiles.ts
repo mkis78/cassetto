@@ -3,6 +3,9 @@ import type { TileParams } from '../shared/types'
 import type { Command } from './Palette'
 import { t } from '../shared/i18n'
 import { isEnded, type JobSpec } from '../shared/jobs'
+import { focusTerminal, isTerminal } from './terminals'
+import { moduleOn } from './modules'
+import { getSettings } from './settings'
 
 // what each tab offers the action bar, asked for when the bar opens (so it sees the selection of that moment)
 const actions = new Map<string, () => Command[]>()
@@ -102,23 +105,34 @@ window.addEventListener('beforeunload', e => {
   })
 })
 
-// a file opens once: asking again shows its tab instead of a second copy
-export function openEditor(api: DockviewApi, where: { path: string; host: string | null; readOnly?: boolean }, nextTo?: string): void {
+// the line an editor tab is asked to show: taken by the tab once its text is in (GOTO_LINE: an open tab, now)
+const wantLine = new Map<string, number>()
+export const GOTO_LINE = 'cassetto:gotoLine'
+export const takeLine = (id: string) => {
+  const l = wantLine.get(id)
+  wantLine.delete(id)
+  return l
+}
+
+// a file opens once: asking again shows its tab instead of a second copy; line: where to put the cursor
+export function openEditor(api: DockviewApi, where: { path: string; host: string | null; readOnly?: boolean; line?: number }, nextTo?: string): void {
   const same = api.panels.find(p => {
     const q = p.params as TileParams | undefined
     return q?.kind === 'editor' && q.path === where.path && q.host === where.host
   })
-  if (same) return void (same.api.setActive(), focusTile(same))
+  const id = same?.id ?? crypto.randomUUID()
+  if (where.line) wantLine.set(id, where.line)
+  if (same) return void (same.api.setActive(), focusTile(same), where.line && window.dispatchEvent(new CustomEvent(GOTO_LINE, { detail: id })))
   const ref = nextTo ?? api.activePanel?.id
   const params: TileParams = { kind: 'editor', host: where.host, path: where.path, ...(where.readOnly && { readOnly: true }) }
-  api.addPanel({ id: crypto.randomUUID(), component: 'editor', title: baseName(where.path), params, position: ref ? { referencePanel: ref, direction: 'within' } : undefined })
+  api.addPanel({ id, component: 'editor', title: baseName(where.path), params, position: ref ? { referencePanel: ref, direction: 'within' } : undefined })
 }
 
 // where a tab is: the folder it shows (inside an archive: the folder holding it, never a cache), or the one its terminal was opened in
 export function whereOf(p: IDockviewPanel | undefined): { path: string | null; host: string | null } {
   const q = p?.params as TileParams | undefined
   if (!q) return { path: null, host: null }
-  if (q.kind === 'git') return { path: q.cwd, host: null }
+  if (q.kind === 'git' || q.kind === 'claude') return { path: q.cwd, host: null }
   if (q.kind === 'editor') return { path: q.path.slice(0, q.path.lastIndexOf('/')) || '/', host: q.host }
   if (q.kind === 'files' && q.archives?.length) return { path: q.archives[0].archive.slice(0, q.archives[0].archive.lastIndexOf('/')) || '/', host: q.host }
   return { path: q.kind === 'terminal' ? q.cwd : q.path, host: q.host }
@@ -148,6 +162,40 @@ export function openGit(api: DockviewApi, cwd: string, nextTo?: string): void {
   const ref = nextTo ?? api.activePanel?.id
   const params: TileParams = { kind: 'git', cwd }
   api.addPanel({ id: crypto.randomUUID(), component: 'git', title: baseName(cwd) || '/', params, position: ref ? { referencePanel: ref, direction: 'within' } : undefined })
+}
+
+// a Claude Code session in its own tab, next to `nextTo`; name: the tab's, else the folder's
+export function openClaude(api: DockviewApi, where: { cwd: string; account?: string; name?: string }, nextTo?: string): void {
+  const ref = nextTo ?? api.activePanel?.id
+  const params: TileParams = { kind: 'claude', cwd: where.cwd, sessionId: crypto.randomUUID(), started: false, ...(where.account && { account: where.account }), ...(where.name && { name: where.name }) }
+  api.addPanel({ id: crypto.randomUUID(), component: 'claude', title: baseName(where.cwd) || '/', params, position: ref ? { referencePanel: ref, direction: 'within' } : undefined })
+}
+
+// the Claude tab looked at last (still open), where text sent to Claude goes
+let lastClaude: string | null = null
+export const markClaudeSeen = (id: string) => void (lastClaude = id)
+export const lastClaudeTile = (): string | null => (lastClaude && isTerminal(lastClaude) ? lastClaude : null)
+
+// the Claude tab "Invia a Claude" types into: the one looked at last, else any running in this window; none while the compartment is off
+export function claudeTarget(api: DockviewApi): string | null {
+  if (!moduleOn(getSettings(), 'claude')) return null
+  const last = lastClaudeTile()
+  if (last && api.getPanel(last)) return last
+  return api.panels.find(p => (p.params as TileParams | undefined)?.kind === 'claude' && isTerminal(p.id))?.id ?? null
+}
+
+// quoted only when the path needs it, so "src/a.ts:42" stays readable
+const shellArg = (s: string) => (/^[\w./@:+-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`)
+
+// types a file reference at the Claude's prompt (relative to its folder when inside it), without sending it; lines: ":12" or ":12-20"
+export function sendToClaude(api: DockviewApi, path: string, lines = ''): void {
+  const id = claudeTarget(api)
+  if (!id) return
+  const cwd = (api.getPanel(id)?.params as { cwd?: string } | undefined)?.cwd?.replace(/\/$/, '')
+  const ref = cwd && path.startsWith(cwd + '/') ? path.slice(cwd.length + 1) : path
+  window.api.ptyWrite(id, shellArg(ref + lines) + ' ')
+  api.getPanel(id)?.api.setActive()
+  focusTerminal(id)
 }
 
 // through the tabs in layout order, group by group, wrapping around

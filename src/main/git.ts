@@ -366,3 +366,20 @@ export async function gitWorktrees(cwd: string): Promise<Worktree[]> {
   const r = await git(cwd, ['worktree', 'list', '--porcelain'])
   return r.ok ? parseWorktrees(r.raw) : []
 }
+
+// A new branch from HEAD, checked out in its own folder next to the repository ("repo-worktrees/feat-x"),
+// so a second Claude can work on the same project without touching the first one's files
+export async function gitWorktreeAdd(cwd: string, branch: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  try {
+    ref(branch)
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+  const root = await git(cwd, ['rev-parse', '--show-toplevel'])
+  if (!root.ok) return { ok: false, error: t('Non è un repository git') }
+  // the main checkout, also when asked from inside another worktree
+  const main = (await gitWorktrees(cwd))[0]?.path ?? root.stdout
+  const path = `${main}-worktrees/${branch.replace(/\//g, '-')}`
+  const r = await git(cwd, ['worktree', 'add', '-b', branch, '--', path], 60_000)
+  return r.ok ? { ok: true, path } : { ok: false, error: r.output }
+}

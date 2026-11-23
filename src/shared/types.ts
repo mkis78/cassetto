@@ -12,7 +12,11 @@ export type EditorParams = { kind: 'editor'; host: string | null; path: string; 
 // a repository's branches, commits and changes (an optional compartment, see renderer/modules);
 // the rest is how the tab was left: sidebar shown, closed sections, the graph narrowed to one ref or without some (full refnames)
 export type GitParams = { kind: 'git'; cwd: string; name?: string; color?: TabColor; sidebar?: boolean; collapsed?: string[]; solo?: string | null; hidden?: string[]; refsWidth?: number }
-export type TileParams = FilesParams | TerminalParams | EditorParams | GitParams
+export type ClaudeParams = { kind: 'claude'; cwd: string; sessionId: string; started: boolean; account?: string; name?: string; color?: TabColor }
+export type TileParams = FilesParams | TerminalParams | EditorParams | GitParams | ClaudeParams
+// what Claude's hooks report about a session
+export type ClaudeEvent = 'prompt' | 'tool' | 'permission' | 'stop'
+export interface Account { slot: number; email: string; label: string; active: boolean; usage5h: number | null; usage7d: number | null }
 
 export interface SearchQuery {
   text: string
@@ -64,7 +68,7 @@ export interface Settings {
   barShortcut?: string // the action bar's, an accelerator (shared/shortcuts); unset: DEFAULT_BAR
   ignoredConflict?: string // the shortcut whose clash with the system the user chose to keep
   favStyle?: 'list' | 'tiles' // the sidebar's Favourites and Places; unset: list
-  modules?: { git?: boolean } // optional compartments, off until switched on
+  modules?: { git?: boolean; claude?: boolean } // optional compartments, off until switched on
 }
 
 // git (the Git tile)

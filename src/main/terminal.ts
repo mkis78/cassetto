@@ -7,6 +7,7 @@ export interface Launch {
   file: string
   args: string[]
   cwd: string
+  env?: Record<string, string> // over the inherited environment
 }
 
 // a terminal tab: a login shell in `cwd`, here or on `host` (then `cwd` is a folder there)
@@ -41,7 +42,7 @@ export class PtyManager {
 
   create(id: string, l: Launch, cols: number, rows: number, onData: (d: string) => void, onExit: (code: number) => void): void {
     this.kill(id)
-    const p = this.spawn(l.file, l.args, { name: 'xterm-256color', cols, rows, cwd: l.cwd, env: ptyEnv(process.env) })
+    const p = this.spawn(l.file, l.args, { name: 'xterm-256color', cols, rows, cwd: l.cwd, env: { ...ptyEnv(process.env), ...l.env } })
     this.ptys.set(id, p)
     p.onData(onData)
     p.onExit(({ exitCode }) => {
@@ -50,6 +51,10 @@ export class PtyManager {
       this.ptys.delete(id)
       onExit(exitCode)
     })
+  }
+
+  pid(id: string): number | undefined {
+    return this.ptys.get(id)?.pid
   }
 
   write(id: string, data: string): void {

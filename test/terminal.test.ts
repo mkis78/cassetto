@@ -69,3 +69,10 @@ test('the environment drops what the app inherited from Electron, npm and Claude
   const env = ptyEnv({ PATH: '/bin', HOME: '/h', CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'x', ELECTRON_RENDERER_URL: 'http://x', npm_config_prefix: '/p', UNDEF: undefined })
   expect(env).toEqual({ PATH: '/bin', HOME: '/h', TERM_PROGRAM: 'cassetto' })
 })
+
+test('a launch env goes over the inherited one', () => {
+  let env: Record<string, string> = {}
+  const m = new PtyManager(((_f: string, _a: string[], o: { env: Record<string, string> }) => ((env = o.env), { onData() {}, onExit() {} })) as never)
+  m.create('a', { ...launch, env: { CASSETTO_TILE: 't' } }, 80, 24, noop, noop)
+  expect(env).toMatchObject({ CASSETTO_TILE: 't', TERM_PROGRAM: 'cassetto' })
+})

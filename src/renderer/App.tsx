@@ -3,19 +3,24 @@ import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewRe
 import type { AppState, Favourite, TileParams } from '../shared/types'
 import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
-import TerminalTile from './TerminalTile'
+import TerminalTile, { ClaudeTile } from './TerminalTile'
+import NewClaudeDialog from './NewClaudeDialog'
+import { claudeStore } from './claudeStore'
+import { needsAttention } from '../shared/claudeState'
 import GitTile from './GitTile'
-import { SET_MODULE, useModule, type ModuleId } from './modules'
+import AccountsBar from './AccountsBar'
+import ClaudeOverview from './ClaudeOverview'
+import { moduleOn, SET_MODULE, useModule, type ModuleId } from './modules'
 import { destroyTerminal } from './terminals'
 import Tab, { NewTabButton } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
 import Sidebar from './Sidebar'
 import Transfers from './Transfers'
-import { ChevronDown, GitBranch, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
+import { Asterisk, ChevronDown, GitBranch, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, FAVOURITE, focusTile, openFolder, openGit, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
+import { closeTiles, cycleTile, FAVOURITE, focusTile, openClaude, openFolder, openGit, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout } from '../shared/menus'
@@ -32,7 +37,7 @@ const EditorTile = (props: React.ComponentProps<typeof Editor>) => (
     <Editor {...props} />
   </Suspense>
 )
-const components = { files: FilesTile, terminal: TerminalTile, editor: EditorTile, git: GitTile }
+const components = { files: FilesTile, terminal: TerminalTile, editor: EditorTile, git: GitTile, claude: ClaudeTile }
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null)
@@ -40,6 +45,8 @@ export default function App() {
   const [palette, setPalette] = useState<{ mode: 'files' | 'commands' | 'bar' } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const gitOn = useModule('git')
+  const claudeOn = useModule('claude')
+  const [claudeDialog, setClaudeDialog] = useState<{ cwd?: string } | null>(null)
   const [undoLabel, setUndoLabel] = useState<string | null>(null) // asked for when the bar opens; paletteActions is synchronous
   const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null)
   // a newer release, offered in the top bar; while it installs, a banner says how far it is
@@ -123,6 +130,30 @@ export default function App() {
   }
   const toggleSidebar = () => setState(s => s && { ...s, sidebar: { ...s.sidebar, collapsed: !s.sidebar?.collapsed } })
   const home = () => dv.current && openFolder(dv.current, { path: getSettings().filesHome ?? null, host: null })
+
+  // a notification clicked or the overview: that tab in front
+  const revealTile = (id: string) => {
+    const p = dv.current?.getPanel(id)
+    p?.api.setActive()
+    focusTile(p)
+  }
+
+  // Claude hooks move its tab's state; a turn that ends or stops for you while the window is in the background notifies
+  useEffect(() => {
+    const offs = [
+      window.api.onClaudeEvent((id, e) => {
+        const p = dv.current?.getPanel(id)
+        const prev = claudeStore.get(id)
+        claudeStore.dispatch(id, e, document.hasFocus() && dv.current?.activePanel?.id === id)
+        const next = claudeStore.get(id)
+        const q = p?.params as TileParams | undefined
+        if (next !== prev && needsAttention(next) && !document.hasFocus() && moduleOn(getSettings(), 'claude')) window.api.notify(q?.name ?? p?.title ?? 'Claude', next === 'waiting' ? t('Claude aspetta te') : t('Claude ha finito'), id)
+      }),
+      // a notification clicked: its tab in front
+      window.api.onClaudeReveal(revealTile)
+    ]
+    return () => offs.forEach(off => off())
+  }, [])
 
   useEffect(() => {
     const cycle = (step: number) => cycleTile(dv.current ?? undefined, step)
@@ -252,6 +283,7 @@ export default function App() {
       { label: t('Nuovo terminale qui'), hint: 'Cmd+Alt+T', run: newTerminal, icon: SquareTerminal },
       { label: t('Connetti a server SSH…'), hint: 'Cmd+K', run: () => setSshDialog(true), icon: Server },
       ...(gitOn ? [{ label: t('Apri Git qui'), run: gitHere, icon: GitBranch }] : []),
+      ...(claudeOn ? [{ label: t('Nuovo Claude…'), run: () => setClaudeDialog({ cwd: tileFolder(p) ?? undefined }), icon: Asterisk }, { label: t('Panoramica dei Claude'), run: () => window.dispatchEvent(new Event('cassetto:claude-overview')), icon: Asterisk }] : []),
       ...(p && dv.current ? [{ label: t('Apri in un pannello a destra'), run: () => openFolder(dv.current!, whereOf(p), p.id, 'right'), icon: Columns2 }] : []),
       { label: t('Tab successivo'), hint: 'Cmd+]', run: () => cycleTile(dv.current ?? undefined, 1), icon: SquareArrowRight },
       { label: t('Tab precedente'), hint: 'Cmd+[', run: () => cycleTile(dv.current ?? undefined, -1), icon: SquareArrowLeft },
@@ -272,6 +304,8 @@ export default function App() {
     <div className={`app platform-${window.api.platform}`}>
       <div className="topbar">
         <div className="spacer" />
+        {claudeOn && <AccountsBar />}
+        {claudeOn && <ClaudeOverview api={dv.current} onReveal={revealTile} />}
         <Transfers />
         <button className="topbar-btn" title={t('Disposizione e layout salvati')} onClick={layoutChoice}>
           <LayoutDashboard {...ICON} /> {lastLayout || t('Layout')} <ChevronDown size={12} strokeWidth={2} />
@@ -321,6 +355,13 @@ export default function App() {
           taken={layouts.map(l => l.name)}
           onSave={name => (setSaving(false), saveLayout(name))}
           onCancel={() => setSaving(false)}
+        />
+      )}
+      {claudeDialog && (
+        <NewClaudeDialog
+          initialCwd={claudeDialog.cwd}
+          onConfirm={w => (setClaudeDialog(null), dv.current && openClaude(dv.current, w))}
+          onCancel={() => setClaudeDialog(null)}
         />
       )}
       {sshDialog && (

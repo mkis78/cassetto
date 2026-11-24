@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
 import type { AppState, Favourite, TileParams, Workspace } from '../shared/types'
 import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
 import TerminalTile, { ClaudeTile } from './TerminalTile'
 import NewClaudeDialog from './NewClaudeDialog'
-import { claudeStore } from './claudeStore'
+import { claudeStore, subscribe } from './claudeStore'
 import { needsAttention } from '../shared/claudeState'
 import GitTile from './GitTile'
 import AccountsBar from './AccountsBar'
@@ -388,6 +388,7 @@ export default function App() {
               setWsDrag(null)
             }}
           >
+            <AttentionDot layout={w.layout} />
             {renaming === w.id ? (
               <input
                 autoFocus
@@ -494,6 +495,16 @@ const WS_MIME = 'application/x-cassetto-workspace'
 const dropSide = (wss: { id: string }[], drag: { from: string; over?: string } | null, id: string, i: number) => {
   if (!drag || drag.over !== id || drag.from === id) return ''
   return wss.findIndex(w => w.id === drag.from) < i ? ' drop-after' : ' drop-before'
+}
+
+// on a workspace's tab: one of its Claudes waits for you, or finished and was not looked at yet
+function AttentionDot({ layout }: { layout: unknown }) {
+  const ids = Object.keys((layout as { panels?: object } | null)?.panels ?? {})
+  const state = useSyncExternalStore(subscribe, () => {
+    const all = ids.map(id => claudeStore.get(id))
+    return all.includes('waiting') ? 'waiting' : all.includes('done') ? 'done' : ''
+  })
+  return state ? <span className={'dot ' + state} title={state === 'waiting' ? t('Un Claude ti aspetta') : t('Un Claude ha finito')} /> : null
 }
 
 // the name to save the open tabs under; a taken name asks before replacing that layout

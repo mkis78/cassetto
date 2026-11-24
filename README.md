@@ -72,6 +72,10 @@ Cassetto works alongside the Finder or your Linux file manager rather than repla
 
 Double-click a `.zip`, `.tar`, `.tar.gz` (and the other tar formats), `.7z` or `.rar` to **open it as a folder**, locally or on an SSH server: browse, preview, search and open what's inside without leaving Cassetto. It is read-only: take files out by dragging them to another panel or the sidebar, or with copy and paste (always a copy; the archive is never changed). Leave it like any folder (up from its top, Home, the sidebar). To unpack it all instead, right-click → **Extract Here**. On Linux, `.7z` and `.rar` need `bsdtar` (libarchive-tools), `7z` (p7zip) or `unrar` installed; macOS reads them out of the box.
 
+### Workspaces
+
+Named tabs at the top of the window, each with its own tabs and panels: one for a project, one for a server, one for your downloads. **+** adds one, **Cmd+1…9** (Ctrl+Shift+1…9 on Linux) switches, a double-click renames, right-click gives it a colour or closes it, and dragging reorders them. They come back as they were when Cassetto reopens. The **Layout** button arranges and saves the workspace in front.
+
 ### Sidebar
 
 A sidebar with the places you go to most. **Cmd+Alt+S** (Ctrl+Alt+S on Linux) switches it between the full panel and a slim icon rail.
@@ -183,12 +187,12 @@ It updates itself like on macOS. Finder tags are a macOS feature, so they are no
 
 ## Keyboard
 
-The keys below are for macOS. On Linux, Ctrl takes the place of Cmd; the window-wide ones (new and close tab, next and previous tab, go to a file, SSH server) and the terminal's copy and paste take Ctrl+Shift, so plain Ctrl stays free for the editor and the shell. The app's menus show the exact keys.
+The keys below are for macOS. On Linux, Ctrl takes the place of Cmd; the window-wide ones (new and close tab, next and previous tab, workspace, go to a file, SSH server) and the terminal's copy and paste take Ctrl+Shift, so plain Ctrl stays free for the editor and the shell. The app's menus show the exact keys.
 
 
 | Where | Keys |
 |---|---|
-| Anywhere | Ctrl+Space action bar · Cmd+P go to a file · Cmd+Shift+P commands · Cmd+T new tab · Cmd+W close tab · Cmd+] / Cmd+[ next / previous tab · Cmd+Alt+T terminal here · Cmd+K SSH server · Cmd+, settings · Cmd+Alt+S sidebar: full / icons |
+| Anywhere | Ctrl+Space action bar · Cmd+P go to a file · Cmd+Shift+P commands · Cmd+T new tab · Cmd+W close tab · Cmd+] / Cmd+[ next / previous tab · Cmd+Alt+T terminal here · Cmd+1…9 workspace · Cmd+K SSH server · Cmd+, settings · Cmd+Alt+S sidebar: full / icons |
 | Files | ↑↓ (←→ in icons, gallery and columns) select · Return or Cmd+↓ open · Backspace or Cmd+↑ enclosing folder · Space preview · F2 rename · Cmd+C/X/V copy, cut, paste · Cmd+Backspace move to Trash · Cmd+Z undo · Cmd+A select all · Cmd+F search · a letter jumps to the next name |
 | Editor | Cmd+S save · Cmd+F find · Cmd+D next occurrence · Cmd+Ctrl+G all occurrences · Cmd+Shift+L split into lines · Cmd+Ctrl+↑↓ move line · Cmd+Shift+D duplicate line · Cmd+Shift+K delete line · Cmd+J join lines · F5 sort lines · Cmd+/ comment · Cmd+K Cmd+U/L upper / lower case · Ctrl+G go to line · Cmd+R go to symbol · Alt+Z word wrap · Cmd+Alt+C send to Claude |
 | Markdown | Cmd+Shift+V preview · Cmd+B bold · Cmd+I italic · Cmd+E code · Cmd+Alt+K link · Cmd+Alt+1/2/3 headings |

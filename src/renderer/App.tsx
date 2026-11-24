@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type DockviewReadyEvent, type SerializedDockview } from 'dockview-react'
-import type { AppState, Favourite, TileParams } from '../shared/types'
+import type { AppState, Favourite, TileParams, Workspace } from '../shared/types'
 import type { UpdateStatus } from '../main/release'
 import FilesTile from './FilesTile'
 import TerminalTile, { ClaudeTile } from './TerminalTile'
@@ -12,18 +12,19 @@ import AccountsBar from './AccountsBar'
 import ClaudeOverview from './ClaudeOverview'
 import { moduleOn, SET_MODULE, useModule, type ModuleId } from './modules'
 import { destroyTerminal } from './terminals'
-import Tab, { NewTabButton } from './Tab'
+import Tab, { NewTabButton, themeDots } from './Tab'
 import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
 import Sidebar from './Sidebar'
 import Transfers from './Transfers'
-import { Asterisk, ChevronDown, GitBranch, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
+import { Asterisk, ChevronDown, GitBranch, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Plus, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
 import { closeTiles, cycleTile, FAVOURITE, focusTile, openClaude, openFolder, openGit, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
-import { layoutsMenu, putLayout } from '../shared/menus'
+import { layoutsMenu, putLayout, tabColor, workspaceMenu } from '../shared/menus'
+import { moveWorkspace, withWorkspaces } from '../shared/workspaces'
 import { addFavourite, pushRecent } from '../shared/favourites'
 import { arrange, PRESETS, type Layout, type Preset } from '../shared/arrange'
 import { popup } from './menuIcons'
@@ -66,13 +67,19 @@ export default function App() {
   }
   const [saving, setSaving] = useState(false) // the dialog that names the layout to save
   const [lastLayout, setLastLayout] = useState('') // the one opened or saved last: the name the save dialog offers
+  const stateRef = useRef<AppState | null>(null) // for the keys, set up once
   const [conflict, setConflict] = useState<{ shortcut: string; with: string } | null>(null) // the bar's shortcut is taken by the system
-  const dv = useRef<DockviewApi | null>(null)
+  // one dockview per workspace; dv.current is the one in front
+  const apis = useRef<Record<string, DockviewApi>>({})
+  const frontWs = useRef('')
+  const dv = useRef({ get current(): DockviewApi | null { return apis.current[frontWs.current] ?? null } }).current
+  const [renaming, setRenaming] = useState<string | null>(null) // the workspace whose name is being typed
+  const [wsDrag, setWsDrag] = useState<{ from: string; over?: string } | null>(null) // the workspace tab being dragged
   const theme = useTheme() === 'light' ? themeLight : themeDark
 
   // the language first: everything after is drawn in it
   // caches held by a renderer that reloaded go first: the restored tabs open their archives again
-  useEffect(() => void Promise.all([window.api.loadState(), window.api.archiveReleaseAll()]).then(([s]) => (setLang(resolveLang(s.settings?.language, navigator.language)), setState(s))), [])
+  useEffect(() => void Promise.all([window.api.loadState(), window.api.archiveReleaseAll()]).then(([s]) => (setLang(resolveLang(s.settings?.language, navigator.language)), setState(withWorkspaces(s)))), [])
   useEffect(() => applySettings(state?.settings), [state?.settings])
   // a compartment switched on from a tile (modules.setModule) is saved like one switched in the dialog
   useEffect(() => {
@@ -131,18 +138,25 @@ export default function App() {
   const toggleSidebar = () => setState(s => s && { ...s, sidebar: { ...s.sidebar, collapsed: !s.sidebar?.collapsed } })
   const home = () => dv.current && openFolder(dv.current, { path: getSettings().filesHome ?? null, host: null })
 
-  // a notification clicked or the overview: that tab in front
+  // a notification clicked or the overview: its workspace, then that tab, in front
+  const panelOf = (id: string) => Object.values(apis.current).map(a => a.getPanel(id)).find(p => p)
+  const showWorkspace = (id: string) => {
+    frontWs.current = id
+    setState(s => s && { ...s, activeWs: id })
+  }
   const revealTile = (id: string) => {
-    const p = dv.current?.getPanel(id)
+    const ws = Object.keys(apis.current).find(k => apis.current[k].getPanel(id))
+    if (ws) showWorkspace(ws)
+    const p = panelOf(id)
     p?.api.setActive()
-    focusTile(p)
+    setTimeout(() => focusTile(p), 50) // once its workspace is shown
   }
 
   // Claude hooks move its tab's state; a turn that ends or stops for you while the window is in the background notifies
   useEffect(() => {
     const offs = [
       window.api.onClaudeEvent((id, e) => {
-        const p = dv.current?.getPanel(id)
+        const p = panelOf(id)
         const prev = claudeStore.get(id)
         claudeStore.dispatch(id, e, document.hasFocus() && dv.current?.activePanel?.id === id)
         const next = claudeStore.get(id)
@@ -165,6 +179,15 @@ export default function App() {
       // Cmd+Alt+S (Ctrl+Alt+S on Linux): the sidebar, expanded or a rail
       if (e.code === 'KeyS' && e.altKey && !e.shiftKey && (window.api.platform === 'darwin' ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey)) return void (e.preventDefault(), e.stopPropagation(), toggleSidebar())
       if (!(window.api.platform === 'darwin' ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey)) return
+      // Cmd+1…9 (Ctrl+Shift+1…9 on Linux): that workspace
+      const n = /^Digit([1-9])$/.exec(e.code)?.[1]
+      if (n) {
+        e.preventDefault()
+        e.stopPropagation()
+        const ws = stateRef.current?.workspaces?.[Number(n) - 1]
+        if (ws) (showWorkspace(ws.id), setTimeout(() => focusTile(dv.current?.activePanel), 50))
+        return
+      }
       const inEditor = !!(e.target as Element | null)?.closest?.('.cm-editor') // there Cmd+K belongs to the editor's chords
       const act = { KeyP: () => setPalette({ mode: window.api.platform === 'darwin' && e.shiftKey ? 'commands' : 'files' }), BracketRight: () => cycle(1), BracketLeft: () => cycle(-1), ...(!inEditor && !e.shiftKey && { KeyK: () => setSshDialog(true) }) }[e.code]
       if (!act) return
@@ -203,24 +226,61 @@ export default function App() {
     }
   }, [])
 
+  stateRef.current = state
   if (!state) return null
+  const workspaces = state.workspaces ?? []
+  frontWs.current = state.activeWs ?? ''
   const update = (f: (s: AppState) => AppState) => setState(s => (s ? f(s) : s))
 
-  function onReady({ api }: DockviewReadyEvent) {
-    dv.current = api
-    if (state?.layout) {
+  function onReady(ws: Workspace, { api }: DockviewReadyEvent) {
+    apis.current[ws.id] = api
+    if (ws.layout) {
       try {
-        api.fromJSON(state.layout as SerializedDockview)
+        api.fromJSON(ws.layout as SerializedDockview)
       } catch {
         api.clear() // ponytail: layout illeggibile, si riparte da vuoto
       }
     }
     if (!api.panels.length) openFolder(api, { path: getSettings().filesHome ?? null, host: null }) // first launch: the home
-    api.onDidLayoutChange(() => update(s => ({ ...s, layout: api.toJSON() })))
+    api.onDidLayoutChange(() => update(s => ({ ...s, workspaces: s.workspaces?.map(w => (w.id === ws.id ? { ...w, layout: api.toJSON() } : w)) })))
     // a closed terminal tab ends its shell, a closed Files tab lets go of its archives; not one that comes straight back (fromJSON rebuilds every panel
     // for an arrangement or a saved layout, with the same ids)
     api.onDidRemovePanel(p => setTimeout(() => !api.getPanel(p.id) && (destroyTerminal(p.id), void window.api.archiveCancel(p.id), void window.api.archiveRelease(p.id))))
-    setTimeout(() => focusTile(api.activePanel), 50)
+    if (ws.id === frontWs.current) setTimeout(() => focusTile(api.activePanel), 50)
+  }
+
+  // workspaces: named sets of tabs, each with its own layout, as tabs in the top bar
+  const setWs = (id: string, f: (w: Workspace) => Workspace) => update(s => ({ ...s, workspaces: s.workspaces?.map(w => (w.id === id ? f(w) : w)) }))
+  const goWorkspace = (id: string) => (showWorkspace(id), setTimeout(() => focusTile(apis.current[id]?.activePanel), 50))
+  const addWorkspace = () => {
+    const id = crypto.randomUUID()
+    update(s => ({ ...s, workspaces: [...(s.workspaces ?? []), { id, name: t('Spazio {n}', { n: (s.workspaces?.length ?? 0) + 1 }), layout: null }] }))
+    showWorkspace(id)
+    setRenaming(id)
+  }
+  // its tabs close as tabs do (unsaved editors ask first); the workspace goes once they are gone
+  const closeWorkspace = (id: string) => {
+    const api = apis.current[id]
+    const ws = workspaces.find(w => w.id === id)
+    if (workspaces.length < 2 || !api || !ws) return
+    if (api.panels.length && !confirm(t('Chiudere lo spazio «{name}» e i suoi {n} tab?', { name: ws.name, n: api.panels.length }))) return
+    closeTiles([...api.panels])
+    if (api.panels.length) return // an unsaved editor kept it open
+    // after onDidRemovePanel's own timers: shells ended and archives let go while the dockview is still there
+    setTimeout(() => {
+      delete apis.current[id]
+      update(s => {
+        const rest = (s.workspaces ?? []).filter(w => w.id !== id)
+        return { ...s, workspaces: rest, activeWs: s.activeWs === id ? rest[Math.max(0, workspaces.indexOf(ws) - 1)].id : s.activeWs }
+      })
+    })
+  }
+  const workspaceChoice = async (e: React.MouseEvent, w: Workspace) => {
+    e.preventDefault()
+    const choice = await popup(workspaceMenu({ color: w.color, closable: workspaces.length > 1, dots: themeDots() }))
+    if (choice === 'rename') setRenaming(w.id)
+    if (choice === 'close') closeWorkspace(w.id)
+    if (choice?.startsWith('color:')) setWs(w.id, x => ({ ...x, color: tabColor(choice.slice(6)) }))
   }
 
   // saved layouts: the tabs, their folders, views and places, under a name
@@ -296,16 +356,62 @@ export default function App() {
       { label: t('Salva layout corrente…'), run: () => setSaving(true), icon: Save },
       ...layouts.map(l => ({ label: t('Apri layout: {name}', { name: l.name }), run: () => openLayout(l.name), icon: LayoutDashboard }))
     ].map(c => ({ ...c, group: t('Layout') }))
+    const spaces: Command[] = [
+      ...workspaces.map((w, i) => ({ label: t('Vai allo spazio: {name}', { name: w.name }), hint: i < 9 ? `Cmd+${i + 1}` : undefined, run: () => goWorkspace(w.id), icon: LayoutDashboard })),
+      { label: t('Nuovo spazio'), run: addWorkspace, icon: Plus }
+    ].map(c => ({ ...c, group: t('Spazi') }))
     // what the tab in front can do with its selection and its folder first
-    return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general, ...arrangements, ...saved]
+    return [...(p ? (tileActions(p.id)?.() ?? []) : []), ...general, ...spaces, ...arrangements, ...saved]
   }
 
   return (
     <div className={`app platform-${window.api.platform}`}>
       <div className="topbar">
+        {workspaces.map((w, i) => (
+          <div
+            key={w.id}
+            className={'ws-tab' + (w.id === frontWs.current ? ' on' : '') + (w.color ? ' c-' + w.color : '') + dropSide(workspaces, wsDrag, w.id, i)}
+            onClick={() => goWorkspace(w.id)}
+            onDoubleClick={() => setRenaming(w.id)}
+            onContextMenu={e => void workspaceChoice(e, w)}
+            draggable={renaming !== w.id}
+            onDragStart={e => (e.dataTransfer.setData(WS_MIME, w.id), setWsDrag({ from: w.id }))}
+            onDragEnd={() => setWsDrag(null)}
+            onDragOver={e => {
+              if (!wsDrag) return
+              e.preventDefault()
+              if (wsDrag.over !== w.id) setWsDrag({ ...wsDrag, over: w.id })
+            }}
+            onDragLeave={e => wsDrag?.over === w.id && !e.currentTarget.contains(e.relatedTarget as Node) && setWsDrag({ from: wsDrag.from })}
+            onDrop={() => {
+              if (wsDrag) update(s => ({ ...s, workspaces: moveWorkspace(s.workspaces ?? [], wsDrag.from, w.id) }))
+              setWsDrag(null)
+            }}
+          >
+            {renaming === w.id ? (
+              <input
+                autoFocus
+                defaultValue={w.name}
+                onFocus={e => e.target.select()}
+                onBlur={e => (e.target.value.trim() && setWs(w.id, x => ({ ...x, name: e.target.value.trim() })), setRenaming(null))}
+                onKeyDown={e => (e.key === 'Enter' || e.key === 'Escape') && (e.key === 'Escape' && (e.currentTarget.value = w.name), e.currentTarget.blur())}
+              />
+            ) : (
+              <span>{w.name}</span>
+            )}
+            {workspaces.length > 1 && (
+              <button className="x" title={t('Chiudi spazio')} onClick={e => (e.stopPropagation(), closeWorkspace(w.id))}>
+                <X size={12} strokeWidth={2} />
+              </button>
+            )}
+          </div>
+        ))}
+        <button className="ws-add" title={t('Nuovo spazio')} onClick={addWorkspace}>
+          <Plus {...ICON} />
+        </button>
         <div className="spacer" />
         {claudeOn && <AccountsBar />}
-        {claudeOn && <ClaudeOverview api={dv.current} onReveal={revealTile} />}
+        {claudeOn && <ClaudeOverview apis={Object.values(apis.current)} onReveal={revealTile} />}
         <Transfers />
         <button className="topbar-btn" title={t('Disposizione e layout salvati')} onClick={layoutChoice}>
           <LayoutDashboard {...ICON} /> {lastLayout || t('Layout')} <ChevronDown size={12} strokeWidth={2} />
@@ -333,7 +439,11 @@ export default function App() {
             const raw = e.dataTransfer.getData(PLACE_DND)
             if (raw && dv.current) openFolder(dv.current, JSON.parse(raw))
           }}>
-            <DockviewReact theme={theme} components={components} onReady={onReady} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} leftHeaderActionsComponent={NewTabButton} watermarkComponent={Welcome} />
+            {workspaces.map(w => (
+              <div key={w.id} className="ws-dock" style={{ display: w.id === frontWs.current ? 'block' : 'none' }}>
+                <DockviewReact theme={theme} components={components} onReady={e => onReady(w, e)} defaultRenderer="always" dndStrategy="pointer" defaultTabComponent={Tab} leftHeaderActionsComponent={NewTabButton} watermarkComponent={Welcome} />
+              </div>
+            ))}
           </div>
         </div>
       </WelcomeContext.Provider>
@@ -376,6 +486,14 @@ export default function App() {
       )}
     </div>
   )
+}
+
+const WS_MIME = 'application/x-cassetto-workspace'
+
+// where the dragged workspace tab will land: the side of the target facing where it came from
+const dropSide = (wss: { id: string }[], drag: { from: string; over?: string } | null, id: string, i: number) => {
+  if (!drag || drag.over !== id || drag.from === id) return ''
+  return wss.findIndex(w => w.id === drag.from) < i ? ' drop-after' : ' drop-before'
 }
 
 // the name to save the open tabs under; a taken name asks before replacing that layout

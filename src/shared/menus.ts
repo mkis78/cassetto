@@ -165,6 +165,11 @@ export function tabMenu(c: { maximized: boolean; others: boolean; color?: TabCol
   ]
 }
 
+// a workspace's tab in the top bar
+export function workspaceMenu(c: { color?: TabColor; closable: boolean; dots?: Dots }): MenuItem[] {
+  return [{ id: 'rename', label: t('Rinomina…') }, colorMenu(c.color, c.dots), sep, { id: 'close', label: t('Chiudi spazio'), enabled: c.closable }]
+}
+
 // the top bar's "Layout" button: arrange the open tabs, save them, reopen or delete a saved layout (ids carry the name)
 export function layoutsMenu(names: string[], arrangements: { id: string; label: string }[] = []): MenuItem[] {
   return [

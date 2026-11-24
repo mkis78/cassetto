@@ -9,8 +9,8 @@ import { useMenuKeys } from './menuKeys'
 
 const LABEL: Record<ClaudeState, string> = { idle: 'in pausa', working: 'lavora', waiting: 'ti aspetta', done: 'finito' }
 
-// Every Claude tab at a glance, from the top bar: what each is doing, a click to go there
-export default function ClaudeOverview(p: { api: DockviewApi | null; onReveal: (id: string) => void }) {
+// Every Claude tab of every workspace at a glance, from the top bar: what each is doing, a click to go there
+export default function ClaudeOverview(p: { apis: DockviewApi[]; onReveal: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useMenuKeys(ref, open, () => setOpen(false))
@@ -19,7 +19,7 @@ export default function ClaudeOverview(p: { api: DockviewApi | null; onReveal: (
     window.addEventListener('cassetto:claude-overview', f)
     return () => window.removeEventListener('cassetto:claude-overview', f)
   }, [])
-  const tabs = (p.api?.panels ?? []).filter(x => x.api.component === 'claude')
+  const tabs = p.apis.flatMap(a => a.panels).filter(x => x.api.component === 'claude')
   // a string snapshot: the store hands out fresh Maps, which useSyncExternalStore would take for a change every time
   const snap = useSyncExternalStore(subscribe, () => tabs.map(x => claudeStore.get(x.id)).join(','))
   useEffect(() => void (open && !tabs.length && setOpen(false))) // asked from the palette with no Claude open

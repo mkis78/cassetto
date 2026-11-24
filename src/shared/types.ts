@@ -43,8 +43,18 @@ export interface SearchResult {
   error: string | null
 }
 
-export interface AppState {
+// a named set of tabs with its own layout; the top bar switches between them
+export interface Workspace {
+  id: string
+  name: string
+  color?: TabColor
   layout: unknown | null // dockview toJSON()
+}
+
+export interface AppState {
+  layout: unknown | null // before workspaces: the one layout; read once into the first workspace (shared/workspaces)
+  workspaces?: Workspace[]
+  activeWs?: string
   layouts?: SavedLayout[] // saved by name, to reopen later
   settings?: Settings
   sidebar?: SidebarState

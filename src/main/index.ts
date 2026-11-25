@@ -4,7 +4,7 @@ import { APP_ORIGIN, appFile } from './appProtocol'
 import { execFile } from 'node:child_process'
 import { mkdir, readFile, rm, stat, statfs } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { AppState, ClaudeEvent, ClaudeParams, DiffSpec, FileOp, GitAction, LogView, Place, SearchHit, SearchQuery, Trashed, UndoResult, Volume } from '../shared/types'
 import { parseOpOutput, runOpLocal, runOpRemote, sshOp } from './fileOps'
 import { inverseOf, runUndo, stampScript, UndoStack } from './undo'
@@ -251,7 +251,8 @@ const remoteScript = async (host: string, script: string) => {
   if (!r.ok) throw new Error(r.error)
   return r.out.toString().trim()
 }
-handle('files:op', async (host: string | null, op: FileOp) => {
+handle('files:op', (host: string | null, op: FileOp) => (undos.fresh(), fileOp(host, op)))
+async function fileOp(host: string | null, op: FileOp) {
   const res = host ? await runOpRemote(host, op) : await runOpLocal(op, trashItems)
   const failed = new Set(res.failed.map(f => f.path))
   const stamps = new Map<string, string>()
@@ -266,7 +267,7 @@ handle('files:op', async (host: string | null, op: FileOp) => {
   const rec = inverseOf(host, op, failed, 'trashed' in res ? (res.trashed as Trashed[]) : [], stamps)
   if (rec) undos.push(rec)
   return { failed: res.failed }
-})
+}
 // for undo: an ssh failure is thrown (not reported per item), so runUndo can tell it from a lasting refusal
 const remoteUndoOp = async (host: string, op: FileOp) => {
   const r = await sshOp(host, op)
@@ -278,9 +279,24 @@ handle('files:undo', async (): Promise<UndoResult> => {
   if (!r) return null
   const { retry, ...res } = await runUndo(r, { local: op => runOpLocal(op, trashItems), remote: remoteUndoOp, script: remoteScript })
   if (retry) undos.push(r) // ssh failed for every step, nothing was undone: Cmd+Z can try again
+  else if (!res.failed.length) undos.undone(r)
   return res
 })
 handle('files:undoLabel', () => undos.peek()?.label ?? null)
+// Cmd+Shift+Z: the undone op again, the way it went the first time (a copy or move through the queue, with its progress); it records its own undo
+handle('files:redo', async (): Promise<UndoResult> => {
+  const r = undos.popRedo()
+  if (!r?.redo) return null
+  const op = r.redo
+  if (op.op === 'copy' || op.op === 'move') {
+    queue.start({ op: op.op, from: r.host, to: r.host, items: op.items })
+    return { label: r.label, failed: [], dirs: [] } // the job refreshes its folders when done
+  }
+  const { failed } = await fileOp(r.host, op)
+  const paths = op.op === 'trash' || op.op === 'delete' ? op.paths : op.op === 'rename' ? [op.from, op.to] : op.op === 'renameMany' ? op.items.map(i => i.to) : op.op === 'extract' ? [op.dest] : 'path' in op ? [op.path] : []
+  return { label: r.label, failed, dirs: [...new Set(paths.map(p => dirname(p)))] }
+})
+handle('files:redoLabel', () => undos.peekRedo()?.label ?? null)
 // updates: GitHub's latest release, offered in the top bar; only an installed app can replace itself
 let release: Release | null = null
 const selfUpdate = () => canSelfUpdate({ packaged: app.isPackaged, platform: process.platform, appImage: process.env.APPIMAGE })
@@ -324,6 +340,7 @@ const validSpec = (s: any): s is JobSpec => {
 }
 handle('jobs:start', (spec: unknown) => {
   if (!validSpec(spec)) throw new Error('invalid job')
+  undos.fresh()
   return queue.start({ op: spec.op, from: spec.from, to: spec.to, items: spec.items.map(i => ({ src: i.src, dest: i.dest, replace: i.replace })) })
 })
 handle('jobs:cancel', (id: string) => queue.cancel(id))

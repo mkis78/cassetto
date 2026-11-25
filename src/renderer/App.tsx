@@ -17,10 +17,10 @@ import SshDialog from './SshDialog'
 import Palette, { type Command } from './Palette'
 import Sidebar from './Sidebar'
 import Transfers from './Transfers'
-import { Asterisk, ChevronDown, GitBranch, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Plus, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, X } from 'lucide-react'
+import { Asterisk, ChevronDown, GitBranch, SquareTerminal, Columns2, Columns3, FolderOpen, Grid2x2, LayoutPanelLeft, Plus, Rows2, Square, LayoutDashboard, Save, Maximize2, Minimize2, PanelLeft, PanelTopOpen, Server, Settings, SquareArrowLeft, SquareArrowRight, Undo2, Redo2, X } from 'lucide-react'
 import SettingsDialog from './SettingsDialog'
 import Welcome, { WelcomeContext, type WelcomeActions } from './Welcome'
-import { closeTiles, cycleTile, FAVOURITE, focusTile, openClaude, openFolder, openGit, openTerminal, PLACE_DND, runUndo, tileActions, tileFolder, whereOf } from './tiles'
+import { closeTiles, cycleTile, FAVOURITE, focusTile, openClaude, openFolder, openGit, openTerminal, PLACE_DND, runRedo, runUndo, tileActions, tileFolder, whereOf } from './tiles'
 import { applySettings, DEFAULT_SETTINGS, getSettings, useTheme } from './settings'
 import { DEFAULT_BAR, fromEvent, shortcutLabel } from '../shared/shortcuts'
 import { layoutsMenu, putLayout, tabColor, workspaceMenu } from '../shared/menus'
@@ -49,6 +49,7 @@ export default function App() {
   const claudeOn = useModule('claude')
   const [claudeDialog, setClaudeDialog] = useState<{ cwd?: string } | null>(null)
   const [undoLabel, setUndoLabel] = useState<string | null>(null) // asked for when the bar opens; paletteActions is synchronous
+  const [redoLabel, setRedoLabel] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null)
   // a newer release, offered in the top bar; while it installs, a banner says how far it is
   const [newVersion, setNewVersion] = useState<string | null>(null)
@@ -92,7 +93,7 @@ export default function App() {
   }, [])
   // at start and after each change: warn when macOS (or Raycast) keeps the bar's shortcut for itself
   useEffect(() => {
-    if (palette?.mode === 'bar') window.api.undoLabel().then(setUndoLabel)
+    if (palette?.mode === 'bar') (window.api.undoLabel().then(setUndoLabel), window.api.redoLabel().then(setRedoLabel))
   }, [palette?.mode])
   // "Aggiungi ai preferiti" in a Files tile
   useEffect(() => {
@@ -338,6 +339,7 @@ export default function App() {
     const group = t('Generali')
     const general: Command[] = [
       ...(undoLabel ? [{ label: t('Annulla: {label}', { label: undoLabel }), hint: 'Cmd+Z', run: runUndo, icon: Undo2 }] : []),
+      ...(redoLabel ? [{ label: t('Ripeti: {label}', { label: redoLabel }), hint: 'Cmd+Shift+Z', run: runRedo, icon: Redo2 }] : []),
       { label: t('Nuovo tab'), hint: 'Cmd+T', run: newTab, icon: PanelTopOpen },
       { label: t('Apri cartella…'), run: pick, icon: FolderOpen },
       { label: t('Nuovo terminale qui'), hint: 'Cmd+Alt+T', run: newTerminal, icon: SquareTerminal },

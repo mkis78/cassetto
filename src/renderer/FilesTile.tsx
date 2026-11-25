@@ -11,7 +11,7 @@ import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
 import { listKey, typeAhead, windowOf } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
-import { addToFavourites, CHANGED, changed, claudeTarget, runUndo, sendToClaude, startJob, NAVIGATE, openClaude, openEditor, openFolder, openGit, openTerminal, PLACE_DND, setTileActions } from './tiles'
+import { addToFavourites, CHANGED, changed, claudeTarget, runRedo, runUndo, sendToClaude, startJob, NAVIGATE, openClaude, openEditor, openFolder, openGit, openTerminal, PLACE_DND, setTileActions } from './tiles'
 import { useModule } from './modules'
 import type { Command } from './Palette'
 import SearchOptions from './SearchOptions'
@@ -635,7 +635,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
     const cmd = e.metaKey || e.ctrlKey
     if (key === 'F2' && sel) return void (e.preventDefault(), !readOnly && rename(chosen()))
     if ((cmd && key === 'Backspace') || key === 'Delete') return void (e.preventDefault(), !readOnly && askDelete(chosen()))
-    if (cmd && !e.shiftKey && key.toLowerCase() === 'z') return void (e.preventDefault(), !readOnly && runUndo())
+    if (cmd && key.toLowerCase() === 'z') return void (e.preventDefault(), !readOnly && (e.shiftKey ? runRedo() : runUndo()))
     if (cmd && key.toLowerCase() === 'a') return void (e.preventDefault(), selectAll())
     if (cmd && !e.shiftKey && ['c', 'x', 'v'].includes(key.toLowerCase())) {
       e.preventDefault()

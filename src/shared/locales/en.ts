@@ -69,6 +69,8 @@ export const EN: Record<string, string> = {
   "Layout": "Layout",
   "Spazio {n}": "Space {n}",
   "Nuovo spazio": "New Space",
+  "Ripetuto: {label}": "Redone: {label}",
+  "Ripeti: {label}": "Redo: {label}",
   "Un Claude ti aspetta": "A Claude is waiting for you",
   "Un Claude ha finito": "A Claude has finished",
   "Chiudi spazio": "Close Space",

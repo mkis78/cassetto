@@ -7,7 +7,8 @@ import { t } from '../shared/i18n'
 // fromTrash: the source is an item in the Trash, so a missing one is reported as such
 // trash: sent to the Trash only once the move has succeeded (the copy left by a cross-volume move)
 export type Step = { kind: 'move'; from: string; to: string; fromTrash?: boolean; trash?: string } | { kind: 'trash'; path: string } | { kind: 'rmdir'; path: string } | { kind: 'removeIfSame'; path: string; stamp: string } | { kind: 'renameMany'; items: { from: string; to: string }[] }
-export type UndoRecord = { host: string | null; label: string; steps: Step[] }
+// redo: the op as it went through (the items that failed left out), run again by Cmd+Shift+Z once this record is undone
+export type UndoRecord = { host: string | null; label: string; steps: Step[]; redo?: FileOp }
 
 // what a remote copy looks like, to tell later whether anyone touched it: a checksum, so it stays small
 // enough for a command line however many files it covers; nothing at all for a missing path
@@ -27,7 +28,8 @@ const named = (n: number, name: string, one: string, many: string) => (n === 1 ?
 // What undoes `op`, given what it did: null when nothing happened or it cannot be undone.
 // Steps are listed in the order the op did them; runUndo runs them backwards.
 export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, trashed: Trashed[], stamps: Map<string, string>): UndoRecord | null {
-  const rec = (label: string, steps: Step[]): UndoRecord | null => (steps.length ? { host, label, steps } : null)
+  const redo: FileOp = op.op === 'copy' || op.op === 'move' ? { ...op, items: op.items.filter(i => !failed.has(i.src)) } : op.op === 'trash' ? { ...op, paths: op.paths.filter(p => !failed.has(p)) } : op
+  const rec = (label: string, steps: Step[]): UndoRecord | null => (steps.length ? { host, label, steps, redo } : null)
   const created = (p: string): Step[] => {
     if (!host) return [{ kind: 'trash', path: p }]
     if (op.op === 'mkdir') return [{ kind: 'rmdir', path: p }]
@@ -72,14 +74,22 @@ export function inverseOf(host: string | null, op: FileOp, failed: Set<string>, 
   }
 }
 
+// what Cmd+Z undoes, newest last; and what it undid, for Cmd+Shift+Z to do again
 export class UndoStack {
   private items: UndoRecord[] = []
+  private redos: UndoRecord[] = []
   push(r: UndoRecord): void {
     this.items.push(r)
     if (this.items.length > 50) this.items.shift()
   }
   pop = () => this.items.pop()
   peek = () => this.items[this.items.length - 1]
+  // undone in full: it can be done again (a partial undo leaves a state the op no longer fits)
+  undone = (r: UndoRecord) => void (r.redo && this.redos.push(r))
+  popRedo = () => this.redos.pop()
+  peekRedo = () => this.redos[this.redos.length - 1]
+  // a new operation from the user: what was undone is no longer next to it
+  fresh = () => void (this.redos = [])
 }
 
 const exists = (p: string) => lstat(p).then(() => true, () => false)

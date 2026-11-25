@@ -89,9 +89,9 @@ A sidebar with the places you go to most. **Cmd+Alt+S** (Ctrl+Alt+S on Linux) sw
 
 Copies and moves run in the background, one after another, with their progress in the top bar: a ring with how far along they are, and a click lists each one with its size, speed and time left, and **Cancel** (nothing half-copied is left behind). Files also go **between your Mac and your SSH servers**, or from one server to another, with the same gestures: drag them from one panel to another, or copy and paste. Between machines a drop always copies; Cut and Paste moves. What failed is listed under the transfer until you **Clear** it. Transfers between machines can't be undone.
 
-### Undo
+### Undo and redo
 
-**Cmd+Z** (Ctrl+Z on Linux) in a files panel undoes the last move, copy, rename, new file or folder, or move to the Trash, which brings the item back from the Trash. It is also in the action bar. Permanent deletes can't be undone. On an SSH server, a created item is removed only if you haven't changed it since.
+**Cmd+Z** (Ctrl+Z on Linux) in a files panel undoes the last move, copy, rename, new file or folder, or move to the Trash, which brings the item back from the Trash. **Cmd+Shift+Z** (Ctrl+Shift+Z) does it again, until you do something new. Both are also in the action bar. Permanent deletes can't be undone. On an SSH server, a created item is removed only if you haven't changed it since.
 
 ### Open With
 
@@ -193,7 +193,7 @@ The keys below are for macOS. On Linux, Ctrl takes the place of Cmd; the window-
 | Where | Keys |
 |---|---|
 | Anywhere | Ctrl+Space action bar · Cmd+P go to a file · Cmd+Shift+P commands · Cmd+T new tab · Cmd+W close tab · Cmd+] / Cmd+[ next / previous tab · Cmd+Alt+T terminal here · Cmd+1…9 workspace · Cmd+K SSH server · Cmd+, settings · Cmd+Alt+S sidebar: full / icons |
-| Files | ↑↓ (←→ in icons, gallery and columns) select · Return or Cmd+↓ open · Backspace or Cmd+↑ enclosing folder · Space preview · F2 rename · Cmd+C/X/V copy, cut, paste · Cmd+Backspace move to Trash · Cmd+Z undo · Cmd+A select all · Cmd+F search · a letter jumps to the next name |
+| Files | ↑↓ (←→ in icons, gallery and columns) select · Return or Cmd+↓ open · Backspace or Cmd+↑ enclosing folder · Space preview · F2 rename · Cmd+C/X/V copy, cut, paste · Cmd+Backspace move to Trash · Cmd+Z undo · Cmd+Shift+Z redo · Cmd+A select all · Cmd+F search · a letter jumps to the next name |
 | Editor | Cmd+S save · Cmd+F find · Cmd+D next occurrence · Cmd+Ctrl+G all occurrences · Cmd+Shift+L split into lines · Cmd+Ctrl+↑↓ move line · Cmd+Shift+D duplicate line · Cmd+Shift+K delete line · Cmd+J join lines · F5 sort lines · Cmd+/ comment · Cmd+K Cmd+U/L upper / lower case · Ctrl+G go to line · Cmd+R go to symbol · Alt+Z word wrap · Cmd+Alt+C send to Claude |
 | Markdown | Cmd+Shift+V preview · Cmd+B bold · Cmd+I italic · Cmd+E code · Cmd+Alt+K link · Cmd+Alt+1/2/3 headings |
 | Terminal | Cmd+F search the output · Cmd+C/V copy, paste · Cmd+click a path: open it in the editor |

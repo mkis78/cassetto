@@ -1,5 +1,5 @@
 import type { DockviewApi, IDockviewPanel } from 'dockview-react'
-import type { TileParams } from '../shared/types'
+import type { TileParams, UndoResult } from '../shared/types'
 import type { Command } from './Palette'
 import { t } from '../shared/i18n'
 import { isEnded, type JobSpec } from '../shared/jobs'
@@ -16,12 +16,14 @@ export const tileActions = (id: string) => actions.get(id)
 export const CHANGED = 'cassetto:changed'
 export const changed = (from: string, dirs: string[]) => window.dispatchEvent(new CustomEvent(CHANGED, { detail: { from, dirs } }))
 
-// undo the last file operation; App shows the outcome as a toast
-export async function runUndo(): Promise<void> {
-  const r = await window.api.undo()
+// undo the last file operation, or redo the last one undone; App shows the outcome as a toast
+export const runUndo = () => history(window.api.undo(), r => t('Annullato: {label}', { label: r.label }))
+export const runRedo = () => history(window.api.redo(), r => t('Ripetuto: {label}', { label: r.label }))
+async function history(p: Promise<UndoResult>, ok: (r: NonNullable<UndoResult>) => string): Promise<void> {
+  const r = await p
   if (!r) return
   changed('undo', r.dirs)
-  const text = r.failed.length ? r.failed.map(f => `${f.path}: ${f.error}`).join('\n') : t('Annullato: {label}', { label: r.label })
+  const text = r.failed.length ? r.failed.map(f => `${f.path}: ${f.error}`).join('\n') : ok(r)
   window.dispatchEvent(new CustomEvent('cassetto:toast', { detail: { text, error: r.failed.length > 0 } }))
 }
 

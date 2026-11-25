@@ -23,16 +23,16 @@ const inv = (host: string | null, op: FileOp, failed: string[] = [], trashed: Tr
 describe('inverseOf', () => {
   test('extract is undone like a created folder', () => {
     const op: FileOp = { op: 'extract', archive: '/d/a.zip', dest: '/d/a' }
-    expect(inv(null, op)).toEqual({ host: null, label: 'Estratto «a»', steps: [{ kind: 'trash', path: '/d/a' }] })
+    expect(inv(null, op)).toMatchObject({ host: null, label: 'Estratto «a»', steps: [{ kind: 'trash', path: '/d/a' }] })
     expect(inv('h', op, [], [], new Map([['/d/a', 's']]))!.steps).toEqual([{ kind: 'removeIfSame', path: '/d/a', stamp: 's' }])
     expect(inv(null, op, ['/d/a'])).toBeNull()
   })
   test('rename', () => {
-    expect(inv(null, { op: 'rename', from: '/d/a', to: '/d/b' })).toEqual({ host: null, label: 'Rinominato «a»', steps: [{ kind: 'move', from: '/d/b', to: '/d/a' }] })
+    expect(inv(null, { op: 'rename', from: '/d/a', to: '/d/b' })).toMatchObject({ host: null, label: 'Rinominato «a»', steps: [{ kind: 'move', from: '/d/b', to: '/d/a' }] })
   })
   test('renameMany: the pairs reversed, only when nothing failed', () => {
     const items = [{ from: '/d/a', to: '/d/b' }, { from: '/d/b', to: '/d/a' }]
-    expect(inv(null, { op: 'renameMany', items })).toEqual({ host: null, label: 'Rinominati 2 elementi', steps: [{ kind: 'renameMany', items: [{ from: '/d/b', to: '/d/a' }, { from: '/d/a', to: '/d/b' }] }] })
+    expect(inv(null, { op: 'renameMany', items })).toMatchObject({ host: null, label: 'Rinominati 2 elementi', steps: [{ kind: 'renameMany', items: [{ from: '/d/b', to: '/d/a' }, { from: '/d/a', to: '/d/b' }] }] })
     expect(inv('h', { op: 'renameMany', items: items.slice(0, 1) })!.label).toBe('Rinominato «a»')
     expect(inv(null, { op: 'renameMany', items }, ['/d/a'])).toBeNull()
     expect(inv(null, { op: 'renameMany', items: [] })).toBeNull()
@@ -234,4 +234,36 @@ test('UndoStack keeps the last 50', () => {
   while (s.peek()) (last = s.pop()), n++
   expect(n).toBe(50)
   expect(last!.label).toBe('10')
+})
+
+describe('redo', () => {
+  test('a record keeps the op as it went through, without the items that failed', () => {
+    const items = ['a', 'b'].map(n => ({ src: `/s/${n}`, dest: `/d/${n}`, replace: false }))
+    expect(inv(null, { op: 'move', items }, ['/s/b'])!.redo).toEqual({ op: 'move', items: [items[0]] })
+    expect(inv(null, { op: 'trash', paths: ['/d/a', '/d/b'] }, ['/d/b'])!.redo).toEqual({ op: 'trash', paths: ['/d/a'] })
+    expect(inv('h', { op: 'rename', from: '/d/a', to: '/d/b' })!.redo).toEqual({ op: 'rename', from: '/d/a', to: '/d/b' })
+  })
+  test('only what was undone can be redone, newest first, until a new operation', () => {
+    const s = new UndoStack()
+    const r = (label: string): UndoRecord => ({ host: null, label, steps: [], redo: { op: 'mkdir', path: '/' + label } })
+    s.undone(r('a'))
+    s.undone(r('b'))
+    s.undone({ host: null, label: 'no op', steps: [] }) // nothing to run again
+    expect(s.peekRedo()?.label).toBe('b')
+    expect(s.popRedo()?.label).toBe('b')
+    s.fresh()
+    expect(s.popRedo()).toBeUndefined()
+  })
+  test('rename, undo, redo on disk', async () => {
+    const d = dir()
+    writeFileSync(join(d, 'a'), 'x')
+    const op: FileOp = { op: 'rename', from: join(d, 'a'), to: join(d, 'b') }
+    await local(op)
+    const rec = inv(null, op)!
+    expect((await runUndo(rec, deps)).failed).toEqual([])
+    expect(existsSync(join(d, 'a'))).toBe(true)
+    expect((await local(rec.redo!)).failed).toEqual([])
+    expect(readFileSync(join(d, 'b'), 'utf8')).toBe('x')
+    expect(existsSync(join(d, 'a'))).toBe(false)
+  })
 })

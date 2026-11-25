@@ -218,9 +218,10 @@ on('notify', (title: string, body: string, tileId: string) => {
 // a local listing carries the Finder tags of what it holds
 handle('files:list', async (host: string | null, path: string | null) => {
   if (host) return listRemote(host, path)
-  const r = await listLocal(path ?? homedir())
+  // side by side: on a 100k-entry folder the tags' find takes as long as the listing
+  // ponytail: still a wait for both; tags sent after the entries if huge folders feel slow on macOS
+  const [r, tags] = await Promise.all([listLocal(path ?? homedir()), folderTags(path ?? homedir())])
   if (!r.ok) return r
-  const tags = await folderTags(r.listing.path)
   if (tags.size) r.listing.entries = r.listing.entries.map(e => (tags.has(e.name) ? { ...e, tags: tags.get(e.name) } : e))
   return r
 })

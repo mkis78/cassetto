@@ -19,3 +19,19 @@ export function typeAhead(names: string[], from: number, c: string): number {
   }
   return from
 }
+
+// A long list drawn in part: of `n` entries, `perRow` to a row, rows `pitch` apart (a row `item` big, the rest is gap), entry 0 at `start`,
+// scrolled to `pos` in a box `size` big: the entries worth drawing (from, to), a screen either side, and the blank space before and after them.
+export function windowOf(n: number, m: { start: number; pitch: number; item: number; perRow: number }, pos: number, size: number) {
+  const first = Math.max(0, (pos - m.start) / m.pitch)
+  const rows = Math.ceil(n / m.perRow)
+  const fromRow = Math.max(0, Math.floor(first - size / m.pitch))
+  const toRow = Math.min(rows, Math.ceil(first + (2 * size) / m.pitch) + 1)
+  const gap = m.pitch - m.item
+  return {
+    from: fromRow * m.perRow,
+    to: Math.min(n, toRow * m.perRow),
+    before: fromRow ? fromRow * m.pitch - gap : 0,
+    after: rows > toRow ? (rows - toRow) * m.pitch - gap : 0
+  }
+}

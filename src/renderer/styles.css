@@ -256,6 +256,7 @@ button { font: inherit; }
 .files-icons .thumb, .files-gallery .thumb { width: 64px; height: 48px; display: flex; align-items: center; justify-content: center; }
 .files-icons .thumb img, .files-gallery .thumb img { max-width: 100%; max-height: 100%; border-radius: 3px; }
 .files-icons .file .name, .files-gallery .file .name { width: 100%; flex: none; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; }
+.files-icons .file .name { height: 2lh; } /* every row one height: a long folder draws only the rows in view */
 .files-columns { display: flex; padding: 0; overflow-x: auto; overflow-y: hidden; }
 .files-col { flex: none; width: 220px; overflow-y: auto; padding: 4px 0; border-right: 1px solid var(--line); }
 .file.opened { background: var(--opened); }
@@ -424,6 +425,8 @@ svg.lucide { flex: none; vertical-align: -2px; }
 .files-gallery .files-preview > video { max-height: calc(100% - 50px); }
 .files-gallery .files-entries { flex: none; min-height: 0; display: flex; gap: 4px; padding: 6px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid var(--line); }
 .files-gallery .file { flex: none; width: 96px; }
+.files-space { flex: none; }
+.files-icons .files-space { grid-column: 1 / -1; }
 .palette-overlay { padding-top: 80px; }
 .palette { width: 620px; max-width: calc(100vw - 32px); background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,.5); overflow: hidden; display: flex; flex-direction: column; }
 .palette input { background: var(--bg); color: var(--fg-strong); border: 0; border-bottom: 1px solid var(--line2); padding: 10px 12px; font: 13px Menlo, monospace; outline: none; }

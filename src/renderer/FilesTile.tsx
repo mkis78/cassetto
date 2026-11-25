@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import type { AppInfo, DirEntry, Listing, Preview, SearchQuery } from '../shared/types'
 import { ArrowUp, ChevronDown, FileCode, Tags as TagsIcon, ScanSearch, SlidersHorizontal, SquareTerminal, ChevronRight, ClipboardPaste, Columns2, Copy, CopyPlus, Ellipsis, ExternalLink, Eye, EyeOff, FilePlus, FolderPlus, House, Link, PanelRight, Pencil, RotateCw, Scissors, Search, Star, TextSearch, Trash2, X, Columns3, GalleryHorizontal, File, Folder, LayoutGrid, List } from 'lucide-react'
@@ -9,7 +9,7 @@ import FileSearch, { dirOf } from './FileSearch'
 import { actionsMenu, filesMenu, tagsMenu, viewMenu } from '../shared/menus'
 import { knownTags, TAG_HEX, TagDialog, TagDots } from './Tags'
 import type { Tag } from '../shared/tags'
-import { listKey, typeAhead } from '../shared/listNav'
+import { listKey, typeAhead, windowOf } from '../shared/listNav'
 import { sortBy, type SortKey } from '../shared/sortEntries'
 import { addToFavourites, CHANGED, changed, claudeTarget, runUndo, sendToClaude, startJob, NAVIGATE, openClaude, openEditor, openFolder, openGit, openTerminal, PLACE_DND, setTileActions } from './tiles'
 import { useModule } from './modules'
@@ -36,8 +36,11 @@ const VIEW_NAME = { list: tx('Elenco'), icons: tx('Icone'), columns: tx('Colonne
 
 const EMPTY: SearchQuery = { text: '', mode: 'name', regex: false, word: false }
 
-// ponytail: no virtualised list; huge folders show the first entries only
-const MAX_SHOWN = 2000
+// a folder longer than this draws only the entries in view, a screen either side; blank space stands in for the rest
+const WINDOW_FROM = 500
+// a windowed list as last drawn: start, where entry 0 would be; pitch, from one row to the next; item, a row's own size (pitch less the gap)
+type Metrics = { start: number; pitch: number; item: number; perRow: number; from: number }
+const sorted = new WeakMap<Listing, { how: string; entries: DirEntry[] }>()
 
 // copy/cut, shared by every Files tile; the paths belong to the host they were taken from
 // root: taken inside an archive, the cache it lives in (read-only: copied, never cut)
@@ -122,7 +125,57 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const listRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => void listRef.current?.querySelector('.file.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }), [sel, cols])
+  // the selection in view; in a windowed list it may not be drawn yet: scroll to where it is, which draws it
+  useEffect(() => {
+    const el = listRef.current?.querySelector('.file.selected')
+    if (el) return void el.scrollIntoView({ block: 'nearest', inline: 'nearest' }) // void: Chromium's scrollIntoView returns a promise, which React would take for a cleanup
+    const box = scrollerOf(ci)
+    const m = metrics.current[ci]
+    if (!box || !m || at < 0) return
+    const pos = m.start + Math.floor(at / m.perRow) * m.pitch - (view === 'gallery' ? box.clientWidth : box.clientHeight) / 2
+    if (view === 'gallery') box.scrollLeft = pos
+    else box.scrollTop = pos
+  }, [sel, cols])
+
+  // windowed lists: drawn again as they scroll or resize, measured after each drawing
+  const metrics = useRef<Record<number, Metrics>>({})
+  const [, redraw] = useReducer((n: number) => n + 1, 0)
+  const frame = useRef(0)
+  const redrawSoon = () => (cancelAnimationFrame(frame.current), (frame.current = requestAnimationFrame(redraw)))
+  useEffect(() => {
+    const box = listRef.current
+    if (!box) return
+    const ro = new ResizeObserver(redrawSoon)
+    ro.observe(box)
+    return () => (ro.disconnect(), cancelAnimationFrame(frame.current))
+  }, [listRef.current])
+  // the element a folder's entries scroll in: the list, its column, or the gallery's strip
+  const scrollerOf = (i: number): HTMLElement | null =>
+    view === 'columns' ? ((listRef.current?.children[i] as HTMLElement | undefined) ?? null) : view === 'gallery' ? (listRef.current?.querySelector<HTMLElement>('.files-entries') ?? null) : listRef.current
+  const drawn = useRef<Record<number, number>>({}) // per column, the first entry drawn; -1 when not windowed
+  useLayoutEffect(() => {
+    let changed = false
+    for (const [k, from] of Object.entries(drawn.current)) {
+      const i = Number(k)
+      const box = scrollerOf(i)
+      const items = [...(box?.querySelectorAll<HTMLElement>(':scope .file:not(.editing)') ?? [])]
+      if (from < 0 || !box || !items.length) {
+        delete metrics.current[i]
+        continue
+      }
+      const x = view === 'gallery'
+      const b = box.getBoundingClientRect()
+      const at = (el: HTMLElement) => (x ? el.getBoundingClientRect().left - b.left + box.scrollLeft : el.getBoundingClientRect().top - b.top + box.scrollTop)
+      const perRow = x ? 1 : Math.max(1, items.filter(el => el.offsetTop === items[0].offsetTop).length)
+      const item = x ? items[0].offsetWidth : items[0].offsetHeight
+      const pitch = items[perRow] ? at(items[perRow]) - at(items[0]) : item
+      const m = { start: at(items[0]) - (from / perRow) * pitch, pitch, item, perRow, from }
+      const old = metrics.current[i]
+      if (!old || old.perRow !== m.perRow || Math.abs(old.pitch - m.pitch) > 0.5 || Math.abs(old.start - m.start) > 0.5) changed = true
+      metrics.current[i] = m
+    }
+    if (changed) redrawSoon()
+  })
 
   const seq = useRef(0)
   const load = useCallback(
@@ -229,7 +282,15 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   const shownPath = (p: string) => (host ? `${host}:` : '') + displayPath(p, archives)
   // a remote folder has no recursive search: the box filters what is listed
   const searching = !!q.text && !!listing
-  const visible = (l: Listing) => sortBy(l.entries.filter(e => hidden || !e.name.startsWith('.')), sort.key, sort.desc)
+  // sorted once per listing and order, not on every render (a selection, a keystroke)
+  const visible = (l: Listing) => {
+    const how = `${hidden} ${sort.key} ${sort.desc}`
+    const c = sorted.get(l)
+    if (c?.how === how) return c.entries
+    const entries = sortBy(l.entries.filter(e => hidden || !e.name.startsWith('.')), sort.key, sort.desc)
+    sorted.set(l, { how, entries })
+    return entries
+  }
   const columns = listing ? (view === 'columns' ? [listing, ...cols] : [listing]) : []
 
   // into a new folder next to the archive, named after it; a taken name gets the next free one
@@ -313,7 +374,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   // the keys act on the column holding the selection (the only one outside the columns view)
   const ci = Math.max(0, columns.findIndex(c => sel && c.path === dirOf(sel.path)))
   const col = columns[ci]
-  const shown = col ? visible(col).slice(0, MAX_SHOWN) : []
+  const shown = col ? visible(col) : []
   const at = shown.findIndex(e => child(col.path, e.name) === sel?.path)
   const pick = (i: number, how: 'one' | 'range' = 'one') => shown[i] && select(ci, col.path, shown[i], how)
   // icons view: how many icons fit in a row, read from the layout; the gallery is one row, so ↑↓ step by one
@@ -637,6 +698,22 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
   // one folder's entries, as rows (list), tiles (icons) or a column
   const entriesOf = (l: Col, i: number) => {
     const all = visible(l)
+    // a long folder: only the rows in view, a screen either side, and blank space for the rest
+    let from = 0
+    let to = all.length
+    let before = 0
+    let after = 0
+    const m = metrics.current[i]
+    const box = scrollerOf(i)
+    if (all.length > WINDOW_FROM) {
+      if (!m || !box || m.pitch <= 0) to = 200 // enough to measure
+      else {
+        const x = view === 'gallery'
+        ;({ from, to, before, after } = windowOf(all.length, m, x ? box.scrollLeft : box.scrollTop, x ? box.clientWidth : box.clientHeight))
+      }
+    }
+    drawn.current[i] = all.length > WINDOW_FROM ? from : -1
+    const space = (n: number) => n > 0 && <div className="files-space" style={view === 'gallery' ? { width: n } : { height: n }} />
     // click a heading to sort by it, again to reverse
     const head = (key: SortKey, label: string, cls: string) => (
       <span className={cls + (sort.key === key ? ' sorted' : '')} onClick={() => setSort(s => ({ key, desc: s.key === key ? !s.desc : key !== 'name' }))}>
@@ -660,7 +737,8 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
             {editBox(editing)}
           </div>
         )}
-        {all.slice(0, MAX_SHOWN).map(e => {
+        {space(before)}
+        {all.slice(from, to).map(e => {
           const full = child(l.path, e.name)
           const opened = view === 'columns' && columns[i + 1]?.path === full && full !== sel?.path // the folder shown in the next column
           const renaming = editing?.kind === 'rename' && editing.from === full
@@ -709,7 +787,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           )
         })}
         {!all.length && <div className="files-empty">{l.entries.length ? t('Nessun elemento da mostrare') : t('Cartella vuota')}</div>}
-        {all.length > MAX_SHOWN && <div className="files-empty">{t('… altri {n} elementi non mostrati', { n: all.length - MAX_SHOWN })}</div>}
+        {space(after)}
       </>
     )
   }
@@ -890,7 +968,7 @@ export default function FilesTile({ params, api, containerApi }: IDockviewPanelP
           {searching && listing ? (
             <FileSearch tileId={api.id} host={host} cwd={searchDir ?? listing.path} q={q} onSelect={path => setSel({ path, dir: false })} onFolder={dir => (set({ text: '' }), load(dir))} onOpen={full => open(full, false)} shownPath={shownPath} toClaude={() => (!host && !readOnly && claudeOn && claudeTarget(containerApi) ? (full, line) => sendToClaude(containerApi, full, line ? `:${line}` : '') : null)} />
           ) : (
-            <div ref={listRef} tabIndex={0} data-autofocus className={`files-list files-${view}` + (loading ? ' loading' : '')} onKeyDown={keys}>
+            <div ref={listRef} tabIndex={0} data-autofocus className={`files-list files-${view}` + (loading ? ' loading' : '')} onKeyDown={keys} onScrollCapture={redrawSoon}>
               {view === 'columns'
                 ? columns.map((l, i) => (
                     <div key={l.path} className="files-col" onContextMenu={e => menu(e, l.path, null)} {...dropProps(l.path)}>

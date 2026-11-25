@@ -180,7 +180,6 @@ export const EN: Record<string, string> = {
   "doppio clic: apri": "double-click: open",
   "Nessun elemento da mostrare": "Nothing to show",
   "Cartella vuota": "Empty folder",
-  "… altri {n} elementi non mostrati": "… {n} more items not shown",
   "Apri {name}": "Open {name}",
   "Invio": "Return",
   "Tag…": "Tags…",
